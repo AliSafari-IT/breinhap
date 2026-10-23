@@ -26,6 +26,17 @@
     "scheme": "breinhap",
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "915d6f55-aa01-4426-b6fb-0e618c7859e3"
+      }
+    },
+    "owner": "asafarim"
   }
 }
