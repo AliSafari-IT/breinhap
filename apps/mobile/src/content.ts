@@ -2,10 +2,11 @@ import { samplePack, type LearningObject, type Mission } from "@breinhap/content
 
 /**
  * Content shown in this build. Only reviewed content reaches students;
- * development builds also show drafts so content can be tried out.
+ * development builds and the "preview" EAS profile (an APK for the team's own
+ * phones, never uploaded to Google Play) also show drafts so content can be tried out.
  * Content packs will be downloaded later; for now the samples ship in the app.
  */
-export const includeDrafts = __DEV__;
+export const includeDrafts = __DEV__ || process.env.EXPO_PUBLIC_INCLUDE_DRAFTS === "1";
 
 export const learningObjects: readonly LearningObject[] = samplePack.objects.filter(
   (object) => includeDrafts || object.review.status === "reviewed",

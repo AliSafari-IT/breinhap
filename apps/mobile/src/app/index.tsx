@@ -21,6 +21,7 @@ export default function Home() {
   return (
     <Screen>
       <AppText variant="big">Hoeveel tijd heb je?</AppText>
+      {includeDrafts && <AppText muted>Proefversie: deze missies zijn nog niet nagekeken.</AppText>}
       <View style={styles.row}>
         {TIME_OPTIONS.map((option) => (
           <View key={option} style={{ flexGrow: 1, minWidth: 120 }}>
@@ -50,7 +51,9 @@ export default function Home() {
       {minutes !== null && !choice && (
         <Card>
           <AppText>
-            {minutes <= 2
+            {learningObjects.length === 0
+              ? "Er staan nog geen missies in deze versie. Ze komen eraan."
+              : minutes <= 2
               ? "Geen missie past in 2 minuten. Kies wat meer tijd, of neem een pauze. Dat mag ook."
               : "Je hebt alles van vandaag al gedaan. Goed bezig. Morgen is er meer."}
           </AppText>

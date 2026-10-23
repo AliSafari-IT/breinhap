@@ -95,13 +95,12 @@ const nl = {
     items: [
       "Geen advertenties. Geen tracking. We verkopen niets door.",
       "We vragen nooit naar een diagnose.",
-      "Je logt in met je ASafariM-account. Geen wachtwoord nodig: een code per e-mail of een passkey.",
-      "Je gegevens blijven in de Europese Unie.",
-      "AI ziet nooit je naam, school of rooster.",
-      "Je kan je account en al je gegevens verwijderen, in de app of via deze website.",
+      "Geen account nodig. Deze versie werkt helemaal op je toestel en stuurt niets over jou door.",
+      "Komt er later inloggen of AI, dan blijven je gegevens in de Europese Unie en ziet AI nooit je naam, school of rooster.",
+      "Je instellingen wis je met één tik in de instellingen van je toestel.",
     ],
     privacyLink: "Lees het privacybeleid",
-    deleteLink: "Account verwijderen",
+    deleteLink: "Je gegevens verwijderen",
   },
   parents: {
     title: "Voor ouders en leerkrachten",
@@ -120,7 +119,7 @@ const nl = {
   footer: {
     tagline: "Leren in kleine happen.",
     privacy: "Privacy",
-    delete: "Account verwijderen",
+    delete: "Gegevens verwijderen",
     os: "ASafariM",
     rights: "ASafariM",
   },
@@ -218,13 +217,12 @@ const en = {
     items: [
       "No ads. No tracking. We never sell data.",
       "We never ask for a diagnosis.",
-      "You sign in with your ASafariM account. No password needed: a code by email, or a passkey.",
-      "Your data stays in the European Union.",
-      "AI never sees your name, school or timetable.",
-      "You can delete your account and all your data, in the app or on this website.",
+      "No account needed. This version works entirely on your device and sends nothing about you anywhere.",
+      "If sign-in or AI comes later, your data stays in the European Union and AI never sees your name, school or timetable.",
+      "Clear your settings with one tap in your device settings.",
     ],
     privacyLink: "Read the privacy policy",
-    deleteLink: "Delete your account",
+    deleteLink: "Delete your data",
   },
   parents: {
     title: "For parents and teachers",
@@ -243,7 +241,7 @@ const en = {
   footer: {
     tagline: "Learning in small bites.",
     privacy: "Privacy",
-    delete: "Delete account",
+    delete: "Delete data",
     os: "ASafariM",
     rights: "ASafariM",
   },
