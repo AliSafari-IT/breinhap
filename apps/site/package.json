@@ -1,0 +1,12 @@
+{
+  "name": "@breinhap/site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node src/build.mjs",
+    "start": "node src/build.mjs && node src/serve.mjs",
+    "typecheck": "echo 'site: plain JS, checked by its tests'",
+    "test": "node src/build.mjs && node --test test/*.test.mjs"
+  }
+}
