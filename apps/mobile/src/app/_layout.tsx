@@ -1,0 +1,33 @@
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { SettingsProvider, useSettings } from "../settings/SettingsContext";
+
+function ThemedStack() {
+  const { palette } = useSettings();
+  return (
+    <>
+      {/* The header is always dark charcoal, so the status bar text is light. */}
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: palette.header },
+          headerTintColor: palette.onHeader,
+          contentStyle: { backgroundColor: palette.background },
+          animation: "none",
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: "Breinhap" }} />
+        <Stack.Screen name="mission/[id]" options={{ title: "Missie" }} />
+        <Stack.Screen name="instellingen" options={{ title: "Instellingen" }} />
+      </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SettingsProvider>
+      <ThemedStack />
+    </SettingsProvider>
+  );
+}

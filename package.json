@@ -1,0 +1,14 @@
+{
+  "name": "breinhap",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "mobile": "pnpm --filter @breinhap/mobile start",
+    "site": "pnpm --filter @breinhap/site start"
+  }
+}
