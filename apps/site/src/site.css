@@ -270,6 +270,7 @@ p { margin: 0 0 1em; }
 .faq-item p { margin: 10px 0 0; color: var(--muted); }
 
 /* Legal pages */
+.prose h1 { font-size: clamp(1.9rem, 7vw, 3.6rem); overflow-wrap: break-word; hyphens: auto; }
 .prose h2 { font-size: 1.3rem; margin-top: 1.6em; }
 .prose ul, .prose ol { padding-left: 1.3em; }
 .prose li { margin-bottom: 0.4em; }

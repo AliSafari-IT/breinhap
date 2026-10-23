@@ -11,6 +11,8 @@ export const routes = {
   home: { nl: "/", en: "/en/" },
   privacy: { nl: "/privacy/", en: "/en/privacy/" },
   deletion: { nl: "/account-verwijderen/", en: "/en/delete-account/" },
+  cookies: { nl: "/cookies/", en: "/en/cookies/" },
+  terms: { nl: "/voorwaarden/", en: "/en/terms/" },
 };
 
 const ICONS = {
@@ -98,6 +100,8 @@ ${body}
     </div>
     <nav class="footer-links" aria-label="Footer">
       <a href="${routes.privacy[lang]}">${esc(t.footer.privacy)}</a>
+      <a href="${routes.cookies[lang]}">${esc(t.footer.cookies)}</a>
+      <a href="${routes.terms[lang]}">${esc(t.footer.terms)}</a>
       <a href="${routes.deletion[lang]}">${esc(t.footer.delete)}</a>
       <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>
       <a href="https://asafarim.site/">${esc(t.footer.os)}</a>
@@ -215,17 +219,24 @@ function home(t, lang) {
   return layout({ t, lang, page: "home", title: t.meta.title, description: t.meta.description, body });
 }
 
-function block(item, deleteHref) {
-  if (typeof item === "string") return `<p>${item.replaceAll("{{deleteHref}}", deleteHref)}</p>`;
+/** Fills the {{deleteHref}}, {{privacyHref}} and {{cookiesHref}} placeholders with the page's language's paths. */
+function links(text, lang) {
+  return text
+    .replaceAll("{{deleteHref}}", routes.deletion[lang])
+    .replaceAll("{{privacyHref}}", routes.privacy[lang])
+    .replaceAll("{{cookiesHref}}", routes.cookies[lang]);
+}
+
+function block(item, lang) {
+  if (typeof item === "string") return `<p>${links(item, lang)}</p>`;
   if (item.list) return `<ul>${item.list.map((li) => `<li>${li}</li>`).join("")}</ul>`;
   if (item.ordered) return `<ol>${item.ordered.map((li) => `<li>${li}</li>`).join("")}</ol>`;
   return "";
 }
 
 function legal(t, lang, page, doc) {
-  const deleteHref = routes.deletion[lang];
   const sections = doc.sections
-    .map(([heading, items]) => `<h2>${esc(heading)}</h2>${items.map((it) => block(it, deleteHref)).join("")}`)
+    .map(([heading, items]) => `<h2>${esc(heading)}</h2>${items.map((it) => block(it, lang)).join("")}`)
     .join("");
   const body = `<section class="section"><div class="wrap narrow prose">
     <h1>${esc(doc.title)}</h1>

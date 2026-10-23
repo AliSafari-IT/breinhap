@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { languages } from "./content.mjs";
-import { deletion, privacy } from "./legal.mjs";
+import { cookies, deletion, privacy, terms } from "./legal.mjs";
 import { SITE_URL, home, legal, notFound, routes } from "./render.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,6 +28,8 @@ for (const lang of ["nl", "en"]) {
   write(routes.home[lang], home(t, lang));
   write(routes.privacy[lang], legal(t, lang, "privacy", privacy[lang]));
   write(routes.deletion[lang], legal(t, lang, "deletion", deletion[lang]));
+  write(routes.cookies[lang], legal(t, lang, "cookies", cookies[lang]));
+  write(routes.terms[lang], legal(t, lang, "terms", terms[lang]));
 }
 write("/404.html", notFound(languages.nl));
 

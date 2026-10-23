@@ -90,3 +90,18 @@ test("SVG mask ids are unique per page", () => {
     assert.equal(new Set(ids).size, ids.length, `${file}: duplicate mask id`);
   }
 });
+
+test("the legal pages exist in both languages, with the same sections, and the footer links them all", async () => {
+  const legal = await import("../src/legal.mjs");
+  for (const name of ["privacy", "cookies", "terms", "deletion"]) {
+    assert.equal(legal[name].en.sections.length, legal[name].nl.sections.length, `${name}: section count`);
+  }
+  for (const lang of ["nl", "en"]) {
+    const html = read(fileFor(routes.home[lang]));
+    for (const page of ["privacy", "cookies", "terms", "deletion"]) {
+      assert.match(html, new RegExp(`<a href="${routes[page][lang]}">`), `${lang}: footer link to ${page}`);
+    }
+    assert.doesNotMatch(read(fileFor(routes.terms[lang])), /\{\{/, `${lang}: unfilled placeholder`);
+    assert.doesNotMatch(read(fileFor(routes.cookies[lang])), /\{\{/, `${lang}: unfilled placeholder`);
+  }
+});
