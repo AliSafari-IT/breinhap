@@ -5,10 +5,10 @@
   "dependencies": {
     "@breinhap/content": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~58.0.17",
+    "expo": "~58.0.19",
     "expo-constants": "~58.0.13",
     "expo-linking": "~58.0.14",
-    "expo-router": "~58.0.25",
+    "expo-router": "~58.0.26",
     "expo-speech": "~58.0.3",
     "expo-status-bar": "~58.0.4",
     "react": "19.3.0",
