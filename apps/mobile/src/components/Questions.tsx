@@ -85,15 +85,19 @@ function OrderView({ question, onDone, seed }: Props<OrderQuestion> & { seed: nu
       <AppText muted>Tik de stukjes aan in de juiste volgorde. Tik een gekozen stukje om het terug te zetten.</AppText>
 
       <View style={{ gap: spacing.sm }}>
-        {placed.map((item, i) => (
-          <Button
-            key={item}
-            label={`${i + 1}. ${item}`}
-            accessibilityHint="Zet dit stukje terug"
-            disabled={checked}
-            onPress={() => setPlaced(placed.filter((p) => p !== item))}
-          />
-        ))}
+        {placed.map((item, i) =>
+          // After checking, show the answer as plain text: a faded button is hard to read.
+          checked ? (
+            <AppText key={item}>{`${i + 1}. ${item}`}</AppText>
+          ) : (
+            <Button
+              key={item}
+              label={`${i + 1}. ${item}`}
+              accessibilityHint="Zet dit stukje terug"
+              onPress={() => setPlaced(placed.filter((p) => p !== item))}
+            />
+          ),
+        )}
       </View>
 
       {remaining.length > 0 && (
