@@ -23,6 +23,7 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
+    "production": "npx eas-cli@latest build -p android --profile production",
     "typecheck": "tsc --noEmit",
     "test": "echo 'no mobile tests yet'",
     "doctor": "expo-doctor"
