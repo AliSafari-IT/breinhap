@@ -13,7 +13,7 @@
   var toggle = flow.querySelector("[data-flow-toggle]");
   var caption = flow.querySelector("[data-flow-caption]");
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
-  var DURATIONS = [3500, 3500, 3800, 5200, 4200, 4200];
+  var DURATIONS = [3800, 3800, 4600, 3800, 5200, 4200, 4200];
   var current = 0;
   var timer = null;
   var playing = false;

@@ -69,7 +69,7 @@ test("each page has the right language and links to its translation", () => {
 
 test("both languages tell the same story", () => {
   const { nl, en } = languages;
-  assert.equal(nl.flow.steps.length, 6);
+  assert.equal(nl.flow.steps.length, 7);
   assert.equal(en.flow.steps.length, nl.flow.steps.length);
   assert.equal(en.why.items.length, nl.why.items.length);
   assert.equal(en.content.steps.length, nl.content.steps.length);
@@ -79,9 +79,9 @@ test("both languages tell the same story", () => {
 
 test("the phone has one scene per step, the first one shown", () => {
   const html = read(fileFor("/"));
-  assert.equal((html.match(/class="scene[^"]*" data-scene=/g) ?? []).length, 6);
+  assert.equal((html.match(/class="scene[^"]*" data-scene=/g) ?? []).length, 7);
   assert.match(html, /class="scene is-active" data-scene="0"/);
-  assert.equal((html.match(/data-step="/g) ?? []).length, 6);
+  assert.equal((html.match(/data-step="/g) ?? []).length, 7);
 });
 
 test("SVG mask ids are unique per page", () => {

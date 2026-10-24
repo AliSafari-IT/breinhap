@@ -2,7 +2,7 @@
 // Keep sentences short and literal: the audience includes autistic and ADHD readers.
 
 export const CONTACT_EMAIL = "privacy@asafarim.site";
-export const POLICY_UPDATED = "2026-10-23";
+export const POLICY_UPDATED = "2026-10-24";
 
 const nl = {
   lang: "nl-BE",
@@ -15,25 +15,26 @@ const nl = {
   meta: {
     title: "Breinhap: leren in kleine happen",
     description:
-      "Breinhap helpt leerlingen van het 3de middelbaar starten met studeren: 2 tot 6 minuten per keer, rustig en voorspelbaar. Gemaakt met en voor leerlingen met ADHD en AuDHD.",
+      "Breinhap helpt leerlingen in het Vlaamse middelbaar starten met studeren: je eigen vakken, 2 tot 6 minuten per keer, rustig en voorspelbaar. Gemaakt met en voor leerlingen met ADHD en AuDHD.",
   },
   hero: {
-    kicker: "Voor het 3de middelbaar in Vlaanderen",
+    kicker: "Voor leerlingen in het Vlaamse middelbaar",
     title: "Leren in kleine happen.",
-    lead: "Breinhap helpt je starten met studeren. Jij zegt hoeveel tijd je hebt. De app kiest één korte missie van 2 tot 6 minuten. Rustig, voorspelbaar, zonder tijdsdruk.",
+    lead: "Breinhap helpt je starten met studeren. Je kiest één keer je school, jaar en richting, en ziet daarna je eigen vakken. Kies een vak, zeg hoeveel tijd je hebt, en de app kiest één korte missie van 2 tot 6 minuten. Rustig, voorspelbaar, zonder tijdsdruk.",
     note: "Gemaakt met en voor leerlingen met ADHD en AuDHD. Fijn voor iedereen.",
     cta: "Bekijk hoe het werkt",
     chips: ["5 minuten", "Wiskunde", "Biologie", "Klopt.", "Geen tijdsdruk"],
   },
   flow: {
     title: "Hoe het werkt",
-    lead: "Elke missie volgt dezelfde stappen. Zo weet je altijd wat er komt.",
+    lead: "De eerste keer kies je je school. Daarna volgt elke missie dezelfde stappen. Zo weet je altijd wat er komt.",
     play: "Afspelen",
     pause: "Pauzeren",
     stepWord: "Stap",
     steps: [
-      { title: "Hoeveel tijd heb je?", text: "Eén vraag, vier knoppen. Je tikt op 5 minuten. Geen lange menu's." },
-      { title: "De app kiest één missie", text: "Eerst het vak dat je morgen hebt. Je ziet vooraf hoe lang het duurt." },
+      { title: "Kies je school, één keer", text: "Gemeente, school, jaar en richting. Eén vraag per scherm. Het blijft op je toestel en je past het aan in Instellingen." },
+      { title: "Kies een vak", text: "Je ziet alleen de vakken van jouw richting. Vakken zonder missies staan bij “Binnenkort”." },
+      { title: "Hoeveel tijd heb je?", text: "Vier knoppen. Je tikt op 5 minuten. De app kiest één missie en zegt vooraf hoe lang ze duurt." },
       { title: "Opwarmen en leren", text: "Eén idee per scherm. Laat de tekst voorlezen als je wil." },
       { title: "Doen", text: "Zet prikkel, receptor, conductor en reactie in de juiste volgorde." },
       { title: "Rustige feedback", text: "“Klopt.” of “Nog niet.”, altijd met de uitleg erbij. Geen rode kruisen." },
@@ -41,7 +42,15 @@ const nl = {
     ],
     screen: {
       app: "Breinhap",
-      howMuch: "Hoeveel tijd heb je?",
+      welcome: ["Dit vragen we maar één keer.", "Het blijft op je toestel."],
+      setupSteps: ["Gemeente", "School", "Jaar", "Richting"],
+      yearQuestion: "In welk jaar zit je?",
+      years: ["3de jaar", "4de jaar", "5de jaar", "6de jaar"],
+      whatNow: ["Wat wil je nu", "studeren?"],
+      courses: ["Biologie", "Wiskunde", "Nederlands"],
+      soonLabel: "Binnenkort",
+      soon: "Frans, Engels, Geschiedenis",
+      howMuch: ["Hoeveel tijd", "heb je?"],
       minutes: ["2 minuten", "5 minuten", "10 minuten", "15 minuten"],
       subject: "Biologie",
       missionTitle: ["Een plant buigt", "naar het licht"],
@@ -66,7 +75,7 @@ const nl = {
     title: "Gemaakt voor hoe jouw brein werkt",
     lead: "Wat helpt bij ADHD en AuDHD, helpt eigenlijk iedereen. Daarom is dit gewoon hoe de app werkt, geen aparte modus.",
     items: [
-      { icon: "start", title: "Starten is makkelijk", text: "Eén knop: “Ik heb 5 minuten”. De app kiest. Begin desnoods met 2 minuten." },
+      { icon: "start", title: "Starten is makkelijk", text: "Kies een vak en tik op “5 minuten”. De app kiest de missie. Begin desnoods met 2 minuten." },
       { icon: "steps", title: "Altijd dezelfde 4 stappen", text: "Opwarmen, Leren, Doen, Check. Je weet vooraf hoe lang het duurt en wat er komt." },
       { icon: "clock", title: "Tijd die je kan zien", text: "Tijd als een balk die krimpt. Deadlines als “nog 2 keer slapen”." },
       { icon: "calm", title: "Rustige modus", text: "Zachte kleuren, niets dat flitst of beweegt, geen geluiden. Licht of donker thema." },
@@ -78,7 +87,7 @@ const nl = {
     title: "Hoe de inhoud gemaakt wordt",
     lead: "AI schrijft mee. Een mens beslist. AI geeft nooit punten en beslist niet wat je kan.",
     steps: [
-      { title: "Leerdoel", text: "Uit het leerplan van jouw school." },
+      { title: "Leerdoel", text: "Uit het leerplan van jouw jaar en richting." },
       { title: "AI-ontwerp", text: "AI maakt een eerste versie: uitleg, voorbeelden, vragen." },
       { title: "Nagekeken", text: "Een mens controleert alles. Fouten eruit." },
       { title: "Inhoudspakket", text: "Pas daarna komt het in de app." },
@@ -96,6 +105,7 @@ const nl = {
       "Geen advertenties. Geen tracking. We verkopen niets door.",
       "We vragen nooit naar een diagnose.",
       "Geen account nodig. Deze versie werkt helemaal op je toestel en stuurt niets over jou door.",
+      "Je school, jaar en richting kies je één keer. Ze blijven op je toestel en je wijzigt ze in Instellingen.",
       "Komt er later inloggen of AI, dan blijven je gegevens in de Europese Unie en ziet AI nooit je naam, school of rooster.",
       "Je instellingen wis je met één tik in de instellingen van je toestel.",
     ],
@@ -111,7 +121,8 @@ const nl = {
     items: [
       { q: "Wanneer is Breinhap beschikbaar?", a: "We testen eerst met een kleine groep leerlingen. Daarna komt de app op Google Play. Eerst voor Android." },
       { q: "Is het alleen voor leerlingen met ADHD of AuDHD?", a: "Nee. Het is ontworpen met hen in gedachten, maar het werkt voor iedereen die het moeilijk vindt om te beginnen of te blijven studeren." },
-      { q: "Volgt het mijn leerplan?", a: "Dat is het doel. Inhoud volgt de leerdoelen van het 3de middelbaar. Leerplannen verschillen per net en richting; we beginnen met wiskunde en biologie." },
+      { q: "Voor welk jaar is Breinhap?", a: "Je kiest zelf je jaar en richting, en ziet dan je eigen vakken. We testen eerst met een paar scholen, jaren en richtingen en breiden daarna uit. Staat jouw school er nog niet bij? Dan kan je toch verder." },
+      { q: "Volgt het mijn leerplan?", a: "Dat is het doel. Elke missie hoort bij een leerdoel van jouw jaar en richting. Leerplannen verschillen per net en richting; we beginnen met wiskunde en biologie. Vakken zonder missies staan in de app bij “Binnenkort”." },
       { q: "Wat kost het?", a: "Tijdens de test is Breinhap gratis. Er komen nooit advertenties." },
       { q: "Wie maakt Breinhap?", a: "Breinhap is een project van ASafariM in België." },
     ],
@@ -139,25 +150,26 @@ const en = {
   meta: {
     title: "Breinhap: learning in small bites",
     description:
-      "Breinhap helps Flemish students in their 3rd year of secondary school get started with studying: 2 to 6 minutes at a time, calm and predictable. Made with and for students with ADHD and AuDHD.",
+      "Breinhap helps secondary school students in Flanders get started with studying: their own subjects, 2 to 6 minutes at a time, calm and predictable. Made with and for students with ADHD and AuDHD.",
   },
   hero: {
-    kicker: "For the 3rd year of secondary school in Flanders",
+    kicker: "For secondary school students in Flanders",
     title: "Learning in small bites.",
-    lead: "Breinhap helps you get started. You say how much time you have. The app picks one short mission of 2 to 6 minutes. Calm, predictable, no time pressure.",
+    lead: "Breinhap helps you get started. You pick your school, year and study programme once, then see your own subjects. Pick a subject, say how much time you have, and the app picks one short mission of 2 to 6 minutes. Calm, predictable, no time pressure.",
     note: "Made with and for students with ADHD and AuDHD. Good for everyone.",
     cta: "See how it works",
     chips: ["5 minutes", "Maths", "Biology", "Correct.", "No time pressure"],
   },
   flow: {
     title: "How it works",
-    lead: "Every mission follows the same steps, so you always know what comes next.",
+    lead: "The first time, you pick your school. After that, every mission follows the same steps, so you always know what comes next.",
     play: "Play",
     pause: "Pause",
     stepWord: "Step",
     steps: [
-      { title: "How much time do you have?", text: "One question, four buttons. You tap 5 minutes. No long menus." },
-      { title: "The app picks one mission", text: "The subject you have tomorrow comes first. You see how long it takes before you start." },
+      { title: "Pick your school, once", text: "Town, school, year and study programme. One question per screen. It stays on your device and you can change it in Settings." },
+      { title: "Pick a subject", text: "You only see the subjects of your programme. Subjects without missions yet are listed under “Coming soon”." },
+      { title: "How much time do you have?", text: "Four buttons. You tap 5 minutes. The app picks one mission and tells you how long it takes before you start." },
       { title: "Warm up and learn", text: "One idea per screen. Have the text read aloud if you like." },
       { title: "Do", text: "Put stimulus, receptor, conductor and response in the right order." },
       { title: "Calm feedback", text: "“Correct.” or “Not yet.”, always with the explanation. No red crosses." },
@@ -165,7 +177,15 @@ const en = {
     ],
     screen: {
       app: "Breinhap",
-      howMuch: "How much time do you have?",
+      welcome: ["We only ask this once.", "It stays on your device."],
+      setupSteps: ["Town", "School", "Year", "Programme"],
+      yearQuestion: "Which year are you in?",
+      years: ["3rd year", "4th year", "5th year", "6th year"],
+      whatNow: ["What do you want", "to study?"],
+      courses: ["Biology", "Maths", "Dutch"],
+      soonLabel: "Coming soon",
+      soon: "French, English, History",
+      howMuch: ["How much time", "do you have?"],
       minutes: ["2 minutes", "5 minutes", "10 minutes", "15 minutes"],
       subject: "Biology",
       missionTitle: ["A plant bends", "towards the light"],
@@ -190,7 +210,7 @@ const en = {
     title: "Made for how your brain works",
     lead: "What helps with ADHD and AuDHD helps everyone. So this is simply how the app works, not a special mode.",
     items: [
-      { icon: "start", title: "Starting is easy", text: "One button: “I have 5 minutes”. The app chooses. Start with 2 minutes if that's what you have." },
+      { icon: "start", title: "Starting is easy", text: "Pick a subject and tap “5 minutes”. The app picks the mission. Start with 2 minutes if that's what you have." },
       { icon: "steps", title: "Always the same 4 steps", text: "Warm up, Learn, Do, Check. You know how long it takes and what comes next." },
       { icon: "clock", title: "Time you can see", text: "Time as a bar that shrinks. Deadlines as “two more sleeps”." },
       { icon: "calm", title: "Calm mode", text: "Soft colours, nothing that flashes or moves, no sounds. Light or dark theme." },
@@ -202,7 +222,7 @@ const en = {
     title: "How the content is made",
     lead: "AI helps write. A person decides. AI never grades you and never decides what you know.",
     steps: [
-      { title: "Learning goal", text: "From your school's curriculum." },
+      { title: "Learning goal", text: "From the curriculum for your year and programme." },
       { title: "AI draft", text: "AI writes a first version: explanation, examples, questions." },
       { title: "Reviewed", text: "A person checks everything and removes mistakes." },
       { title: "Content pack", text: "Only then does it go into the app." },
@@ -220,6 +240,7 @@ const en = {
       "No ads. No tracking. We never sell data.",
       "We never ask for a diagnosis.",
       "No account needed. This version works entirely on your device and sends nothing about you anywhere.",
+      "You pick your school, year and study programme once. They stay on your device and you can change them in Settings.",
       "If sign-in or AI comes later, your data stays in the European Union and AI never sees your name, school or timetable.",
       "Clear your settings with one tap in your device settings.",
     ],
@@ -235,7 +256,8 @@ const en = {
     items: [
       { q: "When is Breinhap available?", a: "We are testing with a small group of students first. Then the app comes to Google Play, on Android first." },
       { q: "Is it only for students with ADHD or AuDHD?", a: "No. It is designed with them in mind, but it works for anyone who finds it hard to start or keep studying." },
-      { q: "Does it follow my curriculum?", a: "That is the goal. Content follows the learning goals of the 3rd year. Curricula differ by school network and track; we start with maths and biology." },
+      { q: "Which year is Breinhap for?", a: "You pick your own year and study programme, then see your own subjects. We are testing with a few schools, years and programmes first and will add more after that. Is your school not listed yet? You can still continue." },
+      { q: "Does it follow my curriculum?", a: "That is the goal. Every mission belongs to a learning goal of your year and programme. Curricula differ by school network and programme; we start with maths and biology. Subjects without missions yet are listed in the app under “Coming soon”." },
       { q: "What does it cost?", a: "Breinhap is free during the test. There will never be ads." },
       { q: "Who makes Breinhap?", a: "Breinhap is a project by ASafariM in Belgium." },
     ],
