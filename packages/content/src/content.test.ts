@@ -8,6 +8,7 @@ import {
   shuffleForDisplay,
 } from "./index";
 import { biologiePrikkelReactie } from "./samples/biologie-prikkel-reactie";
+import { wiskundeSamengesteldeIntrest } from "./samples/wiskunde-samengestelde-intrest";
 
 const reviewed = (object: LearningObject): LearningObject => ({
   ...object,
@@ -43,6 +44,15 @@ describe("schema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("only accepts secondary school years 1 to 6", () => {
+    expect(LearningObject.safeParse({ ...biologiePrikkelReactie, grade: 5 }).success).toBe(true);
+    expect(LearningObject.safeParse({ ...biologiePrikkelReactie, grade: 7 }).success).toBe(false);
+  });
+
+  it("keeps new samples as drafts until reviewed", () => {
+    expect(LearningObject.parse(wiskundeSamengesteldeIntrest).review.status).toBe("draft");
+  });
+
   it("requires a reviewer on reviewed content", () => {
     const broken = { ...biologiePrikkelReactie, review: { status: "reviewed" } };
     expect(LearningObject.safeParse(broken).success).toBe(false);
@@ -65,7 +75,7 @@ describe("pickMission", () => {
   });
 
   it("uses the time offered: the longest mission that fits", () => {
-    expect(pickMission(objects, 10)?.mission.id).toBe("wis-kwadraat-van-een-som");
+    expect(pickMission(objects, 10)?.mission.id).toBe("wis-samengestelde-intrest");
   });
 
   it("prefers the subject the student has soonest", () => {
