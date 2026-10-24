@@ -1,0 +1,60 @@
+# CodeQL code scanning: the app, the content package and the site (javascript-typescript), plus these workflow
+# files themselves (actions). Findings show under Security > Code scanning and as annotations on pull requests.
+#
+# - push to main and every pull request: scan the change, so a finding shows up before it is merged.
+# - weekly (Sunday 04:17 UTC): rescan main, so new CodeQL queries also catch issues in code that did not change.
+# - workflow_dispatch: run by hand from the Actions tab.
+#
+# Nothing is built: the repo is TypeScript/JavaScript only (no Kotlin/Java of our own; Expo generates the Android
+# project at build time), so build-mode none sees all of our code. The extended security suite is used because
+# the app is for minors; it adds more queries than the default suite at the cost of an occasional extra
+# false positive, which can be dismissed in the Security tab.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 0"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to a PR replaces that PR's stale scan. Pushes to main and the weekly run are never cancelled.
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Upload the results to code scanning.
+      security-events: write
+      # Read the workflow run's status (required in a private repository).
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
