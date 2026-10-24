@@ -1,6 +1,6 @@
 import type { LearningObjectInput } from "../schema";
 
-// Draft sample: AI-assisted, not yet reviewed by a teacher.
+// AI-assisted sample, reviewed by Ali Safari on 2026-10-24.
 export const wiskundeMerkwaardigeProducten: LearningObjectInput = {
   schemaVersion: 1,
   id: "wiskunde-merkwaardige-producten",
@@ -10,7 +10,7 @@ export const wiskundeMerkwaardigeProducten: LearningObjectInput = {
   curriculum: {
     leerdoel: "De leerlingen werken merkwaardige producten uit en herkennen ze.",
   },
-  review: { status: "draft" },
+  review: { status: "reviewed", reviewedBy: "Ali Safari", reviewedAt: "2026-10-24" },
   missions: [
     {
       id: "wis-kwadraat-van-een-som",

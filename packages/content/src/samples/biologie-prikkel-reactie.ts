@@ -1,6 +1,6 @@
 import type { LearningObjectInput } from "../schema";
 
-// Draft sample: AI-assisted, not yet reviewed by a teacher.
+// AI-assisted sample, reviewed by Ali Safari on 2026-10-24.
 export const biologiePrikkelReactie: LearningObjectInput = {
   schemaVersion: 1,
   id: "biologie-prikkel-reactie-planten",
@@ -11,7 +11,7 @@ export const biologiePrikkelReactie: LearningObjectInput = {
     leerdoel:
       "De leerlingen tonen aan dat plantaardige en dierlijke organismen als systeem functioneren.",
   },
-  review: { status: "draft" },
+  review: { status: "reviewed", reviewedBy: "Ali Safari", reviewedAt: "2026-10-24" },
   missions: [
     {
       id: "bio-prikkel-reactie-volgorde",

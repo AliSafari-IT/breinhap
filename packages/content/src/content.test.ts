@@ -53,8 +53,10 @@ describe("pickMission", () => {
   const objects = samplePack.objects.map(reviewed);
 
   it("never shows drafts unless asked", () => {
-    expect(pickMission(samplePack.objects, 10)).toBeUndefined();
-    expect(pickMission(samplePack.objects, 10, { includeDrafts: true })).toBeDefined();
+    const drafts = samplePack.objects.map((o) => ({ ...o, review: { status: "draft" as const } }));
+    expect(pickMission(drafts, 10)).toBeUndefined();
+    expect(pickMission(drafts, 10, { includeDrafts: true })).toBeDefined();
+    expect(pickMission(samplePack.objects, 10)).toBeDefined();
   });
 
   it("only picks missions that fit the time", () => {

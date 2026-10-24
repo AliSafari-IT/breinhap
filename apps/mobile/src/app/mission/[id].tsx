@@ -46,7 +46,11 @@ export default function MissionScreen() {
     return (
       <Screen>
         <AppText variant="big">Missie klaar.</AppText>
-        <AppText>{`Je had ${correct} van de ${questionCount} vragen juist.`}</AppText>
+        <AppText>
+          {correct > 0
+            ? `Je had ${correct} van de ${questionCount} vragen juist.`
+            : `Je hebt ${questionCount} vragen geoefend. Lees de uitleg nog eens rustig na.`}
+        </AppText>
         {mission.commonMistakes.length > 0 && (
           <Card>
             <AppText variant="title">Veelgemaakte fout</AppText>
