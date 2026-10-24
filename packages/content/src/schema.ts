@@ -103,8 +103,8 @@ export const LearningObject = z.object({
   id: Id,
   subject: Subject,
   title: Text,
-  /** Year of secondary school (3 = 3de middelbaar). */
-  grade: z.literal(3),
+  /** Year of secondary school (3 = 3de middelbaar, 5 = 5de jaar). */
+  grade: z.number().int().min(1).max(6),
   curriculum: z.object({
     /** The learning goal in the school's own words. */
     leerdoel: Text,
