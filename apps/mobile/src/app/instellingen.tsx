@@ -1,5 +1,7 @@
+import { router } from "expo-router";
 import { Linking, Switch, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
+import { LEGAL } from "../links";
 import { useSettings, type ThemePreference } from "../settings/SettingsContext";
 import { spacing } from "../theme/tokens";
 
@@ -7,15 +9,6 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
   { value: "system", label: "Zoals mijn toestel" },
   { value: "light", label: "Licht" },
   { value: "dark", label: "Donker" },
-];
-
-/** The legal pages on the website (Dutch; each links its English version). Google Play also lists the privacy policy. */
-const SITE = "https://breinhap.asafarim.site";
-const LEGAL: Array<{ label: string; url: string }> = [
-  { label: "Privacybeleid", url: `${SITE}/privacy/` },
-  { label: "Gebruiksvoorwaarden", url: `${SITE}/voorwaarden/` },
-  { label: "Cookies", url: `${SITE}/cookies/` },
-  { label: "Je gegevens verwijderen", url: `${SITE}/account-verwijderen/` },
 ];
 
 function Toggle({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
@@ -89,6 +82,7 @@ export default function SettingsScreen() {
           ))}
         </View>
       </Card>
+      <Button kind="secondary" label="Over Breinhap" onPress={() => router.push("/over")} />
     </Screen>
   );
 }

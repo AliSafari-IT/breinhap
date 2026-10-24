@@ -1,9 +1,10 @@
 import { pickMission } from "@breinhap/content";
 import { router } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
-import { includeDrafts, learningObjects, subjectLabel } from "../content";
+import { includeDrafts, learningObjects, showsDrafts, subjectLabel } from "../content";
+import { LEGAL } from "../links";
 import { useSettings } from "../settings/SettingsContext";
 
 const TIME_OPTIONS = [2, 5, 10, 15] as const;
@@ -21,7 +22,7 @@ export default function Home() {
   return (
     <Screen>
       <AppText variant="big">Hoeveel tijd heb je?</AppText>
-      {includeDrafts && <AppText muted>Proefversie: deze missies zijn nog niet nagekeken.</AppText>}
+      {showsDrafts && <AppText muted>Proefversie: deze missies zijn nog niet nagekeken.</AppText>}
       <View style={styles.row}>
         {TIME_OPTIONS.map((option) => (
           <View key={option} style={{ flexGrow: 1, minWidth: 120 }}>
@@ -65,6 +66,25 @@ export default function Home() {
       )}
 
       <Button kind="secondary" label="Instellingen" onPress={() => router.push("/instellingen")} />
+      <Button kind="secondary" label="Over Breinhap" onPress={() => router.push("/over")} />
+
+      <View style={[styles.row, { justifyContent: "center" }]}>
+        {LEGAL.slice(0, 2).map((page) => (
+          <Pressable
+            key={page.url}
+            accessibilityRole="link"
+            accessibilityHint="Opent de website van Breinhap"
+            hitSlop={8}
+            onPress={() => {
+              Linking.openURL(page.url).catch(() => {});
+            }}
+          >
+            <AppText variant="small" muted style={{ textDecorationLine: "underline" }}>
+              {page.label}
+            </AppText>
+          </Pressable>
+        ))}
+      </View>
     </Screen>
   );
 }

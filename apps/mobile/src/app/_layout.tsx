@@ -19,6 +19,7 @@ function ThemedStack() {
         <Stack.Screen name="index" options={{ title: "Breinhap" }} />
         <Stack.Screen name="mission/[id]" options={{ title: "Missie" }} />
         <Stack.Screen name="instellingen" options={{ title: "Instellingen" }} />
+        <Stack.Screen name="over" options={{ title: "Over Breinhap" }} />
       </Stack>
     </>
   );
