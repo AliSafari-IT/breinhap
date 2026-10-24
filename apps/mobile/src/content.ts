@@ -12,6 +12,9 @@ export const learningObjects: readonly LearningObject[] = samplePack.objects.fil
   (object) => includeDrafts || object.review.status === "reviewed",
 );
 
+/** True when this build shows missions that nobody has checked yet. */
+export const showsDrafts = learningObjects.some((object) => object.review.status === "draft");
+
 export function findMission(id: string): { object: LearningObject; mission: Mission } | undefined {
   for (const object of learningObjects) {
     const mission = object.missions.find((m) => m.id === id);
