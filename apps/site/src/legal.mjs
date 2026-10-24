@@ -24,6 +24,7 @@ export const privacy = {
           {
             list: [
               "<strong>Je instellingen.</strong> Thema, rustige modus en grote tekst.",
+              "<strong>Je school.</strong> De school, het jaar en de richting die je koos, zodat je meteen je eigen vakken ziet.",
               "<strong>Wat je vandaag deed.</strong> Welke missies je vandaag al deed, zodat je niet twee keer dezelfde krijgt. Dat verdwijnt als je de app sluit.",
             ],
           },
@@ -94,6 +95,7 @@ export const privacy = {
           {
             list: [
               "<strong>Your settings.</strong> Theme, calm mode and large text.",
+              "<strong>Your school.</strong> The school, year and study programme you picked, so you see your own subjects straight away.",
               "<strong>What you did today.</strong> Which missions you already did today, so you don't get the same one twice. This is gone when you close the app.",
             ],
           },
@@ -168,7 +170,7 @@ export const deletion = {
       ],
       [
         "Wat er dan weg is",
-        [{ list: ["Je instellingen (thema, rustige modus, grote tekst).", "Wat je vandaag deed."] }],
+        [{ list: ["Je instellingen (thema, rustige modus, grote tekst).", "Je school, jaar en richting.", "Wat je vandaag deed."] }],
       ],
       [
         "Bij ons",
@@ -197,7 +199,7 @@ export const deletion = {
       ],
       [
         "What is then gone",
-        [{ list: ["Your settings (theme, calm mode, large text).", "What you did today."] }],
+        [{ list: ["Your settings (theme, calm mode, large text).", "Your school, year and study programme.", "What you did today."] }],
       ],
       [
         "On our side",

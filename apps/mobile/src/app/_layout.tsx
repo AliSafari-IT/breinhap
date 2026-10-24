@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Text } from "react-native";
+import { ProfileProvider } from "../settings/ProfileContext";
 import { SettingsProvider, useSettings } from "../settings/SettingsContext";
 import { versionLabel } from "../version";
 
@@ -33,6 +34,7 @@ function ThemedStack() {
         <Stack.Screen name="mission/[id]" options={{ title: "Missie" }} />
         <Stack.Screen name="instellingen" options={{ title: "Instellingen" }} />
         <Stack.Screen name="over" options={{ title: "Over Breinhap" }} />
+        <Stack.Screen name="school" options={{ title: "Mijn school" }} />
       </Stack>
     </>
   );
@@ -41,7 +43,9 @@ function ThemedStack() {
 export default function RootLayout() {
   return (
     <SettingsProvider>
-      <ThemedStack />
+      <ProfileProvider>
+        <ThemedStack />
+      </ProfileProvider>
     </SettingsProvider>
   );
 }
