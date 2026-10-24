@@ -1,6 +1,4 @@
 import { pickMission } from "@breinhap/content";
-import * as Application from "expo-application";
-import Constants from "expo-constants";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -87,12 +85,6 @@ export default function Home() {
           </Pressable>
         ))}
       </View>
-      {/* Lets testers see at a glance which build they have. */}
-      <AppText variant="small" muted style={{ textAlign: "center" }}>
-        {`Versie ${Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "?"}${
-          Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ""
-        }${includeDrafts ? " · proefversie" : ""}`}
-      </AppText>
     </Screen>
   );
 }
