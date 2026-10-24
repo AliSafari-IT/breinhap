@@ -1,4 +1,4 @@
-import { Switch, View } from "react-native";
+import { Linking, Switch, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
 import { useSettings, type ThemePreference } from "../settings/SettingsContext";
 import { spacing } from "../theme/tokens";
@@ -7,6 +7,15 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
   { value: "system", label: "Zoals mijn toestel" },
   { value: "light", label: "Licht" },
   { value: "dark", label: "Donker" },
+];
+
+/** The legal pages on the website (Dutch; each links its English version). Google Play also lists the privacy policy. */
+const SITE = "https://breinhap.asafarim.site";
+const LEGAL: Array<{ label: string; url: string }> = [
+  { label: "Privacybeleid", url: `${SITE}/privacy/` },
+  { label: "Gebruiksvoorwaarden", url: `${SITE}/voorwaarden/` },
+  { label: "Cookies", url: `${SITE}/cookies/` },
+  { label: "Je gegevens verwijderen", url: `${SITE}/account-verwijderen/` },
 ];
 
 function Toggle({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
@@ -60,9 +69,26 @@ export default function SettingsScreen() {
           onChange={(largeText) => update({ largeText })}
         />
       </Card>
-      <AppText variant="small" muted>
-        Breinhap vraagt nooit naar een diagnose. Deze instellingen blijven op je toestel.
-      </AppText>
+      <Card>
+        <AppText variant="title">Privacy en voorwaarden</AppText>
+        <AppText variant="small" muted>
+          Breinhap vraagt nooit naar een diagnose. Deze instellingen blijven op je toestel. De app stuurt niets over jou
+          door.
+        </AppText>
+        <View style={styles.row}>
+          {LEGAL.map((page) => (
+            <Button
+              key={page.url}
+              kind="secondary"
+              label={page.label}
+              accessibilityHint="Opent de website van Breinhap"
+              onPress={() => {
+                Linking.openURL(page.url).catch(() => {});
+              }}
+            />
+          ))}
+        </View>
+      </Card>
     </Screen>
   );
 }

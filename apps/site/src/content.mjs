@@ -119,6 +119,8 @@ const nl = {
   footer: {
     tagline: "Leren in kleine happen.",
     privacy: "Privacy",
+    cookies: "Cookies",
+    terms: "Voorwaarden",
     delete: "Gegevens verwijderen",
     os: "ASafariM",
     rights: "ASafariM",
@@ -241,6 +243,8 @@ const en = {
   footer: {
     tagline: "Learning in small bites.",
     privacy: "Privacy",
+    cookies: "Cookies",
+    terms: "Terms",
     delete: "Delete data",
     os: "ASafariM",
     rights: "ASafariM",
