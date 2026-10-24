@@ -1,7 +1,9 @@
 import { router } from "expo-router";
 import { Linking, Switch, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
+import { profileLabel } from "../components/SchoolPicker";
 import { LEGAL } from "../links";
+import { useProfile } from "../settings/ProfileContext";
 import { useSettings, type ThemePreference } from "../settings/SettingsContext";
 import { spacing } from "../theme/tokens";
 
@@ -33,8 +35,14 @@ function Toggle({ label, hint, value, onChange }: { label: string; hint: string;
 
 export default function SettingsScreen() {
   const { settings, update } = useSettings();
+  const { profile } = useProfile();
   return (
     <Screen>
+      <Card>
+        <AppText variant="title">Mijn school</AppText>
+        <AppText muted>{profile ? profileLabel(profile) : "Nog niet gekozen."}</AppText>
+        <Button kind="secondary" label="Wijzig school, jaar of richting" onPress={() => router.push("/school")} />
+      </Card>
       <Card>
         <AppText variant="title">Thema</AppText>
         <View style={styles.row}>
@@ -65,7 +73,7 @@ export default function SettingsScreen() {
       <Card>
         <AppText variant="title">Privacy en voorwaarden</AppText>
         <AppText variant="small" muted>
-          Breinhap vraagt nooit naar een diagnose. Deze instellingen blijven op je toestel. De app stuurt niets over jou
+          Breinhap vraagt nooit naar een diagnose. Je school en deze instellingen blijven op je toestel. De app stuurt niets over jou
           door.
         </AppText>
         <View style={styles.row}>

@@ -52,7 +52,7 @@ export default function AboutScreen() {
       <Card>
         <AppText variant="title">Privacy en voorwaarden</AppText>
         <AppText variant="small" muted>
-          Breinhap werkt zonder account en stuurt niets over jou door. Je instellingen blijven op je toestel.
+          Breinhap werkt zonder account en stuurt niets over jou door. Je school en je instellingen blijven op je toestel.
         </AppText>
         <View style={styles.row}>
           {LEGAL.map((page) => (

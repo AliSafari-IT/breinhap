@@ -23,16 +23,4 @@ export function findMission(id: string): { object: LearningObject; mission: Miss
   return undefined;
 }
 
-export const subjectLabel: Record<string, string> = {
-  wiskunde: "Wiskunde",
-  biologie: "Biologie",
-  chemie: "Chemie",
-  fysica: "Fysica",
-  nederlands: "Nederlands",
-  engels: "Engels",
-  frans: "Frans",
-  aardrijkskunde: "Aardrijkskunde",
-  geschiedenis: "Geschiedenis",
-  economie: "Economie",
-  "digitale-vaardigheden": "Digitale vaardigheden",
-};
+export { subjectLabel } from "@breinhap/content";
