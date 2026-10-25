@@ -44,7 +44,50 @@ function themeToggle(t) {
 </button>`;
 }
 
-function layout({ t, lang, page, title, description, body, nav = true }) {
+/** Open Graph locale for each page language. */
+const OG_LOCALE = { nl: "nl_BE", en: "en_US" };
+
+/**
+ * Structured data (schema.org JSON-LD) for the home page: who publishes Breinhap, the site, and the app.
+ * A JSON data block, not a script: the CSP's script-src does not apply to it and browsers never run it.
+ */
+function structuredData(t, lang) {
+  const url = `${SITE_URL}${routes.home[lang]}`;
+  const graph = {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "Organization", "@id": "https://asafarim.site/#org", name: "ASafariM", url: "https://asafarim.site/", email: CONTACT_EMAIL },
+      {
+        "@type": "WebSite",
+        "@id": `${url}#website`,
+        url,
+        name: "Breinhap",
+        description: t.meta.description,
+        inLanguage: t.lang,
+        publisher: { "@id": "https://asafarim.site/#org" },
+      },
+      {
+        "@type": "MobileApplication",
+        "@id": `${SITE_URL}/#app`,
+        name: "Breinhap",
+        description: t.meta.description,
+        url,
+        image: `${SITE_URL}/og.png`,
+        operatingSystem: "Android",
+        applicationCategory: "EducationalApplication",
+        inLanguage: "nl-BE",
+        isAccessibleForFree: true,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+        audience: { "@type": "EducationalAudience", educationalRole: "student" },
+        publisher: { "@id": "https://asafarim.site/#org" },
+      },
+    ],
+  };
+  // "<" escaped so no text in the data can close the element.
+  return `<script type="application/ld+json">${JSON.stringify(graph).replaceAll("<", "\\u003c")}</script>\n`;
+}
+
+function layout({ t, lang, page, title, description, body, nav = true, noindex = false, jsonLd = "" }) {
   const other = lang === "nl" ? "en" : "nl";
   const home = routes.home[lang];
   const path = routes[page]?.[lang] ?? home;
@@ -68,10 +111,20 @@ function layout({ t, lang, page, title, description, body, nav = true }) {
 <link rel="canonical" href="${SITE_URL}${path}">
 <link rel="alternate" hreflang="nl-BE" href="${SITE_URL}${routes[page]?.nl ?? "/"}">
 <link rel="alternate" hreflang="en" href="${SITE_URL}${routes[page]?.en ?? "/en/"}">
+<link rel="alternate" hreflang="x-default" href="${SITE_URL}${routes[page]?.nl ?? "/"}">
+${noindex ? '<meta name="robots" content="noindex">\n' : ""}<meta property="og:type" content="website">
+<meta property="og:site_name" content="Breinhap">
+<meta property="og:url" content="${SITE_URL}${path}">
+<meta property="og:locale" content="${OG_LOCALE[lang]}">
+<meta property="og:locale:alternate" content="${OG_LOCALE[other]}">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="${SITE_URL}/og.png">
-<meta name="theme-color" content="#222222">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(t.meta.title)}">
+<meta name="twitter:card" content="summary_large_image">
+${jsonLd}<meta name="theme-color" content="#222222">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css">
 <script src="/theme.js"></script>
@@ -216,7 +269,7 @@ function home(t, lang) {
     ${faq}
   </div>
 </section>`;
-  return layout({ t, lang, page: "home", title: t.meta.title, description: t.meta.description, body });
+  return layout({ t, lang, page: "home", title: t.meta.title, description: t.meta.description, body, jsonLd: structuredData(t, lang) });
 }
 
 /** Fills the {{deleteHref}}, {{privacyHref}} and {{cookiesHref}} placeholders with the page's language's paths. */
@@ -255,7 +308,7 @@ function notFound(t) {
     <p>${esc(t.notFound.text)}</p>
     <p><a class="btn" href="/">${esc(t.notFound.home)}</a> <a class="btn btn--ghost" href="/en/">English</a></p>
   </div></section>`;
-  return layout({ t, lang: "nl", page: "home", title: `${t.notFound.title} · Breinhap`, description: t.notFound.text, body, nav: false });
+  return layout({ t, lang: "nl", page: "home", title: `${t.notFound.title} · Breinhap`, description: t.notFound.text, body, nav: false, noindex: true });
 }
 
 export { home, legal, notFound };

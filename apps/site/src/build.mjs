@@ -33,12 +33,19 @@ for (const lang of ["nl", "en"]) {
 }
 write("/404.html", notFound(languages.nl));
 
-const urls = Object.values(routes).flatMap((byLang) => Object.values(byLang));
+// Each page with its translations (xhtml:link), so search engines pair the two languages.
+const entries = Object.values(routes).flatMap((byLang) =>
+  Object.values(byLang).map((u) => {
+    const alternates = Object.entries(byLang)
+      .map(([l, alt]) => `    <xhtml:link rel="alternate" hreflang="${languages[l].lang}" href="${SITE_URL}${alt}"/>`)
+      .concat(`    <xhtml:link rel="alternate" hreflang="x-default" href="${SITE_URL}${byLang.nl}"/>`)
+      .join("\n");
+    return `  <url>\n    <loc>${SITE_URL}${u}</loc>\n${alternates}\n  </url>`;
+  }),
+);
 write(
   "/sitemap.xml",
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
-    .map((u) => `  <url><loc>${SITE_URL}${u}</loc></url>`)
-    .join("\n")}\n</urlset>\n`,
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${entries.join("\n")}\n</urlset>\n`,
 );
 
 console.log(`Built ${dist}`);

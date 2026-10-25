@@ -29,7 +29,8 @@ test("every route is built, in both languages", () => {
 test("pages fit the CSP: no inline scripts, styles or style attributes, nothing from another origin", () => {
   for (const file of pages) {
     const html = read(file);
-    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, `${file}: inline <script>`);
+    // JSON-LD is a data block, not a script: the CSP does not apply to it and browsers never run it.
+    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)(?![^>]*type="application\/ld\+json")[^>]*>/, `${file}: inline <script>`);
     assert.doesNotMatch(html, /<style[\s>]/, `${file}: inline <style>`);
     assert.doesNotMatch(html, /\sstyle="/, `${file}: style attribute`);
     assert.doesNotMatch(html, /\son[a-z]+="/, `${file}: inline event handler`);
@@ -104,4 +105,24 @@ test("the legal pages exist in both languages, with the same sections, and the f
     assert.doesNotMatch(read(fileFor(routes.terms[lang])), /\{\{/, `${lang}: unfilled placeholder`);
     assert.doesNotMatch(read(fileFor(routes.cookies[lang])), /\{\{/, `${lang}: unfilled placeholder`);
   }
+});
+
+test("search and share metadata: Open Graph, x-default, JSON-LD on the home pages, 404 not indexed", () => {
+  for (const lang of ["nl", "en"]) {
+    const html = read(fileFor(routes.home[lang]));
+    const url = `https://breinhap.asafarim.site${routes.home[lang]}`;
+    assert.match(html, new RegExp(`<meta property="og:url" content="${url}">`));
+    assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+    assert.match(html, /<link rel="alternate" hreflang="x-default" href="https:\/\/breinhap\.asafarim\.site\/">/);
+    const [, json] = html.match(/<script type="application\/ld\+json">([^<]*)<\/script>/) ?? [];
+    assert.ok(json, `${lang}: no JSON-LD`);
+    const types = JSON.parse(json)["@graph"].map((n) => n["@type"]);
+    assert.deepEqual(types, ["Organization", "WebSite", "MobileApplication"]);
+    assert.doesNotMatch(html, /name="robots"/);
+  }
+  assert.match(read(join(dist, "404.html")), /<meta name="robots" content="noindex">/);
+  const sitemap = read(join(dist, "sitemap.xml"));
+  for (const byLang of Object.values(routes))
+    for (const path of Object.values(byLang)) assert.ok(sitemap.includes(`<loc>https://breinhap.asafarim.site${path}</loc>`), path);
+  assert.ok(existsSync(join(dist, "robots.txt")));
 });
