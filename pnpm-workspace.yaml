@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+# Expo/React Native tooling expects a flat node_modules in a pnpm monorepo. pnpm 11+ reads this
+# setting only from here (.npmrc is auth/registry only).
+nodeLinker: hoisted
