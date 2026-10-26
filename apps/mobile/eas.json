@@ -5,11 +5,13 @@
   },
   "build": {
     "preview": {
+      "pnpm": "12.15.0",
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "env": { "EXPO_PUBLIC_INCLUDE_DRAFTS": "1" }
     },
     "production": {
+      "pnpm": "12.15.0",
       "android": { "buildType": "app-bundle" },
       "autoIncrement": true
     }
