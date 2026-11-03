@@ -26,7 +26,7 @@
     "android": "expo start --android",
     "production": "npx eas-cli@latest build -p android --profile production",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'no mobile tests yet'",
+    "test": "node --experimental-strip-types --test --test-isolation=none tests/*.test.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

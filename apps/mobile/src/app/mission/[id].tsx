@@ -1,15 +1,13 @@
-import type { Card as CardContent, Question } from "@breinhap/content";
+import type { Mission } from "@breinhap/content";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect } from "react";
 import { QuestionView } from "../../components/Questions";
-import { StepBar, type Step } from "../../components/StepBar";
+import { StepBar } from "../../components/StepBar";
 import { AppText, Button, Card, ReadAloud, Screen } from "../../components/ui";
 import { findMission } from "../../content";
+import { score } from "../../progress/model";
+import { missionStorage, useMissionProgress } from "../../progress/useMissionProgress";
 import { useSettings } from "../../settings/SettingsContext";
-
-type Page =
-  | { step: Step; kind: "card"; card: CardContent }
-  | { step: Step; kind: "question"; question: Question };
 
 /**
  * One mission: Opwarmen → Leren → Doen → Check, one thing per screen.
@@ -18,34 +16,98 @@ type Page =
 export default function MissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const found = findMission(String(id));
+  return found ? <MissionSession key={JSON.stringify(found.mission)} mission={found.mission} /> : <Unavailable id={String(id)} />;
+}
+
+function Unavailable({ id }: { id: string }) {
+  useEffect(() => {
+    if (id.length <= 100) void missionStorage.clear(id).catch(() => {});
+  }, [id]);
+  return (
+    <Screen>
+      <AppText variant="title">Deze missie bestaat niet (meer).</AppText>
+      <Button label="Terug naar start" onPress={() => router.replace("/")} />
+    </Screen>
+  );
+}
+
+function MissionSession({ mission }: { mission: Mission }) {
   const { markDone } = useSettings();
-  const [index, setIndex] = useState(0);
-  const [correct, setCorrect] = useState(0);
-
-  if (!found) {
-    return (
-      <Screen>
-        <AppText variant="title">Deze missie bestaat niet (meer).</AppText>
-        <Button label="Terug naar start" onPress={() => router.replace("/")} />
-      </Screen>
-    );
-  }
-
-  const { mission } = found;
-  const pages: Page[] = [
-    { step: "Opwarmen", kind: "card", card: mission.warmup },
-    ...mission.learn.map((card): Page => ({ step: "Leren", kind: "card", card })),
-    ...mission.practice.map((question): Page => ({ step: "Doen", kind: "question", question })),
-    ...mission.check.map((question): Page => ({ step: "Check", kind: "question", question })),
-  ];
+  const session = useMissionProgress(mission);
+  const { progress, pages, phase, busy, saveError } = session;
+  const { index } = progress;
+  const correct = score(progress, pages);
   const questionCount = mission.practice.length + mission.check.length;
   const page = pages[index];
-  const next = () => setIndex(index + 1);
+  const next = () => session.next(index);
+  const warning = saveError && (
+    <Card>
+      <AppText>Opslaan lukt nu niet. Je kunt hier verder oefenen. Probeer opnieuw op te slaan voordat je weggaat.</AppText>
+      <Button
+        label="Opnieuw opslaan"
+        disabled={busy}
+        onPress={() => {
+          void session.retrySave();
+        }}
+      />
+    </Card>
+  );
+
+  if (phase === "loading")
+    return (
+      <Screen>
+        <AppText>Je voortgang wordt geladen…</AppText>
+      </Screen>
+    );
+  if (phase === "load-error")
+    return (
+      <Screen>
+        <AppText variant="title">Je voortgang kon niet worden geladen.</AppText>
+        <AppText>Probeer opnieuw, of wis de opgeslagen voortgang van deze missie en begin opnieuw.</AppText>
+        {saveError && <AppText>Wissen kon niet worden bevestigd. Probeer opnieuw of laad je voortgang opnieuw.</AppText>}
+        <Button
+          label="Opnieuw laden"
+          disabled={busy}
+          onPress={() => {
+            void session.retryLoad();
+          }}
+        />
+        <Button
+          kind="secondary"
+          label="Wissen en opnieuw beginnen"
+          disabled={busy}
+          onPress={() => {
+            void session.restart();
+          }}
+        />
+        <Button kind="secondary" label="Terug naar start" disabled={busy} onPress={() => router.replace("/")} />
+      </Screen>
+    );
+  if (phase === "choice")
+    return (
+      <Screen>
+        <AppText variant="title">Verder met je missie?</AppText>
+        <AppText>{mission.title}</AppText>
+        <AppText muted>{`Je was bij stap ${index + 1} van ${pages.length}. Je antwoorden blijven bewaard.`}</AppText>
+        {saveError && <AppText>Opnieuw beginnen kon niet worden bevestigd. Probeer opnieuw of ga verder.</AppText>}
+        <Button label="Verdergaan" disabled={busy} onPress={session.resume} />
+        <Button
+          kind="secondary"
+          label="Opnieuw beginnen"
+          disabled={busy}
+          onPress={() => {
+            void session.restart();
+          }}
+        />
+        <Button kind="secondary" label="Terug naar start" disabled={busy} onPress={() => router.replace("/")} />
+      </Screen>
+    );
 
   if (!page) {
     return (
       <Screen>
         <AppText variant="big">Missie klaar.</AppText>
+        {warning}
         <AppText>
           {correct > 0
             ? `Je had ${correct} van de ${questionCount} vragen juist.`
@@ -60,10 +122,13 @@ export default function MissionScreen() {
           </Card>
         )}
         <Button
-          label="Terug naar start"
+          label={busy ? "Even opslaan…" : "Terug naar start"}
+          disabled={busy}
           onPress={() => {
-            markDone(mission.id);
-            router.replace("/");
+            void session.leave(() => {
+              markDone(mission.id);
+              router.replace("/");
+            });
           }}
         />
       </Screen>
@@ -73,6 +138,8 @@ export default function MissionScreen() {
   const isLast = index === pages.length - 1;
   return (
     <Screen>
+      {warning}
+      {session.discarded && <AppText muted>De opgeslagen voortgang past niet meer bij deze missie. Je begint opnieuw.</AppText>}
       <StepBar current={page.step} />
       <AppText muted>{`${mission.title} · ${index + 1} van ${pages.length}`}</AppText>
       {isLast && <AppText muted>Laatste vraag.</AppText>}
@@ -82,21 +149,28 @@ export default function MissionScreen() {
           <AppText>{page.card.text}</AppText>
           {page.card.example && <AppText muted>{`Voorbeeld: ${page.card.example}`}</AppText>}
           <ReadAloud text={[page.card.text, page.card.example].filter(Boolean).join(" ")} />
-          <Button label="Verder" onPress={next} />
+          <Button label="Verder" onPress={next} disabled={busy} />
         </Card>
       ) : (
         <QuestionView
           key={index}
           seed={index + 1}
           question={page.question}
-          onDone={(ok) => {
-            if (ok) setCorrect(correct + 1);
-            next();
-          }}
+          answer={progress.answers[index]}
+          onAnswer={(answer) => session.answer(index, answer)}
+          disabled={busy}
+          onDone={next}
         />
       )}
 
-      <Button kind="secondary" label="Pauze — later verder" onPress={() => router.back()} />
+      <Button
+        kind="secondary"
+        label={busy ? "Even opslaan…" : "Pauze — later verder"}
+        disabled={busy}
+        onPress={() => {
+          void session.leave(() => router.replace("/"));
+        }}
+      />
     </Screen>
   );
 }
