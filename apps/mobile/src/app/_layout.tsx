@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Text } from "react-native";
+import { CheckpointCleanup } from "../progress/CheckpointCleanup";
 import { ProfileProvider } from "../settings/ProfileContext";
 import { SettingsProvider, useSettings } from "../settings/SettingsContext";
 import { versionLabel } from "../version";
@@ -36,6 +37,7 @@ function ThemedStack() {
         <Stack.Screen name="over" options={{ title: "Over Breinhap" }} />
         <Stack.Screen name="school" options={{ title: "Mijn school" }} />
       </Stack>
+      <CheckpointCleanup />
     </>
   );
 }

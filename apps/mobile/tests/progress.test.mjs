@@ -19,7 +19,7 @@ const choice = (chosen = 1) => updateAnswer(question(), pages, 2, { kind: "choic
 const order = () => advance(choice(), pages, 2);
 const roundTrip = (progress) => decodeProgress(mission, encodeProgress(mission, progress));
 
-test("a process reload restores the exact step and choice feedback", () => {
+test("a process reload restores the exact step and selected answer data", () => {
   const progress = choice();
   assert.deepEqual(roundTrip(progress), progress);
   assert.equal(score(progress, pages), 0);
@@ -164,6 +164,9 @@ function memoryStorage() {
   const values = new Map();
   return {
     values,
+    async getAllKeys() {
+      return [...values.keys()];
+    },
     async getItem(key) {
       return values.get(key) ?? null;
     },
@@ -259,4 +262,84 @@ test("read and delete failures are surfaced instead of silently replacing checkp
   };
   await assert.rejects(store.clear(mission.id), /delete failed/);
   assert.equal(disk.values.size, 1);
+});
+
+test("inventory cleanup removes orphan checkpoints of any ID length and preserves other app data", async () => {
+  const disk = memoryStorage();
+  const store = createProgressStorage(disk);
+  const longId = `${"long-".repeat(40)}mission`;
+  const removedId = `${"removed-".repeat(30)}mission`;
+  await store.save({ ...mission, id: longId }, choice());
+  await store.save({ ...mission, id: removedId }, choice());
+  await store.save(mission, choice());
+  disk.values.set("breinhap.settings.v1", "settings");
+  disk.values.set("breinhap.profile.v1", "profile");
+  disk.values.set("breinhap.mission.v1.%broken", "invalid key");
+  await store.prune([mission.id, longId]);
+  assert.equal(disk.values.size, 4);
+  assert.deepEqual((await store.load({ ...mission, id: longId })).progress, choice());
+  assert.equal(disk.values.get("breinhap.settings.v1"), "settings");
+  assert.equal(disk.values.get("breinhap.profile.v1"), "profile");
+  assert.equal(disk.values.has(`breinhap.mission.v1.${removedId}`), false);
+  assert.equal(disk.values.has("breinhap.mission.v1.%broken"), false);
+});
+
+test("a failed orphan removal is reported, other removals proceed, and retry clears the rest", async () => {
+  const disk = memoryStorage();
+  const store = createProgressStorage(disk);
+  await store.save(mission, choice());
+  await store.save({ ...mission, id: "removed" }, choice());
+  const remove = disk.removeItem;
+  disk.removeItem = async (key) => {
+    if (key.endsWith(".demo")) throw new Error("temporary failure");
+    await remove(key);
+  };
+  await assert.rejects(store.prune([]), /progress.cleanup_failed/);
+  assert.equal(disk.values.size, 1);
+  disk.removeItem = remove;
+  await store.prune([]);
+  assert.equal(disk.values.size, 0);
+});
+
+test("enumeration failure keeps saved state and cleanup can be retried", async () => {
+  const disk = memoryStorage();
+  const store = createProgressStorage(disk);
+  await store.save(mission, choice());
+  const enumerate = disk.getAllKeys;
+  disk.getAllKeys = async () => {
+    throw new Error("enumeration unavailable");
+  };
+  await assert.rejects(store.prune([]), /enumeration unavailable/);
+  assert.equal(disk.values.size, 1);
+  disk.getAllKeys = enumerate;
+  await store.prune([]);
+  assert.equal(disk.values.size, 0);
+});
+
+test("cleanup waits for an in-flight orphan save so it cannot resurrect after pruning", async () => {
+  const disk = memoryStorage();
+  const set = disk.setItem;
+  let release;
+  disk.setItem = async (key, value) => {
+    await new Promise((resolve) => {
+      release = resolve;
+    });
+    await set(key, value);
+  };
+  const store = createProgressStorage(disk);
+  const saving = store.save(mission, choice());
+  const pruning = store.prune([]);
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  await Promise.all([saving, pruning]);
+  assert.equal(disk.values.size, 0);
+});
+
+test("direct removal accepts the same long IDs as the content schema", async () => {
+  const disk = memoryStorage();
+  const store = createProgressStorage(disk);
+  const long = { ...mission, id: `${"long-".repeat(40)}mission` };
+  await store.save(long, choice());
+  await store.clear(long.id);
+  assert.equal(disk.values.size, 0);
 });

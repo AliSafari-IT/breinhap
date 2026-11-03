@@ -1,6 +1,6 @@
 import type { Mission } from "@breinhap/content";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect } from "react";
+import { router, useLocalSearchParams, usePreventRemove } from "expo-router";
+import { useEffect, useState } from "react";
 import { QuestionView } from "../../components/Questions";
 import { StepBar } from "../../components/StepBar";
 import { AppText, Button, Card, ReadAloud, Screen } from "../../components/ui";
@@ -21,7 +21,7 @@ export default function MissionScreen() {
 
 function Unavailable({ id }: { id: string }) {
   useEffect(() => {
-    if (id.length <= 100) void missionStorage.clear(id).catch(() => {});
+    void missionStorage.clear(id).catch(() => {});
   }, [id]);
   return (
     <Screen>
@@ -36,6 +36,18 @@ function MissionSession({ mission }: { mission: Mission }) {
   const session = useMissionProgress(mission);
   const { progress, pages, phase, busy, saveError } = session;
   const { index } = progress;
+  const [leaving, setLeaving] = useState(false);
+  const disablePrevention = usePreventRemove(phase === "active" && !leaving, () => {
+    void leaveHome();
+  });
+  function leaveHome() {
+    return session.leave(() => {
+      setLeaving(true);
+      disablePrevention();
+      if (index === pages.length) markDone(mission.id);
+      router.replace("/");
+    });
+  }
   const correct = score(progress, pages);
   const questionCount = mission.practice.length + mission.check.length;
   const page = pages[index];
@@ -125,10 +137,7 @@ function MissionSession({ mission }: { mission: Mission }) {
           label={busy ? "Even opslaan…" : "Terug naar start"}
           disabled={busy}
           onPress={() => {
-            void session.leave(() => {
-              markDone(mission.id);
-              router.replace("/");
-            });
+            void leaveHome();
           }}
         />
       </Screen>
@@ -168,7 +177,7 @@ function MissionSession({ mission }: { mission: Mission }) {
         label={busy ? "Even opslaan…" : "Pauze — later verder"}
         disabled={busy}
         onPress={() => {
-          void session.leave(() => router.replace("/"));
+          void leaveHome();
         }}
       />
     </Screen>
