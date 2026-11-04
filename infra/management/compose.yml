@@ -1,0 +1,18 @@
+services:
+  management:
+    image: ${BREINHAP_MANAGEMENT_IMAGE:?Set an immutable management image digest}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    networks:
+      edge_net:
+        aliases: [breinhap-management]
+networks:
+  edge_net:
+    external: true

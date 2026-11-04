@@ -11,3 +11,7 @@
 !web/src
 !web/src/**
 !web/Dockerfile
+!management
+!management/src
+!management/src/**
+!management/Dockerfile
