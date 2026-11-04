@@ -442,3 +442,21 @@ test("registry dot-segment subjects are rejected before any network request", as
 	}
 	assert.equal(validSubject("person.name"), true);
 });
+
+test("stale logout clears local cookies without identity logout and still rejects cross-origin requests", async () => {
+	const context = await setup();
+	const url = new URL(`${ORIGIN}/afmelden`);
+	for (const origin of ["null", "https://attacker.test", undefined]) {
+		const req = request("", { method: "POST", origin });
+		if (origin === undefined) delete req.headers.origin;
+		assert.equal((await context.identity.handle(req, url)).status, 403);
+	}
+	const result = await context.identity.handle(
+		request("", { method: "POST", origin: ORIGIN }),
+		url,
+	);
+	assert.equal(result.status, 303);
+	assert.equal(result.headers.Location, "/login?logged-out=1");
+	assert.equal(result.headers["Set-Cookie"].length, 3);
+	assert.ok(result.headers["Set-Cookie"].every((c) => c.includes("Max-Age=0")));
+});

@@ -1,6 +1,6 @@
 {
 	"name": "@breinhap/management",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -12,5 +12,8 @@
 		"jose": "6.2.15",
 		"openid-client": "6.8.9",
 		"redis": "6.3.1"
+	},
+	"devDependencies": {
+		"playwright": "1.64.1"
 	}
 }
