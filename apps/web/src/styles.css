@@ -7,10 +7,11 @@ a:hover { color: var(--accent-hover); }
 .skip { position: absolute; left: -9999px; }
 .skip:focus { left: 20px; top: 12px; padding: 10px; z-index: 2; background: var(--card); }
 .topbar-inner, .brand, .tools { display: flex; align-items: center; gap: 16px; }
-.topbar-inner { justify-content: space-between; min-height: 76px; }
+.topbar-inner { justify-content: space-between; flex-wrap: wrap; min-height: 76px; padding-block: 12px; }
+.tools { flex-wrap: wrap; max-width: 100%; gap: 12px; }
 .brand { font-size: 1.3rem; font-weight: 800; text-decoration: none; }
 .tools a { color: var(--top-ink); }
-.tools button { background: var(--top-card); color: var(--top-ink); border: 1px solid var(--top-line); border-radius: 50%; width: 44px; height: 44px; font-size: 1.5rem; cursor: pointer; }
+.tools button { flex-shrink: 0; background: var(--top-card); color: var(--top-ink); border: 1px solid var(--top-line); border-radius: 50%; width: 44px; height: 44px; font-size: 1.5rem; cursor: pointer; }
 .release-banner { background: var(--accent-soft); border-bottom: 1px solid var(--line); padding: 18px 0; }
 .release-banner strong { color: var(--accent); }
 .release-banner p { margin: 4px 0 0; max-width: 80ch; }
