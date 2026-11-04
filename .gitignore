@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 .ci-export/
 dist/
+
+# Private Redis ACL/configuration installed by the management operator.
+/.redis.management.conf
