@@ -1,6 +1,8 @@
 services:
   management:
     image: ${BREINHAP_MANAGEMENT_IMAGE:?Set an immutable management image digest}
+    env_file:
+      - ${BREINHAP_MANAGEMENT_ENV_FILE:?Set the private management environment file}
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -11,8 +13,12 @@ services:
     mem_limit: 128m
     cpus: 0.25
     networks:
+      core_net: {}
       edge_net:
         aliases: [breinhap-management]
 networks:
+  core_net:
+    external: true
+    name: ${ASAFARIM_CORE_NETWORK:?Set the existing ASafariM core network}
   edge_net:
     external: true

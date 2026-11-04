@@ -1,0 +1,80 @@
+{
+	"id": "breinhap",
+	"name": "Breinhap beheer",
+	"version": "0.2.0",
+	"platform": ">=0.1 <1",
+	"owner": "ASafariM Digital",
+	"domains": {
+		"primary": "management.breinhap.com"
+	},
+	"runtime": {
+		"image": "ghcr.io/alisafari-it/breinhap",
+		"port": 8080,
+		"health": {
+			"live": "/healthz",
+			"ready": "/readyz"
+		},
+		"resources": {
+			"memory": "128m",
+			"cpus": 0.25
+		}
+	},
+	"database": {
+		"engine": "none"
+	},
+	"auth": {
+		"client": "oidc",
+		"publicPaths": [
+			"/healthz",
+			"/readyz",
+			"/.well-known/asafarim-app.json",
+			"/aanmelden",
+			"/auth/start",
+			"/auth/callback"
+		]
+	},
+	"permissions": [
+		{
+			"key": "breinhap.management.access",
+			"description": "Open the adult management shell; grants no student or content scope"
+		},
+		{
+			"key": "breinhap.student.access",
+			"description": "Student role; never permits management access"
+		}
+	],
+	"roles": [
+		{
+			"key": "breinhap.admin",
+			"grants": ["breinhap.management.access"]
+		},
+		{
+			"key": "breinhap.parent",
+			"grants": ["breinhap.management.access"]
+		},
+		{
+			"key": "breinhap.tutor",
+			"grants": ["breinhap.management.access"]
+		},
+		{
+			"key": "breinhap.teacher",
+			"grants": ["breinhap.management.access"]
+		},
+		{
+			"key": "breinhap.student",
+			"grants": ["breinhap.student.access"]
+		}
+	],
+	"secrets": ["ASAFARIM_REGISTRY_CREDENTIAL"],
+	"ui": {
+		"glyph": "BH",
+		"color": "#23456b",
+		"nav": [
+			{
+				"label": "Overzicht",
+				"href": "/"
+			}
+		],
+		"status": "active"
+	}
+}

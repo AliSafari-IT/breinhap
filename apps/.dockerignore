@@ -15,3 +15,6 @@
 !management/src
 !management/src/**
 !management/Dockerfile
+!management/package.json
+!management/package-lock.json
+!management/platform.app.json

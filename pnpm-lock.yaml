@@ -230,6 +230,14 @@ importers:
         specifier: ^4.1.0
         version: 4.1.12(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(terser@5.51.2))
 
+  apps/management:
+    dependencies:
+      openid-client:
+        specifier: 6.8.9
+        version: 6.8.9
+
+  apps/web: {}
+
 packages:
 
   2g@1.0.1:
@@ -2967,6 +2975,15 @@ packages:
 
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
+  jose@6.2.15:
+    resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
+
+  oauth4webapi@3.8.8:
+    resolution: {integrity: sha512-8N28E+a/oxfXWBgOMt+ZP/JUf/XR+IFbvkAEPP3gznXOMv9BpAAwiIj0TFNz3tGTPc0ZQ8zmWBNgN1nAys0gng==}
+
+  openid-client@6.8.9:
+    resolution: {integrity: sha512-6mXMRNJxDOf6BflEWLXul1UwzLFz++9Ofz1PYwPwwsJsyXBsbfkO+Jo255SW1qnFNLYz4EJWHz42X4OJJrya/g==}
 
 snapshots:
 
@@ -5966,3 +5983,11 @@ snapshots:
   zod@3.25.76: {}
 
   zod@4.6.7: {}
+  jose@6.2.15: {}
+
+  oauth4webapi@3.8.8: {}
+
+  openid-client@6.8.9:
+    dependencies:
+      jose: 6.2.15
+      oauth4webapi: 3.8.8

@@ -100,6 +100,10 @@ jobs:
           for name in HOST SSH_USER KEY KNOWN_HOSTS; do
             [[ -n "${!name}" ]] || { echo "::error::Missing website deploy setting: $name; see private runbook"; exit 1; }
           done
+          [[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || { echo '::error::HOST must be a hostname or IPv4 address only, without a URL scheme, username or whitespace'; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo '::error::SSH_USER must be a Unix username only'; exit 1; }
+          PORT="${PORT:-22}"
+          [[ "$PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$PORT >= 1 && 10#$PORT <= 65535 )) || { echo '::error::PORT must be an integer from 1 to 65535'; exit 1; }
           dir=$(mktemp -d "$RUNNER_TEMP/breinhap-ssh.XXXXXX")
           trap 'rm -rf "$dir"' EXIT
           (umask 077; printf '%s\n' "$KEY" > "$dir/key"; printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts")
@@ -110,4 +114,8 @@ jobs:
             "$SSH_USER@$HOST" "deploy $SHA"
           curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors \
             --connect-timeout 10 --max-time 30 https://breinhap.com/healthz
-          printf 'Deployed website commit %s.\n' "$SHA" >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf 'Deployed website commit %s.\n' "$SHA"
+            echo 'Open https://breinhap.com/ for Dutch or https://breinhap.com/en/ for English.'
+            echo 'Deployment health: https://breinhap.com/healthz'
+          } >> "$GITHUB_STEP_SUMMARY"

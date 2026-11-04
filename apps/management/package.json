@@ -1,11 +1,14 @@
 {
 	"name": "@breinhap/management",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"start": "node src/server.mjs",
 		"typecheck": "node --check src/server.mjs",
 		"test": "node --test test/*.test.mjs"
+	},
+	"dependencies": {
+		"openid-client": "6.8.9"
 	}
 }
