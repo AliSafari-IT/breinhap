@@ -75,6 +75,8 @@ test("real Host and request target determine isolation, never forwarded headers"
 		"www.breinhap.com",
 		"breinhap.asafarim.site",
 		"management.breinhap.com.attacker.test",
+		"Management.breinhap.com",
+		"management.breinhap.com:443",
 	]) {
 		const res = await get("/bibliotheek", {
 			headers: { Host: host, "X-Forwarded-Host": "management.breinhap.com" },
@@ -118,7 +120,9 @@ test("trusted resolver can render accessible shell and deep links only", async (
 	assert.match(res.body, /aria-label="Beheernavigatie"/);
 	assert.match(res.body, /href="\/bibliotheek" aria-current="page"/);
 	assert.match(res.body, /nog geen inhoudsbibliotheek/);
-	assert.equal((await get("/unknown")).status, 404);
+	const missing = await get("/unknown");
+	assert.equal(missing.status, 404);
+	assert.doesNotMatch(missing.body, /aria-current/);
 	assert.equal((await get("/", { method: "HEAD" })).body, "");
 });
 

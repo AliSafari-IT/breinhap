@@ -10,9 +10,10 @@ SHA = 'a' * 40
 
 
 class ImagePlanTest(unittest.TestCase):
-    def run_plan(self, registry='exists', head=SHA, repair_fails=False):
+    def run_plan(self, registry='exists', head=SHA, repair_fails=False, promote=False):
         workflow = WORKFLOW.read_text()
-        script = workflow.split('      - name: Plan the tags', 1)[1].split('        run: |\n', 1)[1].split('\n      # On a pull request', 1)[0]
+        step = '      - name: Promote current main' if promote else '      - name: Plan the tags'
+        script = workflow.split(step, 1)[1].split('        run: |\n', 1)[1].split('\n      # On a pull request', 1)[0]
         script = '\n'.join(line[10:] for line in script.splitlines())
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -39,27 +40,27 @@ printf '%s\\n' "$*" >> "$CALLS"
             return result.returncode, output, calls
 
     def test_existing_current_image_repairs_only_convenience_tag(self):
-        status, output, calls = self.run_plan()
+        status, output, calls = self.run_plan(promote=True)
         self.assertEqual(status, 0)
-        self.assertEqual(output, 'publish=false\n')
+        self.assertEqual(output, '')
         self.assertEqual(calls, f'buildx imagetools create --tag ghcr.io/test/management:management-main ghcr.io/test/management:management-{SHA}\n')
 
     def test_existing_old_or_unknown_head_does_not_move_convenience_tag(self):
         for head in ['b' * 40, '']:
             with self.subTest(head=head):
-                status, output, calls = self.run_plan(head=head)
-                self.assertEqual((status, output, calls), (0, 'publish=false\n', ''))
+                status, output, calls = self.run_plan(head=head, promote=True)
+                self.assertEqual((status, output, calls), (0, '', ''))
 
     def test_repair_failure_is_not_reported_as_success(self):
-        status, output, _ = self.run_plan(repair_fails=True)
+        status, output, _ = self.run_plan(repair_fails=True, promote=True)
         self.assertNotEqual(status, 0)
         self.assertNotIn('publish=false', output)
 
-    def test_missing_current_image_plans_both_tags(self):
+    def test_missing_current_image_plans_only_immutable_tag(self):
         status, output, calls = self.run_plan(registry='missing')
         self.assertEqual(status, 0)
         self.assertIn('publish=true', output)
-        self.assertIn('management-main', output)
+        self.assertNotIn('management-main', output)
         self.assertEqual(calls, '')
 
     def test_missing_old_image_never_moves_convenience_tag(self):
@@ -67,6 +68,18 @@ printf '%s\\n' "$*" >> "$CALLS"
         self.assertEqual(status, 0)
         self.assertIn('publish=true', output)
         self.assertNotIn('management-main', output)
+
+    def test_existing_commit_is_never_rebuilt(self):
+        status, output, calls = self.run_plan()
+        self.assertEqual((status, output, calls), (0, 'publish=false\n', ''))
+
+    def test_convenience_promotion_has_its_own_serialized_job(self):
+        workflow = WORKFLOW.read_text()
+        promotion = workflow.split('  promote:', 1)[1]
+        self.assertIn('needs: image', promotion)
+        self.assertIn('group: management-main-promotion', promotion)
+        self.assertIn('cancel-in-progress: false', promotion)
+        self.assertIn("github.event_name != 'pull_request'", promotion)
 
     def test_registry_auth_error_fails_closed(self):
         status, output, calls = self.run_plan(registry='error')

@@ -115,7 +115,7 @@ export function createHandler({
 				page(
 					"Pagina niet gevonden",
 					'Ga terug naar het <a href="/">overzicht</a>.',
-					"/",
+					null,
 				),
 			);
 		return send(200, page(route[0], route[1], url.pathname));
