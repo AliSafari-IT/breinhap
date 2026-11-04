@@ -97,3 +97,44 @@ select {
 form {
 	margin-block: 1rem 2rem;
 }
+fieldset {
+	border: 1px solid var(--line);
+	border-radius: 0.4rem;
+	padding: 0.5rem 1rem;
+}
+legend {
+	font-weight: 700;
+	padding-inline: 0.25rem;
+}
+label:has(> input[type="radio"]) {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 0.6rem;
+	padding: 0.6rem 0;
+	cursor: pointer;
+}
+input[type="radio"] {
+	display: inline-block;
+	width: 1.2rem;
+	height: 1.2rem;
+	margin: 0;
+	accent-color: var(--accent);
+}
+label small {
+	flex-basis: 100%;
+	padding-left: 1.8rem;
+	color: var(--muted);
+}
+.requests {
+	padding: 0;
+	list-style: none;
+}
+.requests li {
+	border-top: 1px solid var(--line);
+	padding-block: 0.5rem;
+}
+.requests form {
+	display: inline-block;
+	margin: 0 0.5rem 1rem 0;
+}
