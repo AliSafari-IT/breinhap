@@ -220,6 +220,44 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	assert.equal(home.status, 200);
 	assert.match(home.body, /Je rollen: Ouder/);
 	assert.doesNotMatch(home.body, /person|secret/);
+	// Signed in: the sign-in pages send you on instead of asking again.
+	for (const path of ["/login", "/register", "/aanmelden"]) {
+		const again = await get(path, { headers: { Cookie: session } });
+		assert.equal(again.status, 303, path);
+		assert.equal(again.headers.location, "/", path);
+	}
+	// breinhap.com (same-site) may read the session state for its navbar; other origins may not.
+	const fromSite = await get("/auth/session", {
+		headers: { Cookie: session, Origin: "https://breinhap.com" },
+	});
+	assert.equal(fromSite.status, 200);
+	assert.deepEqual(JSON.parse(fromSite.body), { active: true });
+	assert.equal(
+		fromSite.headers["access-control-allow-origin"],
+		"https://breinhap.com",
+	);
+	assert.equal(fromSite.headers["access-control-allow-credentials"], "true");
+	assert.match(fromSite.headers.vary, /Origin/);
+	for (const origin of [
+		"https://evil.example",
+		"https://breinhap.com.evil.example",
+		"http://breinhap.com",
+		"null",
+	]) {
+		const other = await get("/auth/session", {
+			headers: { Cookie: session, Origin: origin },
+		});
+		assert.equal(other.headers["access-control-allow-origin"], undefined);
+		assert.equal(other.headers["access-control-allow-credentials"], undefined);
+	}
+	const anonymous = await get("/auth/session", {
+		headers: { Origin: "https://breinhap.com" },
+	});
+	assert.equal(anonymous.status, 401);
+	assert.equal(
+		anonymous.headers["access-control-allow-origin"],
+		"https://breinhap.com",
+	);
 	const csrf = /name="csrf" value="([^"]+)"/.exec(home.body)[1];
 	const logout = await get("/afmelden", {
 		method: "POST",
@@ -228,6 +266,10 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	});
 	assert.equal(logout.status, 303);
 	assert.equal((await get("/", { headers: { Cookie: session } })).status, 303);
+	assert.equal(
+		(await get("/login", { headers: { Cookie: session } })).status,
+		200,
+	);
 	assert.equal((await get("/.well-known/asafarim-app.json")).status, 200);
 });
 

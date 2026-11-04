@@ -54,13 +54,13 @@ ${missing ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:title" content="Breinhap · ${esc(t.title)}"><meta property="og:description" content="${esc(t.intro)}">
 <meta property="og:type" content="website"><meta property="og:url" content="${origin}${path}">
 <meta name="theme-color" content="#222222"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script>
+<link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/account.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">${t.skip}</a>
 <header class="os-topbar"><div class="wrap topbar-inner">
   <a class="brand" href="${path}"><img src="/logo.svg" width="40" height="40" alt=""><span>Breinhap</span></a>
-  <div class="tools"><a href="${lang === "nl" ? "/login" : "/en/login"}">${lang === "nl" ? "Aanmelden" : "Sign in"}</a><a href="${lang === "nl" ? "/register" : "/en/register"}">${lang === "nl" ? "Toegang aanvragen" : "Request access"}</a><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
+  <div class="tools"><a href="${lang === "nl" ? "/login" : "/en/login"}" data-account="login" data-signed-in-label="${lang === "nl" ? "Naar Breinhap beheer" : "Go to Breinhap management"}">${lang === "nl" ? "Aanmelden" : "Sign in"}</a><a href="${lang === "nl" ? "/register" : "/en/register"}" data-account="register">${lang === "nl" ? "Toegang aanvragen" : "Request access"}</a><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
   <button type="button" data-theme-toggle aria-label="${t.theme}" aria-pressed="false">◐</button></div>
 </div></header>
 <aside class="release-banner" aria-label="${t.badge}"><div class="wrap"><strong>${t.badge}</strong><p>${t.notice}</p></div></aside>
@@ -97,6 +97,7 @@ function entryPage(lang, kind) {
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(join(dist, "en"), { recursive: true });
 for (const asset of ["logo.svg", "favicon.svg", "theme.js"]) cpSync(join(shared, "public", asset), join(dist, asset));
+cpSync(join(root, "src/account.js"), join(dist, "account.js"));
 writeFileSync(join(dist, "styles.css"), readFileSync(join(shared, "src/theme.css"), "utf8") + "\n" + readFileSync(join(root, "src/styles.css"), "utf8"));
 writeFileSync(join(dist, "index.html"), page("nl"));
 writeFileSync(join(dist, "en/index.html"), page("en"));
