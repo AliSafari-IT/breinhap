@@ -1,0 +1,21 @@
+services:
+  site:
+    image: ${BREINHAP_SITE_IMAGE:?Use deploy.sh with a published commit}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 64m
+    cpus: 0.25
+    environment:
+      NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+    networks:
+      edge_net:
+        aliases: [breinhap-web]
+
+networks:
+  edge_net:
+    external: true

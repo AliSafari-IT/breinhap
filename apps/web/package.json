@@ -1,0 +1,11 @@
+{
+  "name": "@breinhap/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node src/build.mjs",
+    "typecheck": "node --check src/build.mjs",
+    "test": "node src/build.mjs && node --test test/*.test.mjs"
+  }
+}
