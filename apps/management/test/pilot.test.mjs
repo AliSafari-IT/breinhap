@@ -204,10 +204,19 @@ test("concurrent requests rotate a refresh token only once across application in
 		release = resolve;
 	});
 	p.setRefresh(() => gate);
+	p.store.refreshLeaseMs = 120;
 	const first = p.identity.current(request(cookie));
 	while (p.refreshCount() === 0)
 		await new Promise((resolve) => setTimeout(resolve, 5));
-	const second = p.identity.current(request(cookie));
+	const replica = createIdentity({
+		provider: p.provider,
+		store: p.store,
+		grants: p.grants,
+		now: p.time,
+	});
+	const second = replica.current(request(cookie));
+	await new Promise((resolve) => setTimeout(resolve, 250));
+	assert.equal(await p.store.acquireRefresh(cookie.split("=")[1]), null);
 	release();
 	assert.ok((await first).allowed);
 	assert.ok((await second).allowed);
@@ -250,4 +259,17 @@ test("permission-service outage fails closed and local logout still destroys the
 	assert.equal(result.status, 303);
 	assert.equal(result.headers.Location, "/login?logged-out=1");
 	assert.equal(await p.identity.access(request(cookie)), "anonymous");
+});
+
+test("one requester exhausting sign-in attempts does not block another requester", async () => {
+	const p = await pilot();
+	const start = async (address) => {
+		const req = request("");
+		req.headers["x-breinhap-client-address"] = address;
+		return p.identity.handle(req, new URL(`${ORIGIN}/auth/start`));
+	};
+	for (let n = 0; n < 30; n++)
+		assert.equal((await start("192.0.2.1")).status, 303);
+	assert.equal((await start("192.0.2.1")).status, 429);
+	assert.equal((await start("192.0.2.2")).status, 303);
 });

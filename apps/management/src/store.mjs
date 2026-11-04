@@ -60,6 +60,7 @@ export class IdentityStore {
 		this.key = key;
 		this.now = now;
 		this.workspace = workspace;
+		this.refreshLeaseMs = 30_000;
 	}
 	keyFor(kind, value) {
 		return `${prefix}${this.workspace}:${kind}:${digest(value)}`;
@@ -94,10 +95,10 @@ export class IdentityStore {
 	async ready() {
 		return this.client.ping();
 	}
-	async budget(kind, limit = 30, seconds = 60) {
+	async budget(kind, limit = 30, seconds = 60, requester = "workspace") {
 		const key = this.keyFor(
 			"budget",
-			`${kind}:${Math.floor(this.now() / (seconds * 1000))}`,
+			`${kind}:${requester}:${Math.floor(this.now() / (seconds * 1000))}`,
 		);
 		return (
 			Number(
@@ -166,10 +167,23 @@ export class IdentityStore {
 		const token = randomBytes(24).toString("base64url");
 		return (await this.client.set(this.keyFor("refresh", id), token, {
 			NX: true,
-			PX: 10_000,
+			PX: this.refreshLeaseMs,
 		}))
 			? token
 			: null;
+	}
+	async renewRefresh(id, token) {
+		return (
+			Number(
+				await this.client.eval(
+					"if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end return redis.call('PEXPIRE',KEYS[1],ARGV[2])",
+					{
+						keys: [this.keyFor("refresh", id)],
+						arguments: [token, String(this.refreshLeaseMs)],
+					},
+				),
+			) === 1
+		);
 	}
 	async releaseRefresh(id, token) {
 		await this.client.eval(UNLOCK, {

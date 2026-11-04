@@ -36,6 +36,12 @@ export function signRequest(credential, path, body = "", method = "GET") {
 	};
 }
 
+export const validSubject = (subject) =>
+	typeof subject === "string" &&
+	/^[A-Za-z0-9:._@-]{1,400}$/.test(subject) &&
+	subject !== "." &&
+	subject !== "..";
+
 export function managementAccess(grants, subject) {
 	if (
 		grants?.appId !== "breinhap" ||
@@ -94,9 +100,11 @@ export function createPlatform({ url, credential, fetcher = fetch }) {
 	return {
 		register: () =>
 			request("/registry/v1/apps/breinhap", JSON.stringify(manifest), "POST"),
-		grants: (subject) =>
-			request(
+		grants: (subject) => {
+			if (!validSubject(subject)) throw new Error("Invalid account code");
+			return request(
 				`/registry/v1/apps/breinhap/subjects/${encodeURIComponent(subject)}`,
-			),
+			);
+		},
 	};
 }

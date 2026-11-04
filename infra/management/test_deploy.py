@@ -28,7 +28,8 @@ elif name == 'docker':
     elif args[:1] == ['inspect']: print(os.environ['PREVIOUS'])
     elif args[0] == 'compose':
         if 'ps' in args: print('' if case == 'first-failure' else 'existing-container')
-        if 'up' in args and case in ['health-failure', 'first-failure'] and os.environ.get('BREINHAP_MANAGEMENT_IMAGE') != os.environ['PREVIOUS']: sys.exit(1)
+        if 'up' in args and args[-1]=='redis' and case=='redis-failure': sys.exit(1)
+        if 'up' in args and args[-1]=='management' and case in ['health-failure', 'first-failure'] and os.environ.get('BREINHAP_MANAGEMENT_IMAGE') != os.environ['PREVIOUS']: sys.exit(1)
 '''
 
 
@@ -75,17 +76,23 @@ class DeployTests(unittest.TestCase):
         code, calls = self.execute("success")
         self.assertEqual(code, 0)
         updates = [(args, image) for name, args, image in calls if name == "docker" and "up" in args]
-        self.assertEqual(len(updates), 1)
-        args, image = updates[0]
+        self.assertEqual(len(updates), 2)
+        self.assertEqual(updates[0][0][-1], "redis")
+        args, image = updates[1]
         self.assertEqual(image, DIGEST)
         self.assertEqual(args[args.index("-p") + 1], "breinhap-management")
         self.assertEqual(args[-1], "management")
         self.assertIn("--wait", args)
 
+    def test_redis_failure_does_not_start_management(self):
+        code, calls = self.execute("redis-failure")
+        self.assertNotEqual(code, 0)
+        self.assertFalse(any(name == "docker" and "up" in args and args[-1]=="management" for name, args, _ in calls))
+
     def test_failed_health_restores_previous_image_and_fails(self):
         code, calls = self.execute("health-failure")
         self.assertNotEqual(code, 0)
-        images = [image for name, args, image in calls if name == "docker" and "up" in args]
+        images = [image for name, args, image in calls if name == "docker" and "up" in args and args[-1]=="management"]
         self.assertEqual(images, [DIGEST, PREVIOUS])
 
     def test_failed_first_deploy_stops_the_unhealthy_service(self):

@@ -3,6 +3,22 @@ import { randomBytes } from "node:crypto";
 
 let container;
 const env = { ...process.env };
+let child;
+const cleanup = () => {
+	if (container) {
+		spawnSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+		container = undefined;
+	}
+};
+for (const [signal, code] of [
+	["SIGINT", 130],
+	["SIGTERM", 143],
+])
+	process.once(signal, () => {
+		child?.kill(signal);
+		cleanup();
+		process.exit(code);
+	});
 try {
 	if (!env.REDIS_TEST_URL) {
 		container = `breinhap-auth-test-${randomBytes(6).toString("hex")}`;
@@ -40,7 +56,7 @@ try {
 			throw new Error("Unexpected test Redis binding");
 		env.REDIS_TEST_URL = `redis://${endpoint}`;
 	}
-	const child = spawn(process.execPath, ["--test", "test/*.test.mjs"], {
+	child = spawn(process.execPath, ["--test", "test/*.test.mjs"], {
 		env,
 		stdio: "inherit",
 	});
@@ -48,6 +64,5 @@ try {
 		child.on("exit", (code) => resolve(code ?? 1)),
 	);
 } finally {
-	if (container)
-		spawnSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+	cleanup();
 }

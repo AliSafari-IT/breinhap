@@ -31,6 +31,7 @@ export ASAFARIM_CORE_NETWORK="asafarim-os_os_core"
 [[ -f "$BREINHAP_MANAGEMENT_ENV_FILE" ]] || { echo "Management environment not installed" >&2; exit 1; }
 docker network inspect "$ASAFARIM_CORE_NETWORK" > /dev/null
 compose=(docker compose -p breinhap-management -f "$here/compose.yml")
+"${compose[@]}" up -d --wait --wait-timeout 90 redis
 current=$("${compose[@]}" ps -aq management)
 previous=''
 if [[ -n "$current" ]]; then

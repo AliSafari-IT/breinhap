@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import * as oidc from "openid-client";
 import { managementAccess, roleLabels } from "./platform.mjs";
@@ -72,7 +73,7 @@ export function createIdentity({
 				await store.destroySession(id);
 				return null;
 			}
-			const lock = await store.acquireRefresh(id);
+			let lock = await store.acquireRefresh(id);
 			if (!lock) {
 				for (let attempt = 0; attempt < 50; attempt++) {
 					await new Promise((resolve) => setTimeout(resolve, 100));
@@ -80,8 +81,34 @@ export function createIdentity({
 					if (!saved) return null;
 					if (saved.tokenExpires > now() + 10_000) return { id, saved };
 				}
-				throw new Error("Refresh busy");
+				saved = await store.getSession(id, false);
+				if (!saved) return null;
+				if (saved.tokenExpires > now() + 10_000) return { id, saved };
+				lock = await store.acquireRefresh(id);
+				if (!lock) throw new Error("Refresh busy");
 			}
+			let renewing = null;
+			let leaseLost = false;
+			const renewal = setInterval(
+				() => {
+					if (renewing) return;
+					renewing = store
+						.renewRefresh(id, lock)
+						.then(
+							(ok) => {
+								if (!ok) leaseLost = true;
+							},
+							() => {
+								leaseLost = true;
+							},
+						)
+						.finally(() => {
+							renewing = null;
+						});
+				},
+				Math.max(10, Math.floor(store.refreshLeaseMs / 3)),
+			);
+			renewal.unref();
 			try {
 				saved = await store.getSession(id, false);
 				if (!saved) return null;
@@ -108,9 +135,13 @@ export function createIdentity({
 						refreshToken: tokens.refreshToken ?? saved.refreshToken,
 						tokenExpires: now() + tokens.expiresIn * 1000,
 					};
+					await renewing;
+					if (leaseLost) throw new Error("Refresh ownership lost");
 					if (!(await store.saveSession(id, saved, lock))) return null;
 				}
 			} finally {
+				clearInterval(renewal);
+				await renewing;
 				await store.releaseRefresh(id, lock);
 			}
 		}
@@ -186,8 +217,6 @@ export function createIdentity({
 					...message(405, "Method not allowed"),
 					headers: { Allow: "POST" },
 				};
-			if (!(await store.budget("logout", 120)))
-				return message(429, "Probeer later opnieuw.");
 			let claims;
 			try {
 				const form = await readForm(req, 16384);
@@ -197,6 +226,8 @@ export function createIdentity({
 			} catch {
 				return message(400, "Invalid logout token");
 			}
+			if (!(await store.budget("logout", 120, 60, claims.sid ?? claims.sub)))
+				return message(429, "Probeer later opnieuw.");
 			await store.logout(claims);
 			return message(200, "ok");
 		}
@@ -244,7 +275,16 @@ export function createIdentity({
 				headers: { Allow: "GET" },
 			};
 		if (path === "/auth/start") {
-			if (!(await store.budget("start")))
+			// Caddy overwrites this header with its transport peer, only for rate limiting.
+			const forwarded = req.headers["x-breinhap-client-address"];
+			const requester =
+				typeof forwarded === "string" && isIP(forwarded)
+					? forwarded
+					: (req.socket?.remoteAddress ?? "direct");
+			if (
+				!(await store.budget("start", 30, 60, requester)) ||
+				!(await store.budget("start-global", 3000))
+			)
 				return message(429, "Te veel aanmeldpogingen. Probeer later opnieuw.");
 			const flow = random();
 			const invite = readCookie(req, INVITE);

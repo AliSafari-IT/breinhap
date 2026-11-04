@@ -197,6 +197,7 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 		"pexpire",
 		"pttl",
 		"expire",
+		"exists",
 		"incr",
 		"eval",
 		"xadd",
@@ -242,6 +243,36 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 		assert.equal(await restricted.budget("start"), true);
 		await restricted.bootstrap("admin");
 		assert.equal((await restricted.membership("admin")).role, "breinhap.admin");
+		const inviter = await restricted.membership("admin");
+		assert.ok(
+			await restricted.invite("invitation", {
+				subject: "recipient",
+				role: "breinhap.parent",
+				inviter: "admin",
+				inviterVersion: inviter.version,
+			}),
+		);
+		assert.ok(
+			await restricted.accept(
+				"invitation",
+				await restricted.invitation("invitation"),
+				inviter,
+				"recipient",
+			),
+		);
+		assert.equal(
+			(await restricted.membership("recipient")).role,
+			"breinhap.parent",
+		);
+		const lock = await restricted.acquireRefresh("session");
+		assert.ok(await restricted.renewRefresh("session", lock));
+		await restricted.releaseRefresh("session", lock);
+		await restricted.logout({
+			sid: "browser",
+			iat: Math.floor(Date.now() / 1000),
+			jti: "acl-logout",
+		});
+		await restricted.revokeMember("recipient");
 		await assert.rejects(client.get("another-app:secret"), /NOPERM/);
 		await assert.rejects(client.sendCommand(["CONFIG", "GET", "*"]), /NOPERM/);
 	} finally {

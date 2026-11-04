@@ -1,6 +1,6 @@
 // Operator-only, never reachable over HTTP. Subject comes from stdin, not command-line logs.
 
-import { createPlatform, managementAccess } from "./platform.mjs";
+import { createPlatform, managementAccess, validSubject } from "./platform.mjs";
 import { connectStore } from "./store.mjs";
 
 let input = "";
@@ -9,8 +9,7 @@ for await (const chunk of process.stdin) {
 	if (input.length > 500) throw new Error("Invalid account code");
 }
 const subject = input.trim();
-if (!/^[A-Za-z0-9:._@-]{1,400}$/.test(subject))
-	throw new Error("Invalid account code");
+if (!validSubject(subject)) throw new Error("Invalid account code");
 const platform = createPlatform({
 	url: process.env.CORE_API_URL,
 	credential: process.env.ASAFARIM_REGISTRY_CREDENTIAL,

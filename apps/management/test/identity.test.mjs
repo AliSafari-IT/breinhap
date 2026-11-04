@@ -426,3 +426,19 @@ test("malformed application lifecycle data is unavailable rather than an empty g
 			managementAccess({ ...roles("breinhap.admin"), state }, "person"),
 		);
 });
+
+test("registry dot-segment subjects are rejected before any network request", async () => {
+	const { createPlatform, validSubject } = await import("../src/platform.mjs");
+	const platform = createPlatform({
+		url: "http://core.test",
+		credential: "unused",
+		fetcher: async () => {
+			throw Error("network must not run");
+		},
+	});
+	for (const subject of [".", ".."]) {
+		assert.equal(validSubject(subject), false);
+		assert.throws(() => platform.grants(subject), /Invalid account code/);
+	}
+	assert.equal(validSubject("person.name"), true);
+});

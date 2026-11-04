@@ -1,3 +1,5 @@
 management.breinhap.com {
-  reverse_proxy breinhap-management:8080
+  reverse_proxy breinhap-management:8080 {
+    header_up X-Breinhap-Client-Address {remote_host}
+  }
 }

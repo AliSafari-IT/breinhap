@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { test } from "node:test";
+import { createManagementServer } from "../src/server.mjs";
+import { makeStore } from "./helpers.mjs";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { discoverProvider } from "../src/identity.mjs";
+import { createIdentity, discoverProvider } from "../src/identity.mjs";
 
 test("signed back-channel tokens validate issuer/audience/time/event/sid and reject nonce/replay inputs", async () => {
 	const issuer = "https://id.asafarim.site";
@@ -66,6 +69,52 @@ test("signed back-channel tokens validate issuer/audience/time/event/sid and rej
 			.setJti(`jti-${mode}`)
 			.setExpirationTime(now + 120)
 			.sign(key);
+		if (mode === "valid") {
+			const store = await makeStore();
+			await store.saveSession("logout-victim", {
+				sub: "person",
+				sid: "browser",
+				issuedAt: now - 1,
+				expires: Date.now() + 60000,
+			});
+			const identity = createIdentity({
+				provider,
+				store,
+				grants: async () => {
+					throw Error("unused");
+				},
+			});
+			const server = createManagementServer({ identity });
+			await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+			try {
+				const post = (value) =>
+					new Promise((resolve, reject) => {
+						const req = http.request(
+							{
+								hostname: "127.0.0.1",
+								port: server.address().port,
+								path: "/auth/backchannel-logout",
+								method: "POST",
+								headers: {
+									Host: "management.breinhap.com",
+									"Content-Type": "application/x-www-form-urlencoded",
+								},
+							},
+							(res) => {
+								res.resume();
+								res.on("end", () => resolve(res.statusCode));
+							},
+						);
+						req.on("error", reject);
+						req.end(new URLSearchParams({ logout_token: value }).toString());
+					});
+				for (let n = 0; n < 125; n++) assert.equal(await post("invalid"), 400);
+				assert.equal(await post(token), 200);
+				assert.equal(await store.getSession("logout-victim"), null);
+			} finally {
+				await new Promise((resolve) => server.close(resolve));
+			}
+		}
 		if (mode === "valid" || mode === "sub-only")
 			assert.equal((await provider.validateLogout(token)).jti, `jti-${mode}`);
 		else await assert.rejects(provider.validateLogout(token), undefined, mode);

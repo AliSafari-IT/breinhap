@@ -89,6 +89,7 @@ function entryPage(lang, kind) {
   html = html.replace(/<title>.*?<\/title>/, `<title>Breinhap · ${title}</title>`).replace(`href="${origin}${nl ? "/" : "/en/"}"`, `href="${origin}${route}"`);
   html = html.replace('href="/" lang="nl-BE"', `href="/${kind}" lang="nl-BE"`).replace('href="/en/" lang="en"', `href="/en/${kind}" lang="en"`);
   html = html.replace(/hreflang="nl-BE" href="[^"]*"/, `hreflang="nl-BE" href="${origin}/${kind}"`).replace(/hreflang="en" href="[^"]*"/, `hreflang="en" href="${origin}/en/${kind}"`).replace(/hreflang="x-default" href="[^"]*"/, `hreflang="x-default" href="${origin}/${kind}"`);
+  html = html.replace(/property="og:url" content="[^"]*"/, `property="og:url" content="${origin}${route}"`);
   return html;
 }
 
