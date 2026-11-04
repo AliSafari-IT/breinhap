@@ -1,6 +1,8 @@
 services:
   management:
     image: ${BREINHAP_MANAGEMENT_IMAGE:?Set an immutable management image digest}
+    env_file:
+      - ${BREINHAP_MANAGEMENT_ENV_FILE:?Set the private management environment file}
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -10,9 +12,40 @@ services:
     cap_drop: [ALL]
     mem_limit: 128m
     cpus: 0.25
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
+      sessions: {}
+      core_net: {}
       edge_net:
         aliases: [breinhap-management]
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, /usr/local/etc/redis/redis.conf]
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.25
+    volumes:
+      - sessions:/data
+      - ${BREINHAP_REDIS_CONFIG:?Set the private Redis configuration file}:/usr/local/etc/redis/redis.conf:ro
+    networks: [sessions]
+    healthcheck:
+      test: [CMD-SHELL, "redis-cli ping 2>&1 | grep -q NOAUTH"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  sessions:
+
 networks:
+  sessions:
+    internal: true
+  core_net:
+    external: true
+    name: ${ASAFARIM_CORE_NETWORK:?Set the existing ASafariM core network}
   edge_net:
     external: true

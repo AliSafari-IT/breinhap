@@ -1,0 +1,121 @@
+name: Deploy management
+
+on:
+  workflow_run:
+    workflows: [Management image]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full published main commit SHA (also supports rollback)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: breinhap-management-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      deploy: ${{ steps.release.outputs.deploy }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.event.workflow_run.head_sha }}
+      EVENT: ${{ github.event_name }}
+    steps:
+      - name: Validate release and wait for CI
+        id: release
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid commit SHA'; exit 1; }
+          for attempt in $(seq 1 120); do
+            if [[ "$EVENT" != 'workflow_dispatch' ]]; then
+              head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+              if [[ "$head" != "$SHA" ]]; then
+                echo 'Skipped a superseded management build.' >> "$GITHUB_STEP_SUMMARY"
+                echo 'deploy=false' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&branch=main&per_page=1")
+            status=$(jq -r '.workflow_runs[0].status // "missing"' <<< "$run")
+            if [[ "$status" == 'completed' ]]; then
+              jq -e --arg sha "$SHA" --arg repo "$GITHUB_REPOSITORY" '
+                .workflow_runs[0] | .conclusion == "success" and .head_sha == $sha and
+                .head_repository.full_name == $repo and .event == "push" and .head_branch == "main"
+              ' <<< "$run" > /dev/null || { echo '::error::Source CI did not succeed'; exit 1; }
+              echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+              echo 'deploy=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::Timed out waiting for successful CI; no deployment requested'
+          exit 1
+
+  deploy:
+    needs: validate
+    if: needs.validate.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: breinhap-management
+      url: https://management.breinhap.com
+    env:
+      SHA: ${{ needs.validate.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+      EVENT: ${{ github.event_name }}
+    steps:
+      - name: Deploy the published management
+        env:
+          HOST: ${{ secrets.BREINHAP_MANAGEMENT_DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.BREINHAP_MANAGEMENT_DEPLOY_USER }}
+          PORT: ${{ secrets.BREINHAP_MANAGEMENT_DEPLOY_PORT }}
+          KEY: ${{ secrets.BREINHAP_MANAGEMENT_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.BREINHAP_MANAGEMENT_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" != 'workflow_dispatch' ]]; then
+            head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+            if [[ "$head" != "$SHA" ]]; then
+              echo 'Skipped a superseded management build after waiting for the deployment environment.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          for name in HOST SSH_USER KEY KNOWN_HOSTS; do
+            [[ -n "${!name}" ]] || { echo "::error::Missing management deploy setting: $name; see private runbook"; exit 1; }
+          done
+          [[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || { echo '::error::HOST must be a hostname or IPv4 address only, without a URL scheme, username or whitespace'; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo '::error::SSH_USER must be a Unix username only'; exit 1; }
+          PORT="${PORT:-22}"
+          [[ "$PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$PORT >= 1 && 10#$PORT <= 65535 )) || { echo '::error::PORT must be an integer from 1 to 65535'; exit 1; }
+          dir=$(mktemp -d "$RUNNER_TEMP/breinhap-ssh.XXXXXX")
+          trap 'rm -rf "$dir"' EXIT
+          (umask 077; printf '%s\n' "$KEY" > "$dir/key"; printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts")
+          ssh -T -i "$dir/key" -p "${PORT:-22}" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$dir/known_hosts" -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=4 \
+            "$SSH_USER@$HOST" "deploy-management $SHA"
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 https://management.breinhap.com/readyz
+          {
+            printf 'Deployed management commit %s.\n' "$SHA"
+            echo 'Open https://management.breinhap.com/aanmelden to see the ASafariM sign-in page.'
+            echo 'After sign-in: Overview and Library. Students and accounts without management grants see Access denied.'
+          } >> "$GITHUB_STEP_SUMMARY"

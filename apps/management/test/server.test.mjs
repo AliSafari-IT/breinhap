@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import { after, test } from "node:test";
+import { createIdentity } from "../src/identity.mjs";
 import { createManagementServer } from "../src/server.mjs";
+import { makeStore, member } from "./helpers.mjs";
 
 const servers = [];
 after(async () => {
@@ -14,7 +16,7 @@ async function client(options) {
 	const server = createManagementServer(options);
 	servers.push(server);
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-	return (path, { headers = {}, method = "GET" } = {}) =>
+	return (path, { headers = {}, method = "GET", body } = {}) =>
 		new Promise((resolve, reject) => {
 			const req = http.request(
 				{
@@ -36,7 +38,7 @@ async function client(options) {
 				},
 			);
 			req.on("error", reject);
-			req.end();
+			req.end(body);
 		});
 }
 
@@ -52,7 +54,7 @@ test("production default never accepts client identity or role assertions", asyn
 			},
 		});
 		assert.equal(res.status, 303);
-		assert.equal(res.headers.location, "/aanmelden");
+		assert.equal(res.headers.location, "/login");
 		assert.doesNotMatch(res.body, /Beheernavigatie|inhoudsbibliotheek/);
 		assert.equal(res.headers["cache-control"], "no-store");
 	}
@@ -169,4 +171,76 @@ test("management image and routing never replace student deployment", async () =
 		"utf8",
 	);
 	assert.doesNotMatch(student, /management\/src|resolveAccess|Beheernavigatie/);
+});
+
+test("HTTP sign-in and logout compose with the protected management shell", async () => {
+	let state;
+	const store = await makeStore();
+	await member(store, "person", "breinhap.parent");
+	const identity = createIdentity({
+		store,
+		provider: {
+			authorizationUrl: async (flow) => {
+				state = flow.state;
+				return `https://id.asafarim.site/auth?state=${state}`;
+			},
+			exchange: async () => ({
+				sub: "person",
+				sid: "browser",
+				authTime: Math.floor(Date.now() / 1000),
+				issuedAt: Math.floor(Date.now() / 1000),
+				accessToken: "secret",
+				expiresIn: 3600,
+			}),
+			userInfo: async () => ({ sub: "person" }),
+			logoutUrl: () => "https://id.asafarim.site/session/end",
+		},
+		grants: async () => ({
+			appId: "breinhap",
+			subject: "person",
+			state: "active",
+			roles: ["breinhap.parent"],
+			permissions: ["breinhap.management.access"],
+		}),
+	});
+	const get = await client({ identity });
+	const signIn = await get("/aanmelden");
+	assert.equal(signIn.status, 200);
+	assert.match(signIn.body, /Aanmelden met ASafariM/);
+	assert.match(signIn.body, /Breinhap beheer · 0.2.0/);
+	assert.equal((await get("/readyz")).status, 200);
+	const start = await get("/auth/start");
+	const flowCookie = start.headers["set-cookie"][0].split(";")[0];
+	const callback = await get(`/auth/callback?code=valid&state=${state}`, {
+		headers: { Cookie: flowCookie },
+	});
+	const session = callback.headers["set-cookie"][0].split(";")[0];
+	const home = await get("/", { headers: { Cookie: session } });
+	assert.equal(home.status, 200);
+	assert.match(home.body, /Je rollen: Ouder/);
+	assert.doesNotMatch(home.body, /person|secret/);
+	const csrf = /name="csrf" value="([^"]+)"/.exec(home.body)[1];
+	const logout = await get("/afmelden", {
+		method: "POST",
+		headers: { Cookie: session, Origin: "https://management.breinhap.com" },
+		body: `csrf=${csrf}`,
+	});
+	assert.equal(logout.status, 303);
+	assert.equal((await get("/", { headers: { Cookie: session } })).status, 303);
+	assert.equal((await get("/.well-known/asafarim-app.json")).status, 200);
+});
+
+test("an administrative dependency outage returns unavailable rather than denied or private error details", async () => {
+	const get = await client({
+		identity: {
+			handle: async () => null,
+			privileged: async () => {
+				throw new Error("private dependency detail");
+			},
+		},
+	});
+	const response = await get("/beheer");
+	assert.equal(response.status, 503);
+	assert.match(response.body, /Tijdelijk niet beschikbaar/);
+	assert.doesNotMatch(response.body, /private dependency detail/);
 });

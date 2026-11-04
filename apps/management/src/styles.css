@@ -47,3 +47,53 @@ a[aria-current] {
 h1 {
 	font-size: clamp(1.5rem, 5vw, 2.5rem);
 }
+
+aside {
+	border-top: 1px solid var(--line);
+	margin-top: 2rem;
+	padding-top: 1rem;
+}
+button,
+.action {
+	padding: 0.75rem 1rem;
+	background: var(--accent);
+	color: var(--accent-ink);
+	border-radius: 0.4rem;
+	border: 0;
+	font: inherit;
+	cursor: pointer;
+	display: inline-block;
+}
+
+footer {
+	max-width: 48rem;
+	margin: auto;
+	padding: 1.5rem;
+	color: var(--muted);
+}
+
+header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+label {
+	display: block;
+	margin-block: 1rem;
+}
+input,
+select {
+	display: block;
+	width: 100%;
+	max-width: 40rem;
+	box-sizing: border-box;
+	padding: 0.65rem;
+	font: inherit;
+	color: var(--ink);
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 0.35rem;
+}
+form {
+	margin-block: 1rem 2rem;
+}
