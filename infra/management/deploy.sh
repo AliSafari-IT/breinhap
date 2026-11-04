@@ -25,7 +25,9 @@ digest=$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')
 [[ "$digest" =~ ^ghcr.io/alisafari-it/breinhap@sha256:[0-9a-f]{64}$ ]] || { echo 'Image digest is invalid' >&2; exit 1; }
 export BREINHAP_MANAGEMENT_IMAGE="$digest"
 export BREINHAP_MANAGEMENT_ENV_FILE="$repo/.env.management"
+export BREINHAP_REDIS_CONFIG="$repo/.redis.management.conf"
 export ASAFARIM_CORE_NETWORK="asafarim-os_os_core"
+[[ -f "$BREINHAP_REDIS_CONFIG" && ! -L "$BREINHAP_REDIS_CONFIG" ]] || { echo "Management Redis configuration not installed" >&2; exit 1; }
 [[ -f "$BREINHAP_MANAGEMENT_ENV_FILE" ]] || { echo "Management environment not installed" >&2; exit 1; }
 docker network inspect "$ASAFARIM_CORE_NETWORK" > /dev/null
 compose=(docker compose -p breinhap-management -f "$here/compose.yml")

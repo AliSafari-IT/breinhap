@@ -39,3 +39,14 @@ test("static pages fit the existing CSP and all local assets exist", () => {
     }
   }
 });
+
+test("login and register are branded adult entry pages and create no student session", () => {
+  for (const language of ["", "en/"]) for (const kind of ["login", "register"]) {
+    const html=read(`${language}${kind}/index.html`);
+    assert.match(html,new RegExp(`https://management\\.breinhap\\.com/${kind}`));
+    assert.match(html,language ? /Student sign-in is not available/ : /Voor leerlingen is aanmelden nog niet beschikbaar/);
+    assert.match(html,language ? /platform administrator/ : /platformbeheerder/);
+    assert.doesNotMatch(html, /<form\b|<style\b|\sstyle=|\son\w+=|<script(?![^>]*src=)/);
+    assert.match(html,new RegExp(`rel="canonical" href="https://breinhap\\.com/${language}${kind}"`));
+  }
+});

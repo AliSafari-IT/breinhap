@@ -59,7 +59,7 @@ ${missing ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <a class="skip" href="#main">${t.skip}</a>
 <header class="os-topbar"><div class="wrap topbar-inner">
   <a class="brand" href="${path}"><img src="/logo.svg" width="40" height="40" alt=""><span>Breinhap</span></a>
-  <div class="tools"><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
+  <div class="tools"><a href="${lang === "nl" ? "/login" : "/en/login"}">${lang === "nl" ? "Aanmelden" : "Sign in"}</a><a href="${lang === "nl" ? "/register" : "/en/register"}">${lang === "nl" ? "Toegang aanvragen" : "Request access"}</a><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
   <button type="button" data-theme-toggle aria-label="${t.theme}" aria-pressed="false">◐</button></div>
 </div></header>
 <aside class="release-banner" aria-label="${t.badge}"><div class="wrap"><strong>${t.badge}</strong><p>${t.notice}</p></div></aside>
@@ -74,6 +74,24 @@ ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="
 </body></html>`;
 }
 
+function entryPage(lang, kind) {
+  const nl = lang === "nl";
+  const registering = kind === "register";
+  const route = `${nl ? "" : "/en"}/${kind}`;
+  const title = registering ? (nl ? "Toegang tot Breinhap" : "Access to Breinhap") : (nl ? "Aanmelden bij Breinhap" : "Sign in to Breinhap");
+  const lead = nl ? "Voor uitgenodigde ouders, begeleiders en leerkrachten." : "For invited parents, tutors and teachers.";
+  const text = registering
+    ? (nl ? "We starten met een kleine proefgroep. Je hebt een actief ASafariM-account en een uitnodiging voor de Breinhap-beheerwerkplek nodig. Je begeleider deelt de uitnodiging rechtstreeks met je." : "We are starting with a small pilot. You need an active ASafariM account and an invitation to the Breinhap management workspace. Your organizer shares the invitation with you directly.")
+    : (nl ? "Ga verder naar de Breinhap-beheerwerkplek. Je bevestigt je identiteit via ASafariM en keert daarna terug naar Breinhap." : "Continue to the Breinhap management workspace. Verify your identity through ASafariM, then return to Breinhap.");
+  const note = nl ? "Nieuw bij ASafariM? Een platformbeheerder moet je verbindingsaanvraag eerst goedkeuren. Die goedkeuring geeft je nog geen toegang tot Breinhap. Voor leerlingen is aanmelden nog niet beschikbaar." : "New to ASafariM? A platform administrator must first approve your connection request. Approval alone does not give you Breinhap access. Student sign-in is not available yet.";
+  let html = page(lang).replace(/<main id="main" class="wrap">[\s\S]*?<\/main>/, `<main id="main" class="wrap"><section class="hero"><p class="eyebrow">Breinhap beheer</p><h1>${title}</h1><p class="lead">${lead}</p><p class="intro">${text}</p><a class="button" href="https://management.breinhap.com/${kind}">${nl ? "Verder naar Breinhap beheer" : "Continue to Breinhap management"}</a><p>${note}</p></section></main>`);
+  html = html.replace(/<aside class="release-banner"[\s\S]*?<\/aside>/, "");
+  html = html.replace(/<title>.*?<\/title>/, `<title>Breinhap · ${title}</title>`).replace(`href="${origin}${nl ? "/" : "/en/"}"`, `href="${origin}${route}"`);
+  html = html.replace('href="/" lang="nl-BE"', `href="/${kind}" lang="nl-BE"`).replace('href="/en/" lang="en"', `href="/en/${kind}" lang="en"`);
+  html = html.replace(/hreflang="nl-BE" href="[^"]*"/, `hreflang="nl-BE" href="${origin}/${kind}"`).replace(/hreflang="en" href="[^"]*"/, `hreflang="en" href="${origin}/en/${kind}"`).replace(/hreflang="x-default" href="[^"]*"/, `hreflang="x-default" href="${origin}/${kind}"`);
+  return html;
+}
+
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(join(dist, "en"), { recursive: true });
 for (const asset of ["logo.svg", "favicon.svg", "theme.js"]) cpSync(join(shared, "public", asset), join(dist, asset));
@@ -81,6 +99,12 @@ writeFileSync(join(dist, "styles.css"), readFileSync(join(shared, "src/theme.css
 writeFileSync(join(dist, "index.html"), page("nl"));
 writeFileSync(join(dist, "en/index.html"), page("en"));
 writeFileSync(join(dist, "404.html"), page("nl", true));
+for (const lang of ["nl", "en"]) for (const kind of ["login", "register"]) {
+  const folder = join(dist, lang === "nl" ? "" : "en", kind);
+  mkdirSync(folder, {recursive:true});
+  writeFileSync(join(folder, "index.html"), entryPage(lang,kind));
+}
+
 writeFileSync(join(dist, "robots.txt"), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
 writeFileSync(join(dist, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${origin}/</loc></url><url><loc>${origin}/en/</loc></url></urlset>\n`);
 console.log(`Built ${dist}`);

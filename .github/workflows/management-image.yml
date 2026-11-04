@@ -43,10 +43,17 @@ jobs:
           # also keeps everything but the management sources out of the build context).
           persist-credentials: false
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
       - name: Check management boundaries
         run: |
           node --check apps/management/src/server.mjs
-          node --test apps/management/test/*.test.mjs
+          cd apps/management
+          npm ci --ignore-scripts
+          npm test
+          cd ../..
           python3 infra/management/test_image_plan.py
           python3 infra/management/test_deploy.py
           python3 infra/management/test_workflow_connection.py

@@ -9,6 +9,7 @@ import {
 	manifest,
 	signRequest,
 } from "../src/platform.mjs";
+import { makeStore, member } from "./helpers.mjs";
 
 const roles = (role) => ({
 	appId: "breinhap",
@@ -34,13 +35,16 @@ const cookieHeader = (response) =>
 		.map((value) => value.split(";")[0])
 		.join("; ");
 
-function setup({ maxEntries } = {}) {
+async function setup({ maxEntries, shared } = {}) {
 	let time = 1000;
 	let current = roles("breinhap.teacher");
 	let unavailable = false;
 	let exchanged = 0;
 	let lastFlow;
+	const store = shared ?? (await makeStore(() => time));
+	if (!shared) await member(store, "person");
 	const identity = createIdentity({
+		store,
 		now: () => time,
 		maxEntries,
 		grants: async () => current,
@@ -52,7 +56,14 @@ function setup({ maxEntries } = {}) {
 			exchange: async (_url, flow) => {
 				exchanged++;
 				assert.deepEqual(flow.state, lastFlow.state);
-				return { sub: "person", accessToken: "private-token", expiresIn: 3600 };
+				return {
+					sub: "person",
+					sid: "browser",
+					authTime: Math.floor(time / 1000),
+					issuedAt: Math.floor(time / 1000),
+					accessToken: "private-token",
+					expiresIn: 3600,
+				};
 			},
 			userInfo: async () => {
 				if (unavailable) throw new Error("revoked");
@@ -90,7 +101,7 @@ function setup({ maxEntries } = {}) {
 			current = value;
 		},
 		expire: () => {
-			time += 3600_001;
+			time += 12 * 3600_000 + 1;
 		},
 		revokeIdentity: () => {
 			unavailable = true;
@@ -139,7 +150,7 @@ test("every role is explicit; student-only, unknown and inactive grants deny man
 });
 
 test("flow binds state, nonce and PKCE to a secure host-only cookie; callback cannot replay", async () => {
-	const context = setup();
+	const context = await setup();
 	const flow = await context.start();
 	assert.match(
 		flow.response.headers["Set-Cookie"][0],
@@ -168,7 +179,7 @@ test("forged, missing, duplicated, mismatched and expired callback state never e
 		"expired",
 		"no-cookie",
 	]) {
-		const context = setup();
+		const context = await setup();
 		const flow = await context.start();
 		if (mode === "expired") context.expire();
 		const state =
@@ -187,12 +198,12 @@ test("forged, missing, duplicated, mismatched and expired callback state never e
 });
 
 test("existing sessions lose privileges immediately on role revocation, identity rejection and expiry", async () => {
-	const context = setup();
+	const context = await setup();
 	const { session } = await context.login();
 	assert.equal(await context.identity.access(request(session)), "management");
 	context.setGrants(roles("breinhap.student"));
 	assert.equal(await context.identity.access(request(session)), "denied");
-	context.setGrants(roles("breinhap.admin"));
+	context.setGrants(roles("breinhap.teacher"));
 	assert.equal(await context.identity.access(request(session)), "management");
 	context.revokeIdentity();
 	await assert.rejects(context.identity.access(request(session)));
@@ -207,7 +218,7 @@ test("existing sessions lose privileges immediately on role revocation, identity
 });
 
 test("logout requires same-origin POST and session CSRF then destroys the session", async () => {
-	const context = setup();
+	const context = await setup();
 	const { session } = await context.login();
 	const authenticated = request(session);
 	await context.identity.access(authenticated);
@@ -253,16 +264,22 @@ test("logout requires same-origin POST and session CSRF then destroys the sessio
 	assert.equal(await context.identity.access(request(session)), "anonymous");
 });
 
-test("a process restart drops sessions; login flow storage is bounded", async () => {
-	const first = setup({ maxEntries: 1 });
+test("a new application instance uses the shared session; login starts are rate limited", async () => {
+	const first = await setup({ maxEntries: 1 });
 	const { session } = await first.login();
-	assert.equal(await setup().identity.access(request(session)), "anonymous");
+	assert.equal(
+		await (await setup({ shared: first.identity.store })).identity.access(
+			request(session),
+		),
+		"management",
+	);
 	await first.start();
+	for (let i = 0; i < 28; i++) await first.start();
 	const result = await first.identity.handle(
 		request(),
 		new URL(`${ORIGIN}/auth/start`),
 	);
-	assert.equal(result.status, 503);
+	assert.equal(result.status, 429);
 });
 
 test("registry request signing matches the shared OS ed25519-v1 protocol", async () => {
@@ -357,6 +374,8 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 				if (url.endsWith("/token")) {
 					const time = Math.floor(Date.now() / 1000);
 					const claims = {
+						auth_time: time,
+						sid: "browser",
 						iss: mode === "issuer" ? "https://attacker.test" : issuer,
 						sub: "person",
 						aud: mode === "audience" ? "other" : "breinhap",

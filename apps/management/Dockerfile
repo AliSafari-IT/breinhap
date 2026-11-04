@@ -6,6 +6,7 @@ RUN cd management && npm ci --omit=dev --ignore-scripts
 COPY --chown=node:node management/src management/src
 COPY --chown=node:node management/platform.app.json management/platform.app.json
 COPY --chown=node:node site/src/theme.css site/src/theme.css
+COPY --chown=node:node site/public/theme.js site/public/theme.js
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \

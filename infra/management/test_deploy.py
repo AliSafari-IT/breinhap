@@ -37,6 +37,7 @@ class DeployTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git").mkdir()
+            (root / ".redis.management.conf").write_text("port 6379\n")
             (root / ".env.management").write_text("CORE_API_URL=http://core-api:4020\n")
             site = root / "infra/management"
             site.mkdir(parents=True)

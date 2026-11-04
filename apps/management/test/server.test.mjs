@@ -4,6 +4,7 @@ import http from "node:http";
 import { after, test } from "node:test";
 import { createIdentity } from "../src/identity.mjs";
 import { createManagementServer } from "../src/server.mjs";
+import { makeStore, member } from "./helpers.mjs";
 
 const servers = [];
 after(async () => {
@@ -53,7 +54,7 @@ test("production default never accepts client identity or role assertions", asyn
 			},
 		});
 		assert.equal(res.status, 303);
-		assert.equal(res.headers.location, "/aanmelden");
+		assert.equal(res.headers.location, "/login");
 		assert.doesNotMatch(res.body, /Beheernavigatie|inhoudsbibliotheek/);
 		assert.equal(res.headers["cache-control"], "no-store");
 	}
@@ -174,7 +175,10 @@ test("management image and routing never replace student deployment", async () =
 
 test("HTTP sign-in and logout compose with the protected management shell", async () => {
 	let state;
+	const store = await makeStore();
+	await member(store, "person", "breinhap.parent");
 	const identity = createIdentity({
+		store,
 		provider: {
 			authorizationUrl: async (flow) => {
 				state = flow.state;
@@ -182,6 +186,9 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 			},
 			exchange: async () => ({
 				sub: "person",
+				sid: "browser",
+				authTime: Math.floor(Date.now() / 1000),
+				issuedAt: Math.floor(Date.now() / 1000),
 				accessToken: "secret",
 				expiresIn: 3600,
 			}),
@@ -221,4 +228,19 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	assert.equal(logout.status, 303);
 	assert.equal((await get("/", { headers: { Cookie: session } })).status, 303);
 	assert.equal((await get("/.well-known/asafarim-app.json")).status, 200);
+});
+
+test("an administrative dependency outage returns unavailable rather than denied or private error details", async () => {
+	const get = await client({
+		identity: {
+			handle: async () => null,
+			privileged: async () => {
+				throw new Error("private dependency detail");
+			},
+		},
+	});
+	const response = await get("/beheer");
+	assert.equal(response.status, 503);
+	assert.match(response.body, /Tijdelijk niet beschikbaar/);
+	assert.doesNotMatch(response.body, /private dependency detail/);
 });

@@ -57,6 +57,10 @@ export function managementAccess(grants, subject) {
 				? "management"
 				: "denied",
 		roles: roles.map((role) => roleLabels[role]),
+		roleKeys: roles,
+		permissions: grants.permissions.filter((permission) =>
+			permission.startsWith("breinhap."),
+		),
 	};
 }
 

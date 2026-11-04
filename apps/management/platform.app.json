@@ -28,9 +28,17 @@
 			"/healthz",
 			"/readyz",
 			"/.well-known/asafarim-app.json",
+			"/login",
+			"/register",
 			"/aanmelden",
 			"/auth/start",
-			"/auth/callback"
+			"/auth/callback",
+			"/auth/backchannel-logout",
+			"/auth/invite-link",
+			"/session.js",
+			"/theme.js",
+			"/styles.css",
+			"/theme.css"
 		]
 	},
 	"permissions": [
@@ -41,12 +49,16 @@
 		{
 			"key": "breinhap.student.access",
 			"description": "Student role; never permits management access"
+		},
+		{
+			"key": "breinhap.memberships.manage",
+			"description": "Invite and revoke adult pilot members in the configured workspace; cannot grant ASafariM roles"
 		}
 	],
 	"roles": [
 		{
 			"key": "breinhap.admin",
-			"grants": ["breinhap.management.access"]
+			"grants": ["breinhap.management.access", "breinhap.memberships.manage"]
 		},
 		{
 			"key": "breinhap.parent",
@@ -65,7 +77,11 @@
 			"grants": ["breinhap.student.access"]
 		}
 	],
-	"secrets": ["ASAFARIM_REGISTRY_CREDENTIAL"],
+	"secrets": [
+		"ASAFARIM_REGISTRY_CREDENTIAL",
+		"REDIS_URL",
+		"SESSION_ENCRYPTION_KEY"
+	],
 	"ui": {
 		"glyph": "BH",
 		"color": "#23456b",

@@ -71,3 +71,29 @@ footer {
 	padding: 1.5rem;
 	color: var(--muted);
 }
+
+header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+label {
+	display: block;
+	margin-block: 1rem;
+}
+input,
+select {
+	display: block;
+	width: 100%;
+	max-width: 40rem;
+	box-sizing: border-box;
+	padding: 0.65rem;
+	font: inherit;
+	color: var(--ink);
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 0.35rem;
+}
+form {
+	margin-block: 1rem 2rem;
+}
