@@ -84,6 +84,7 @@ test("real Host and request target determine isolation, never forwarded headers"
 	for (const path of [
 		"https://management.breinhap.com/bibliotheek",
 		"//management.breinhap.com/bibliotheek",
+		"/\\attacker.test/healthz",
 	]) {
 		assert.equal((await get(path)).status, 421);
 	}

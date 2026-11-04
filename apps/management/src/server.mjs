@@ -67,6 +67,8 @@ export function createHandler({
 				Allow: "GET, HEAD",
 			});
 		const url = new URL(req.url, origin);
+		if (url.origin !== origin)
+			return send(421, "Misdirected request", "text/plain; charset=utf-8");
 		if (url.pathname === "/healthz")
 			return send(200, "ok\n", "text/plain; charset=utf-8");
 		if (url.pathname === "/styles.css")
