@@ -293,3 +293,9 @@ p { margin: 0 0 1em; }
 .app-entry-points { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 20px; }
 .app-entry-points .btn { max-width: 100%; }
 .app-entry-points .small { flex-basis: 100%; }
+
+.app-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 24px; }
+.app-card { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.app-card h3 { margin-top: 0; }
+.app-card .btn { margin-top: auto; max-width: 100%; white-space: normal; }
+@media (max-width: 860px) { .app-cards { grid-template-columns: 1fr; } }
