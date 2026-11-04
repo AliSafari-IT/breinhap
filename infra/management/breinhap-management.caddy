@@ -1,0 +1,3 @@
+management.breinhap.com {
+  reverse_proxy breinhap-management:8080
+}
