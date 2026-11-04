@@ -40,6 +40,7 @@ export function managementAccess(grants, subject) {
 	if (
 		grants?.appId !== "breinhap" ||
 		grants.subject !== subject ||
+		!["installed", "active", "inactive", "removed"].includes(grants.state) ||
 		!Array.isArray(grants.roles) ||
 		!Array.isArray(grants.permissions) ||
 		!grants.roles.every((role) => typeof role === "string") ||

@@ -419,3 +419,10 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 		else await assert.rejects(promise, undefined, mode);
 	}
 });
+
+test("malformed application lifecycle data is unavailable rather than an empty grant", () => {
+	for (const state of [undefined, null, {}, "unknown-state"])
+		assert.throws(() =>
+			managementAccess({ ...roles("breinhap.admin"), state }, "person"),
+		);
+});
