@@ -126,3 +126,13 @@ test("search and share metadata: Open Graph, x-default, JSON-LD on the home page
     for (const path of Object.values(byLang)) assert.ok(sitemap.includes(`<loc>https://breinhap.asafarim.site${path}</loc>`), path);
   assert.ok(existsSync(join(dist, "robots.txt")));
 });
+
+test("both introduction languages expose public web and restricted adult entry points", () => {
+ for (const [language, route] of [["nl","/"],["en","/en/"]]) {
+  const html=readFileSync(join(dist,route,"index.html"),"utf8");
+  assert.ok(html.includes(`href="https://breinhap.com${route}"`));
+  assert.ok(html.includes('href="https://management.breinhap.com/login"'));
+  assert.match(html,language==="en" ? /Management is for invited adults/ : /Beheer is voor uitgenodigde volwassenen/);
+  assert.ok(html.includes(`Website v${JSON.parse(readFileSync(new URL("../package.json", import.meta.url),"utf8")).version}`));
+ }
+});

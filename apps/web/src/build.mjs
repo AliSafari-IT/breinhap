@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
+const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const shared = join(root, "../site");
 const origin = "https://breinhap.com";
 const copy = {
@@ -70,7 +71,7 @@ ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="
 <section class="expect"><h2>${t.next}</h2><div class="cards">${t.cards.map(([title, text], index) => `<article class="card"><span class="number" aria-hidden="true">0${index + 1}</span><h3>${title}</h3><p>${text}</p></article>`).join("")}</div></section>
 <section class="android"><h2>${t.android}</h2><p>${t.androidText}</p></section>`}
 </main>
-<footer class="wrap"><p><strong>Breinhap</strong> · ${t.footer}</p><nav aria-label="${lang === "nl" ? "Juridisch" : "Legal"}">${[t.privacy, t.terms, t.cookies, t.deletion].map((label, i) => `<a href="https://breinhap.asafarim.site/${legal[i]}/">${label}</a>`).join("")}</nav></footer>
+<footer class="wrap"><p><strong>Breinhap</strong> · ${t.footer} · Website v${version}</p><nav aria-label="${lang === "nl" ? "Juridisch" : "Legal"}">${[t.privacy, t.terms, t.cookies, t.deletion].map((label, i) => `<a href="https://breinhap.asafarim.site/${legal[i]}/">${label}</a>`).join("")}</nav></footer>
 </body></html>`;
 }
 

@@ -38,3 +38,7 @@ pnpm --filter @breinhap/mobile exec expo install <pkg>   # add native deps with 
 - **Style:** the ASafariM OS look (charcoal header, cool light-blue light theme with navy actions, charcoal dark theme with light-blue accents, theme toggle). No beige. Colours live in `apps/mobile/src/theme/tokens.ts` and `apps/site/src/theme.css` (a copy of asafarim-os `packages/theme/theme.css`).
 - **Site CSP** is `script-src 'self'; style-src 'self'`: no inline scripts, `<style>` or `style=""` (the site tests check). Respect `prefers-reduced-motion`; anything that moves on its own can be paused.
 - Android package id is `com.asafarim.breinhap`. It is permanent once published on Google Play.
+
+## Release versions
+
+Every deployable issue bumps each affected application version before merge (patch by default). Synchronize package/lockfile/manifest versions and visible release labels. Retries and rollbacks reuse the existing artifact version. Report the deployed versions, revisions, inspection URLs and deployment logs.
