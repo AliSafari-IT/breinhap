@@ -1,0 +1,8 @@
+breinhap.com {
+  encode zstd gzip
+  reverse_proxy breinhap-web:8080
+}
+
+www.breinhap.com {
+  redir https://breinhap.com{uri} permanent
+}

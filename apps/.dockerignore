@@ -1,0 +1,13 @@
+*
+!site
+!site/src
+!site/src/theme.css
+!site/public
+!site/public/logo.svg
+!site/public/favicon.svg
+!site/public/theme.js
+!site/nginx.conf
+!web
+!web/src
+!web/src/**
+!web/Dockerfile
