@@ -209,7 +209,8 @@ function home(t, lang) {
       <p class="lead">${esc(t.hero.lead)}</p>
       <p class="muted">${esc(t.hero.note)}</p>
       <div class="hero-actions">
-        <a class="btn" href="#hoe">${esc(t.hero.cta)}</a>
+        <a class="btn" href="https://breinhap.com${routes.home[lang]}">${esc(t.apps.web.cta)}</a>
+        <a class="btn btn--ghost" href="#hoe">${esc(t.hero.cta)}</a>
         <span class="btn btn--ghost btn--static" aria-disabled="true">${esc(t.playSoon)}</span>
       </div>
     </div>
@@ -218,6 +219,16 @@ function home(t, lang) {
         <svg class="hero-mark" viewBox="0 0 64 64" focusable="false">${logoMark("bh-bite-hero")}</svg>
       </div>
       ${chips}
+    </div>
+  </div>
+</section>
+
+<section id="apps" class="section section--alt" aria-labelledby="apps-title">
+  <div class="wrap">
+    <h2 id="apps-title">${esc(t.apps.title)}</h2>
+    <p class="lead">${esc(t.apps.lead)}</p>
+    <div class="app-cards">
+      ${[[t.apps.web, `https://breinhap.com${routes.home[lang]}`], [t.apps.android, "#hoe"], [t.apps.management, "https://management.breinhap.com/login"]].map(([app, href]) => `<article class="card app-card"><p class="kicker">${esc(app.status)}</p><h3>${esc(app.title)}</h3><p>${esc(app.text)}</p><a class="btn btn--ghost" href="${href}">${esc(app.cta)}</a></article>`).join("\n")}
     </div>
   </div>
 </section>

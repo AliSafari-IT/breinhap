@@ -25,6 +25,13 @@ const nl = {
     cta: "Bekijk hoe het werkt",
     chips: ["5 minuten", "Wiskunde", "Biologie", "Klopt.", "Geen tijdsdruk"],
   },
+  apps: {
+    title: "Breinhap op jouw scherm",
+    lead: "Ontdek de Android-app, de webversie en de beheeromgeving. Elke omgeving heeft een eigen doel.",
+    web: { title: "Breinhap Web", status: "Website beschikbaar · missies volgen later", text: "Open Breinhap in je browser op een computer, tablet of telefoon. De website staat klaar; studiemissies en aanmelden voor leerlingen zijn nog in ontwikkeling.", cta: "Open Breinhap Web" },
+    android: { title: "Breinhap voor Android", status: "In test · binnenkort op Google Play", text: "De studie-app met korte, voorspelbare missies. We testen eerst met een kleine groep leerlingen.", cta: "Bekijk de Android-app" },
+    management: { title: "Breinhap management", status: "Beschikbaar voor uitgenodigde volwassenen", text: "Een aparte omgeving voor volwassenen die toegang hebben gekregen. Meld je aan met je bestaande ASafariM-account.", cta: "Open Breinhap management" },
+  },
   flow: {
     title: "Hoe het werkt",
     lead: "De eerste keer kies je je school. Daarna volgt elke missie dezelfde stappen. Zo weet je altijd wat er komt.",
@@ -119,7 +126,7 @@ const nl = {
   faq: {
     title: "Vragen",
     items: [
-      { q: "Wanneer is Breinhap beschikbaar?", a: "We testen eerst met een kleine groep leerlingen. Daarna komt de app op Google Play. Eerst voor Android." },
+      { q: "Wanneer is Breinhap beschikbaar?", a: "De webversie staat op breinhap.com; webmissies volgen later. De Android-app testen we met een kleine groep leerlingen en komt daarna op Google Play. Breinhap management is beschikbaar voor uitgenodigde volwassenen." },
       { q: "Is het alleen voor leerlingen met ADHD of AuDHD?", a: "Nee. Het is ontworpen met hen in gedachten, maar het werkt voor iedereen die het moeilijk vindt om te beginnen of te blijven studeren." },
       { q: "Voor welk jaar is Breinhap?", a: "Je kiest zelf je jaar en richting, en ziet dan je eigen vakken. We testen eerst met een paar scholen, jaren en richtingen en breiden daarna uit. Staat jouw school er nog niet bij? Dan kan je toch verder." },
       { q: "Volgt het mijn leerplan?", a: "Dat is het doel. Elke missie hoort bij een leerdoel van jouw jaar en richting. Leerplannen verschillen per net en richting; we beginnen met wiskunde en biologie. Vakken zonder missies staan in de app bij “Binnenkort”." },
@@ -159,6 +166,13 @@ const en = {
     note: "Made with and for students with ADHD and AuDHD. Good for everyone.",
     cta: "See how it works",
     chips: ["5 minutes", "Maths", "Biology", "Correct.", "No time pressure"],
+  },
+  apps: {
+    title: "Breinhap on your screen",
+    lead: "Explore the Android app, the web version and management. Each has its own purpose.",
+    web: { title: "Breinhap Web", status: "Website available · missions coming later", text: "Open Breinhap in your browser on a computer, tablet or phone. The website is ready; study missions and student sign-in are still in development.", cta: "Open Breinhap Web" },
+    android: { title: "Breinhap for Android", status: "In testing · coming to Google Play", text: "The study app with short, predictable missions. We are testing with a small group of students first.", cta: "Explore the Android app" },
+    management: { title: "Breinhap management", status: "Available to invited adults", text: "A separate workspace for adults who have been granted access. Sign in with your existing ASafariM account.", cta: "Open Breinhap management" },
   },
   flow: {
     title: "How it works",
@@ -254,7 +268,7 @@ const en = {
   faq: {
     title: "Questions",
     items: [
-      { q: "When is Breinhap available?", a: "We are testing with a small group of students first. Then the app comes to Google Play, on Android first." },
+      { q: "When is Breinhap available?", a: "The web version is at breinhap.com; web missions are coming later. We are testing the Android app with a small group of students before its Google Play release. Breinhap management is available to invited adults." },
       { q: "Is it only for students with ADHD or AuDHD?", a: "No. It is designed with them in mind, but it works for anyone who finds it hard to start or keep studying." },
       { q: "Which year is Breinhap for?", a: "You pick your own year and study programme, then see your own subjects. We are testing with a few schools, years and programmes first and will add more after that. Is your school not listed yet? You can still continue." },
       { q: "Does it follow my curriculum?", a: "That is the goal. Every mission belongs to a learning goal of your year and programme. Curricula differ by school network and programme; we start with maths and biology. Subjects without missions yet are listed in the app under “Coming soon”." },
