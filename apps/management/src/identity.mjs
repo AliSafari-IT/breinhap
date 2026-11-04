@@ -254,7 +254,15 @@ export function createIdentity({
 			// Local logout does not depend on the provider or permission service being reachable.
 			const id = readCookie(req, SESSION);
 			const saved = id ? await store.getSession(id, false) : null;
-			if (!saved || !csrfValid(req, await readForm(req), saved))
+			if (req.method !== "POST" || req.headers.origin !== ORIGIN)
+				return message(403, "Afmelden geweigerd.");
+			if (!saved)
+				return redirect("/login?logged-out=1", [
+					cookie(SESSION, "", 0),
+					cookie(FLOW, "", 0),
+					cookie(INVITE, "", 0),
+				]);
+			if (!csrfValid(req, await readForm(req), saved))
 				return message(403, "Afmelden geweigerd.");
 			await store.destroySession(id);
 			let location = "/login?logged-out=1";

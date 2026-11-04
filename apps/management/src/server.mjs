@@ -60,7 +60,7 @@ export function createHandler({
 				"Content-Security-Policy":
 					"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; form-action 'self' https://id.asafarim.site; frame-ancestors 'none'",
 				"X-Content-Type-Options": "nosniff",
-				"Referrer-Policy": "no-referrer",
+				"Referrer-Policy": "same-origin",
 				"X-Frame-Options": "DENY",
 				"Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 				...extra,

@@ -52,6 +52,7 @@ jobs:
           node --check apps/management/src/server.mjs
           cd apps/management
           npm ci --ignore-scripts
+          npx --no-install playwright install --with-deps chromium
           npm test
           cd ../..
           python3 infra/management/test_image_plan.py
