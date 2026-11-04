@@ -147,7 +147,7 @@ ${jsonLd}<meta name="theme-color" content="#222222">
 </header>
 <nav class="app-entry-points wrap" aria-label="${lang === "nl" ? "Breinhap-apps" : "Breinhap apps"}">
   <a class="btn" href="https://breinhap.com${lang === "en" ? "/en/" : "/"}">${lang === "nl" ? "Breinhap op het web" : "Breinhap web"}</a>
-  <a class="btn btn--ghost" href="https://management.breinhap.com/login">${lang === "nl" ? "Beheer voor volwassenen" : "Adult management"}</a>
+  <a class="btn btn--ghost" href="https://management.breinhap.com/login">Breinhap management</a>
   <span class="muted small">${lang === "nl" ? "Webmissies volgen later. Beheer is voor uitgenodigde volwassenen." : "Web missions are coming later. Management is for invited adults."}</span>
 </nav>
 <main id="main">
