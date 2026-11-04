@@ -1,8 +1,11 @@
 // Page templates. Plain functions returning HTML strings; build.mjs writes them to dist/.
 // No inline scripts or styles anywhere: the CSP is script-src 'self'; style-src 'self'.
+import { readFileSync } from "node:fs";
 import { CONTACT_EMAIL } from "./content.mjs";
 import { esc } from "./html.mjs";
 import { logoMark, phone } from "./phone.mjs";
+
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 export const SITE_URL = "https://breinhap.asafarim.site";
 
@@ -142,6 +145,11 @@ ${jsonLd}<meta name="theme-color" content="#222222">
     </div>
   </div>
 </header>
+<nav class="app-entry-points wrap" aria-label="${lang === "nl" ? "Breinhap-apps" : "Breinhap apps"}">
+  <a class="btn" href="https://breinhap.com${lang === "en" ? "/en/" : "/"}">${lang === "nl" ? "Breinhap op het web" : "Breinhap web"}</a>
+  <a class="btn btn--ghost" href="https://management.breinhap.com/login">${lang === "nl" ? "Beheer voor volwassenen" : "Adult management"}</a>
+  <span class="muted small">${lang === "nl" ? "Webmissies volgen later. Beheer is voor uitgenodigde volwassenen." : "Web missions are coming later. Management is for invited adults."}</span>
+</nav>
 <main id="main">
 ${body}
 </main>
@@ -159,7 +167,7 @@ ${body}
       <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>
       <a href="https://asafarim.site/">${esc(t.footer.os)}</a>
     </nav>
-    <p class="muted small">© 2026 ${esc(t.footer.rights)}</p>
+    <p class="muted small">© 2026 ${esc(t.footer.rights)} · Website v${esc(version)}</p>
   </div>
 </footer>
 </body>

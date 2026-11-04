@@ -5,6 +5,7 @@
 
 FROM node:24-alpine AS build
 WORKDIR /site
+COPY package.json ./package.json
 COPY src ./src
 COPY public ./public
 RUN node src/build.mjs

@@ -2,6 +2,7 @@ FROM node:24-alpine AS build
 WORKDIR /apps
 COPY site/src/theme.css site/src/theme.css
 COPY site/public/logo.svg site/public/favicon.svg site/public/theme.js site/public/
+COPY web/package.json web/package.json
 COPY web/src web/src
 RUN node web/src/build.mjs
 

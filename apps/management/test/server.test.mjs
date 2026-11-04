@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import { after, test } from "node:test";
+import { manifest } from "../src/platform.mjs";
 import { createIdentity } from "../src/identity.mjs";
 import { createManagementServer } from "../src/server.mjs";
 import { makeStore, member } from "./helpers.mjs";
@@ -207,7 +208,7 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	const signIn = await get("/aanmelden");
 	assert.equal(signIn.status, 200);
 	assert.match(signIn.body, /Aanmelden met ASafariM/);
-	assert.match(signIn.body, /Breinhap beheer · 0.2.0/);
+	assert.ok(signIn.body.includes(`Breinhap beheer · ${manifest.version}`));
 	assert.equal((await get("/readyz")).status, 200);
 	const start = await get("/auth/start");
 	const flowCookie = start.headers["set-cookie"][0].split(";")[0];
@@ -243,4 +244,18 @@ test("an administrative dependency outage returns unavailable rather than denied
 	assert.equal(response.status, 503);
 	assert.match(response.body, /Tijdelijk niet beschikbaar/);
 	assert.doesNotMatch(response.body, /private dependency detail/);
+});
+
+test("management release versions agree and its launcher remains grant-filtered", async () => {
+	const pkg = JSON.parse(
+		await readFile(new URL("../package.json", import.meta.url), "utf8"),
+	);
+	const lock = JSON.parse(
+		await readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+	);
+	assert.equal(manifest.version, pkg.version);
+	assert.equal(lock.version, pkg.version);
+	assert.equal(lock.packages[""].version, pkg.version);
+	assert.equal(manifest.ui.launcher.access, "authenticated");
+	assert.equal(manifest.ui.launcher.requiresAccountToUse, true);
 });

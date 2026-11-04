@@ -289,3 +289,7 @@ p { margin: 0 0 1em; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.app-entry-points { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 20px; }
+.app-entry-points .btn { max-width: 100%; }
+.app-entry-points .small { flex-basis: 100%; }
