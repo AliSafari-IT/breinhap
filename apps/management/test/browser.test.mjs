@@ -120,8 +120,11 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 			),
 		);
 		assert.equal((await page.goto(ORIGIN)).status(), 200);
+		// Wait for the redirect request, not its page load: Playwright does not route a request that
+		// follows a fulfilled redirect, so loading it would reach the live management.breinhap.com.
+		const loggedOut = page.waitForRequest(`${ORIGIN}/login?logged-out=1`);
 		await page.getByRole("button", { name: "Afmelden", exact: true }).click();
-		await page.waitForURL(`${ORIGIN}/login?logged-out=1`);
+		await loggedOut;
 		assert.deepEqual(submitted, [{ path: "/afmelden", origin: ORIGIN }]);
 		assert.equal(await store.getSession(id), null);
 		assert.ok(
