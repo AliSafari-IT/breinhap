@@ -53,7 +53,9 @@ export const ChoiceQuestion = z
 export const OrderQuestion = z.object({
   kind: z.literal("order"),
   prompt: Text,
-  items: z.array(Text).min(2).max(6),
+  items: z.array(Text).min(2).max(6).refine((items) => new Set(items).size === items.length, {
+    message: "order items must be unique",
+  }),
   explanation: Text,
 });
 

@@ -34,6 +34,16 @@ describe("schema", () => {
     expect(LearningObject.safeParse(broken).success).toBe(false);
   });
 
+  it("rejects repeated ordering items, including duplicates after trimming", () => {
+    for (const items of [["prikkel", "prikkel"], ["prikkel", " prikkel "]]) {
+      const broken = structuredClone(biologiePrikkelReactie);
+      const question = broken.missions[0]?.practice.find((item) => item.kind === "order");
+      if (!question || question.kind !== "order") throw new Error("fixture changed");
+      question.items = items;
+      expect(LearningObject.safeParse(broken).success).toBe(false);
+    }
+  });
+
   it("rejects duplicate mission ids in a pack", () => {
     const result = ContentPack.safeParse({
       schemaVersion: 1,

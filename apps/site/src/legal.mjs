@@ -25,6 +25,7 @@ export const privacy = {
             list: [
               "<strong>Je instellingen.</strong> Thema, rustige modus en grote tekst.",
               "<strong>Je school.</strong> De school, het jaar en de richting die je koos, zodat je meteen je eigen vakken ziet.",
+              "<strong>Gepauzeerde missies.</strong> Je stap en gekozen antwoorden, zodat je later verder kunt. Ze worden gewist als je de missie afrondt of opnieuw begint. Bij gewijzigde lesinhoud begin je opnieuw.",
               "<strong>Wat je vandaag deed.</strong> Welke missies je vandaag al deed, zodat je niet twee keer dezelfde krijgt. Dat verdwijnt als je de app sluit.",
             ],
           },
@@ -96,6 +97,7 @@ export const privacy = {
             list: [
               "<strong>Your settings.</strong> Theme, calm mode and large text.",
               "<strong>Your school.</strong> The school, year and study programme you picked, so you see your own subjects straight away.",
+              "<strong>Paused missions.</strong> Your step and selected answers, so you can continue later. They are cleared when you finish or restart the mission. Changed lesson content starts afresh.",
               "<strong>What you did today.</strong> Which missions you already did today, so you don't get the same one twice. This is gone when you close the app.",
             ],
           },

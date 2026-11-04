@@ -73,7 +73,7 @@ export default function SettingsScreen() {
       <Card>
         <AppText variant="title">Privacy en voorwaarden</AppText>
         <AppText variant="small" muted>
-          Breinhap vraagt nooit naar een diagnose. Je school en deze instellingen blijven op je toestel. De app stuurt niets over jou
+          Breinhap vraagt nooit naar een diagnose. Je school, instellingen en voortgang van gepauzeerde missies blijven op je toestel. De app stuurt niets over jou
           door.
         </AppText>
         <View style={styles.row}>
