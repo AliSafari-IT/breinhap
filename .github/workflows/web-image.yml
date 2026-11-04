@@ -53,6 +53,8 @@ jobs:
           node --test apps/web/test/*.test.mjs
           python3 infra/site/test_deploy.py
           bash -n infra/site/deploy.sh
+          docker build --tag breinhap-web-check --file apps/web/Dockerfile apps
+          python3 apps/web/test/image_routes.py breinhap-web-check
 
       - uses: docker/setup-buildx-action@v4
 
