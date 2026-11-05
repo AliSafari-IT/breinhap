@@ -272,6 +272,21 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 			iat: Math.floor(Date.now() / 1000),
 			jti: "acl-logout",
 		});
+		assert.equal(
+			await restricted.requestRole("newcomer", "breinhap.tutor"),
+			"created",
+		);
+		await restricted.requestRole("other", "breinhap.parent");
+		const [first, second] = await restricted.roleRequests();
+		assert.ok(
+			await restricted.approveRequest(first.id, "admin", inviter.version),
+		);
+		assert.ok(await restricted.rejectRequest(second.id));
+		assert.equal(
+			(await restricted.membership("newcomer")).role,
+			"breinhap.tutor",
+		);
+		await restricted.revokeMember("newcomer");
 		await restricted.revokeMember("recipient");
 		await assert.rejects(client.get("another-app:secret"), /NOPERM/);
 		await assert.rejects(client.sendCommand(["CONFIG", "GET", "*"]), /NOPERM/);

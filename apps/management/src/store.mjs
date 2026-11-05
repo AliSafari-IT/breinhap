@@ -47,6 +47,34 @@ if redis.call('GET',KEYS[2]) ~= ARGV[2] then return 0 end
 if redis.call('EXISTS',KEYS[3])==1 then return 0 end
 redis.call('SET',KEYS[3],ARGV[3]); redis.call('DEL',KEYS[1]); return 1`;
 
+// Role requests use only plain keys and the commands the deployed Redis ACL already allows (no hashes):
+// one encrypted key per request and one index key holding the open request ids, kept in step by Lua.
+const DROP = `local function drop(id)
+  local list = cjson.decode(redis.call('GET',KEYS[1]) or '[]'); local kept = {}
+  for _, v in ipairs(list) do if v ~= id then table.insert(kept, v) end end
+  if #kept == 0 then redis.call('DEL',KEYS[1]) else redis.call('SET',KEYS[1],cjson.encode(kept)) end
+end
+`;
+const REQUEST = `
+if redis.call('EXISTS',KEYS[2])==1 then return 2 end
+local list = cjson.decode(redis.call('GET',KEYS[1]) or '[]')
+if #list >= tonumber(ARGV[3]) then return 0 end
+table.insert(list, ARGV[1]); redis.call('SET',KEYS[1],cjson.encode(list)); redis.call('SET',KEYS[2],ARGV[2]); return 1`;
+const REMOVE = `${DROP}
+local n = redis.call('DEL',KEYS[2]); drop(ARGV[1]); return n`;
+// Approve only while the approver's membership is unchanged and the requester has none yet.
+const APPROVE = `${DROP}
+if redis.call('GET',KEYS[2]) ~= ARGV[2] then return 0 end
+if redis.call('GET',KEYS[3]) ~= ARGV[3] then return 0 end
+if redis.call('EXISTS',KEYS[4])==1 then redis.call('DEL',KEYS[2]); drop(ARGV[1]); return 0 end
+redis.call('SET',KEYS[4],ARGV[4]); redis.call('DEL',KEYS[2]); drop(ARGV[1]); return 1`;
+export const SELF_SERVICE_ROLES = Object.freeze([
+	"breinhap.parent",
+	"breinhap.tutor",
+	"breinhap.teacher",
+]);
+export const MAX_PENDING_REQUESTS = 500;
+
 export class IdentityStore {
 	constructor({ client, secret, workspace = "pilot", now = Date.now }) {
 		const key = Buffer.from(secret ?? "", "base64url");
@@ -238,6 +266,87 @@ export class IdentityStore {
 	}
 	async revokeMember(sub) {
 		await this.client.del(this.keyFor("member", sub));
+		await this.rejectRequest(digest(sub));
+	}
+	requestKeys(id) {
+		const base = `${prefix}${this.workspace}:`;
+		return [`${base}requests`, `${base}request:${id}`];
+	}
+	// A signed-in adult asks for one self-service role. Returns "created", "exists" or "full".
+	async requestRole(subject, role) {
+		if (!SELF_SERVICE_ROLES.includes(role)) throw new Error("Invalid role");
+		const id = digest(subject);
+		const keys = this.requestKeys(id);
+		const result = Number(
+			await this.client.eval(REQUEST, {
+				keys,
+				arguments: [
+					id,
+					this.encode(keys[1], { subject, role, at: this.now() }),
+					String(MAX_PENDING_REQUESTS),
+				],
+			}),
+		);
+		return result === 1 ? "created" : result === 2 ? "exists" : "full";
+	}
+	async roleRequest(subject) {
+		const key = this.requestKeys(digest(subject))[1];
+		return this.decode(key, await this.client.get(key));
+	}
+	async roleRequests() {
+		const ids = JSON.parse(
+			(await this.client.get(this.requestKeys("")[0])) ?? "[]",
+		);
+		const requests = [];
+		for (const id of Array.isArray(ids) ? ids : []) {
+			if (typeof id !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(id)) continue;
+			const key = this.requestKeys(id)[1];
+			const value = this.decode(key, await this.client.get(key));
+			if (value) requests.push({ id, ...value });
+		}
+		return requests.sort((a, b) => a.at - b.at);
+	}
+	async rejectRequest(id) {
+		return (
+			Number(
+				await this.client.eval(REMOVE, {
+					keys: this.requestKeys(id),
+					arguments: [id],
+				}),
+			) === 1
+		);
+	}
+	async approveRequest(id, approver, approverVersion) {
+		const keys = this.requestKeys(id);
+		const raw = await this.client.get(keys[1]);
+		if (!raw) return false;
+		const request = this.decode(keys[1], raw);
+		if (!SELF_SERVICE_ROLES.includes(request.role)) return false;
+		const approverKey = this.keyFor("member", approver);
+		const current = await this.client.get(approverKey);
+		if (
+			!current ||
+			this.decode(approverKey, current).version !== approverVersion
+		)
+			return false;
+		const recipient = this.keyFor("member", request.subject);
+		return (
+			Number(
+				await this.client.eval(APPROVE, {
+					keys: [...keys, approverKey, recipient],
+					arguments: [
+						id,
+						raw,
+						current,
+						this.encode(recipient, {
+							role: request.role,
+							active: true,
+							version: randomBytes(16).toString("hex"),
+						}),
+					],
+				}),
+			) === 1
+		);
 	}
 	async invite(token, data) {
 		const memberKey = this.keyFor("member", data.inviter);

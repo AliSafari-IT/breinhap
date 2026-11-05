@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import * as oidc from "openid-client";
 import { managementAccess, roleLabels } from "./platform.mjs";
-import { ABSOLUTE_MS } from "./store.mjs";
+import { ABSOLUTE_MS, SELF_SERVICE_ROLES } from "./store.mjs";
 
 export const ORIGIN = "https://management.breinhap.com";
 const SESSION = "__Host-breinhap-session";
@@ -169,10 +169,18 @@ export function createIdentity({
 			value.saved.sub,
 		);
 		const membership = await store.membership(value.saved.sub);
+		// ASafariM proves who someone is; the Breinhap membership says which adult role they have. A
+		// self-chosen role becomes a membership only after a Breinhap administrator approves it. The
+		// administrator role itself still needs the matching ASafariM grant, and an account that ASafariM
+		// knows only as a student never gets adult access.
+		const studentOnly = grant.roleKeys.length > 0 && !grant.adult;
 		const allowed =
-			grant.access === "management" &&
 			membership?.active === true &&
-			grant.roleKeys.includes(membership.role);
+			Object.hasOwn(roleLabels, membership.role) &&
+			(membership.role === "breinhap.admin"
+				? grant.access === "management" &&
+					grant.roleKeys.includes("breinhap.admin")
+				: SELF_SERVICE_ROLES.includes(membership.role) && !studentOnly);
 		// Check again after network calls: logout/expiry may have happened during validation.
 		if (!(await store.getSession(value.id, false))) return null;
 		req.managementSession = {
@@ -184,11 +192,13 @@ export function createIdentity({
 				membership.role === "breinhap.admin" &&
 				grant.permissions.includes("breinhap.memberships.manage"),
 		};
+		req.managementSession.canRequest = !allowed && !studentOnly;
 		return {
 			...value,
 			grant,
 			membership,
 			allowed,
+			studentOnly,
 			admin: req.managementSession.admin,
 		};
 	}
@@ -375,6 +385,27 @@ export function createIdentity({
 		if (!isFresh(value.saved, now())) return { response: stepUp() };
 		return { value };
 	}
+	// Signed in but no access yet: show, or file, a request for one self-service role.
+	async function roleRequest(req) {
+		const value = await current(req);
+		if (!value) return { anonymous: true };
+		if (value.allowed) return { allowed: true };
+		if (value.studentOnly) return { student: true };
+		if (req.method !== "POST")
+			return { pending: await store.roleRequest(value.saved.sub) };
+		const form = await readForm(req);
+		if (!csrfValid(req, form, value.saved)) return { refused: true };
+		const role = form.get("role");
+		if (form.getAll("role").length !== 1 || !SELF_SERVICE_ROLES.includes(role))
+			return { invalid: true };
+		if (!(await store.budget("request", 10, 3600, value.saved.sub)))
+			return { busy: true };
+		const result = await store.requestRole(value.saved.sub, role);
+		if (result === "full") return { busy: true };
+		if (result === "created")
+			await audit("role.requested", value.saved.sub, role);
+		return { pending: await store.roleRequest(value.saved.sub) };
+	}
 	async function acceptInvitation(req) {
 		const value = await current(req);
 		if (!value) return redirect("/auth/start?fresh=1");
@@ -423,6 +454,7 @@ export function createIdentity({
 		handle,
 		privileged,
 		acceptInvitation,
+		roleRequest,
 		grants,
 		store,
 		audit,
