@@ -79,13 +79,13 @@ function entryPage(lang, kind) {
   const nl = lang === "nl";
   const registering = kind === "register";
   const route = `${nl ? "" : "/en"}/${kind}`;
-  const title = registering ? (nl ? "Toegang tot Breinhap" : "Access to Breinhap") : (nl ? "Aanmelden bij Breinhap" : "Sign in to Breinhap");
-  const lead = nl ? "Voor uitgenodigde ouders, begeleiders en leerkrachten." : "For invited parents, tutors and teachers.";
+  const title = registering ? (nl ? "Registreren bij Breinhap" : "Register for Breinhap") : (nl ? "Aanmelden bij Breinhap" : "Sign in to Breinhap");
+  const lead = nl ? "Voor ouders, begeleiders en leerkrachten." : "For parents, tutors and teachers.";
   const text = registering
-    ? (nl ? "We starten met een kleine proefgroep. Je hebt een actief ASafariM-account en een uitnodiging voor de Breinhap-beheerwerkplek nodig. Je begeleider deelt de uitnodiging rechtstreeks met je." : "We are starting with a small pilot. You need an active ASafariM account and an invitation to the Breinhap management workspace. Your organizer shares the invitation with you directly.")
+    ? (nl ? "Maak een account aan of meld je aan, en kies of je ouder, begeleider of leerkracht bent. Een beheerder van Breinhap keurt je rol goed; daarna kun je aan de slag. Je hebt geen uitnodiging nodig." : "Create an account or sign in, then choose whether you are a parent, tutor or teacher. A Breinhap administrator approves your role, and then you can get started. No invitation needed.")
     : (nl ? "Ga verder naar de Breinhap-beheerwerkplek. Je bevestigt je identiteit via ASafariM en keert daarna terug naar Breinhap." : "Continue to the Breinhap management workspace. Verify your identity through ASafariM, then return to Breinhap.");
-  const note = nl ? "Nieuw bij ASafariM? Een platformbeheerder moet je verbindingsaanvraag eerst goedkeuren. Die goedkeuring geeft je nog geen toegang tot Breinhap. Voor leerlingen is aanmelden nog niet beschikbaar." : "New to ASafariM? A platform administrator must first approve your connection request. Approval alone does not give you Breinhap access. Student sign-in is not available yet.";
-  let html = page(lang).replace(/<main id="main" class="wrap">[\s\S]*?<\/main>/, `<main id="main" class="wrap"><section class="hero"><p class="eyebrow">Breinhap beheer</p><h1>${title}</h1><p class="lead">${lead}</p><p class="intro">${text}</p><a class="button" href="https://management.breinhap.com/${kind}">${nl ? "Verder naar Breinhap beheer" : "Continue to Breinhap management"}</a><p>${note}</p></section></main>`);
+  const note = nl ? "Je account loopt via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Leerlingen hebben geen account nodig. Voor leerlingen is aanmelden nog niet beschikbaar." : "Your account runs through ASafariM, the secure sign-in platform behind Breinhap. Students do not need an account. Student sign-in is not available yet.";
+  let html = page(lang).replace(/<main id="main" class="wrap">[\s\S]*?<\/main>/, `<main id="main" class="wrap"><section class="hero"><p class="eyebrow">Breinhap beheer</p><h1>${title}</h1><p class="lead">${lead}</p><p class="intro">${text}</p><a class="button" href="https://management.breinhap.com/${kind}">${registering ? (nl ? "Registreren" : "Register") : (nl ? "Verder naar Breinhap beheer" : "Continue to Breinhap management")}</a><p>${note}</p></section></main>`);
   html = html.replace(/<aside class="release-banner"[\s\S]*?<\/aside>/, "");
   html = html.replace(/<title>.*?<\/title>/, `<title>Breinhap · ${title}</title>`).replace(`href="${origin}${nl ? "/" : "/en/"}"`, `href="${origin}${route}"`);
   html = html.replace('href="/" lang="nl-BE"', `href="/${kind}" lang="nl-BE"`).replace('href="/en/" lang="en"', `href="/en/${kind}" lang="en"`);

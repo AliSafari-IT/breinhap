@@ -1,7 +1,7 @@
 {
 	"id": "breinhap",
 	"name": "Breinhap beheer",
-	"version": "0.2.3",
+	"version": "0.2.5",
 	"platform": ">=0.1 <1",
 	"owner": "ASafariM Digital",
 	"domains": {
@@ -93,7 +93,7 @@
 		],
 		"status": "active",
 		"launcher": {
-			"description": "Adult workspace for invited parents, tutors and teachers.",
+			"description": "Adult workspace for parents, tutors and teachers.",
 			"meta": "management.breinhap.com",
 			"access": "authenticated",
 			"requiresAccountToUse": true,

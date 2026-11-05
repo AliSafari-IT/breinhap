@@ -65,6 +65,7 @@ export function managementAccess(grants, subject) {
 				: "denied",
 		roles: roles.map((role) => roleLabels[role]),
 		roleKeys: roles,
+		adult,
 		permissions: grants.permissions.filter((permission) =>
 			permission.startsWith("breinhap."),
 		),
@@ -82,7 +83,7 @@ export function createPlatform({ url, credential, fetcher = fetch }) {
 		base.hash
 	)
 		throw new Error("Invalid core API URL");
-	async function request(path, body, method = "GET") {
+	async function request(path, body, method = "GET", missingOk = false) {
 		const res = await fetcher(new URL(path, base), {
 			method,
 			headers: {
@@ -94,6 +95,7 @@ export function createPlatform({ url, credential, fetcher = fetch }) {
 			redirect: "error",
 			cache: "no-store",
 		});
+		if (missingOk && res.status === 404) return null;
 		if (!res.ok) throw new Error("Registry unavailable");
 		return res.json();
 	}
@@ -102,8 +104,17 @@ export function createPlatform({ url, credential, fetcher = fetch }) {
 			request("/registry/v1/apps/breinhap", JSON.stringify(manifest), "POST"),
 		grants: (subject) => {
 			if (!validSubject(subject)) throw new Error("Invalid account code");
-			return request(
-				`/registry/v1/apps/breinhap/subjects/${encodeURIComponent(subject)}`,
+			const path = `/registry/v1/apps/breinhap/subjects/${encodeURIComponent(subject)}`;
+			// Someone who just made an ASafariM account has no Breinhap grant yet; that is not an outage.
+			return request(path, "", "GET", true).then(
+				(grants) =>
+					grants ?? {
+						appId: "breinhap",
+						subject,
+						state: "inactive",
+						roles: [],
+						permissions: [],
+					},
 			);
 		},
 	};
