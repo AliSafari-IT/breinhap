@@ -28,21 +28,26 @@ elif name == 'docker':
     elif args[:1] == ['inspect']: print(os.environ['PREVIOUS'])
     elif args[0] == 'compose':
         if 'ps' in args: print('' if case == 'first-failure' else 'existing-container')
-        if 'up' in args and args[-1]=='redis' and case=='redis-failure': sys.exit(1)
+        if 'up' in args and 'redis' in args and case=='redis-failure': sys.exit(1)
         if 'up' in args and args[-1]=='management' and case in ['health-failure', 'first-failure'] and os.environ.get('BREINHAP_MANAGEMENT_IMAGE') != os.environ['PREVIOUS']: sys.exit(1)
 '''
 
 
 class DeployTests(unittest.TestCase):
-    def execute(self, case, request=None):
+    def execute(self, case, request=None, postgres=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git").mkdir()
             (root / ".redis.management.conf").write_text("port 6379\n")
             (root / ".env.management").write_text("CORE_API_URL=http://core-api:4020\n")
+            if postgres == "file":
+                (root / ".postgres.management.password").write_text("test-only\n")
+            elif postgres == "symlink":
+                (root / "elsewhere").write_text("test-only\n")
+                (root / ".postgres.management.password").symlink_to(root / "elsewhere")
             site = root / "infra/management"
             site.mkdir(parents=True)
-            for name in ["deploy.sh", "compose.yml"]:
+            for name in ["deploy.sh", "compose.yml", "compose.postgres.yml"]:
                 shutil.copyfile(SOURCE / name, site / name)
             commands = root / "bin"
             commands.mkdir()
@@ -83,6 +88,28 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(args[args.index("-p") + 1], "breinhap-management")
         self.assertEqual(args[-1], "management")
         self.assertIn("--wait", args)
+
+    def test_without_the_password_file_the_database_is_left_out(self):
+        code, calls = self.execute("success")
+        self.assertEqual(code, 0)
+        for name, args, _ in calls:
+            if name == "docker" and args[:1] == ["compose"]:
+                self.assertNotIn("postgres", args)
+                self.assertFalse(any(a.endswith("compose.postgres.yml") for a in args))
+
+    def test_with_the_password_file_postgres_starts_with_redis_before_management(self):
+        code, calls = self.execute("success", postgres="file")
+        self.assertEqual(code, 0)
+        updates = [args for name, args, _ in calls if name == "docker" and "up" in args]
+        self.assertEqual(updates[0][-2:], ["redis", "postgres"])
+        self.assertEqual(updates[1][-1], "management")
+        for args in updates:
+            self.assertTrue(any(a.endswith("compose.postgres.yml") for a in args))
+
+    def test_a_symlinked_password_file_is_refused_before_any_restart(self):
+        code, calls = self.execute("success", postgres="symlink")
+        self.assertNotEqual(code, 0)
+        self.assertFalse(any(name == "docker" and "up" in args for name, args, _ in calls))
 
     def test_redis_failure_does_not_start_management(self):
         code, calls = self.execute("redis-failure")

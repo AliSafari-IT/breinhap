@@ -1,0 +1,43 @@
+# breinhap#25: the management database (learner profiles, groups, adult links, capability grants).
+# deploy.sh adds this file only when the operator has installed the password file
+# (.postgres.management.password, mode 0600). Management reads DATABASE_URL from its private
+# environment file; without it the learner pages say they are not available yet.
+services:
+  management:
+    networks:
+      data: {}
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/run/postgresql:size=1m
+      - /tmp:size=16m
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    environment:
+      POSTGRES_USER: breinhap
+      POSTGRES_DB: breinhap
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - data:/var/lib/postgresql/data
+    # private: reachable only by management on this internal network; no host port, no edge network
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U breinhap -d breinhap"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+secrets:
+  postgres_password:
+    file: ${BREINHAP_POSTGRES_PASSWORD_FILE:?Set the private Postgres password file}
+
+volumes:
+  data:
+
+networks:
+  data:
+    internal: true

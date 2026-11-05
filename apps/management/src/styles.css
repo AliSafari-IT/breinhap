@@ -138,3 +138,9 @@ label small {
 	display: inline-block;
 	margin: 0 0.5rem 1rem 0;
 }
+
+/* breinhap#25: several small forms on one line (archive, remove, revoke) */
+form.inline {
+	display: inline-block;
+	margin: 0 0.5rem 0.5rem 0;
+}

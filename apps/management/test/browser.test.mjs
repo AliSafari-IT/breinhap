@@ -44,10 +44,11 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 	const server = createManagementServer({ identity });
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	let browser;
+	let context;
 	const submitted = [];
 	try {
 		browser = await chromium.launch({ headless: true });
-		const context = await browser.newContext();
+		context = await browser.newContext();
 		await context.addCookies([
 			{
 				name: "__Host-breinhap-session",
@@ -133,6 +134,9 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 			),
 		);
 	} finally {
+		// The redirected /login request can still be inside the route handler when the assertions are
+		// done; stop routing first so closing the browser cannot fail that in-flight callback.
+		await context?.unrouteAll({ behavior: "ignoreErrors" });
 		await browser?.close();
 		server.closeAllConnections();
 		await new Promise((resolve) => server.close(resolve));
