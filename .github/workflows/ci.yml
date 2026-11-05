@@ -22,8 +22,16 @@ jobs:
         image: redis:7-alpine
         ports: [6379:6379]
         options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      # breinhap#25: the management directory tests create and drop their own databases here
+      postgres:
+        image: postgres:17-alpine
+        ports: [5432:5432]
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       REDIS_TEST_URL: redis://127.0.0.1:6379
+      POSTGRES_TEST_URL: postgres://postgres:ci-only-password@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v7
         with:

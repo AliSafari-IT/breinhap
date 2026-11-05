@@ -448,9 +448,18 @@ export function createIdentity({
 		await audit("invitation.accepted", value.saved.sub, data.inviter);
 		return redirect("/", [cookie(INVITE, "", 0)]);
 	}
+	// The signed-in adult as this request resolved them: their subject and CURRENT membership role, for
+	// the workspace directory (breinhap#25). An administrator role counts only with its ASafariM grant.
+	async function principal(req) {
+		const value = await current(req);
+		if (!value?.allowed) return null;
+		if (value.membership.role === "breinhap.admin" && !value.admin) return null;
+		return { sub: value.saved.sub, role: value.membership.role };
+	}
 	return {
 		access,
 		current,
+		principal,
 		handle,
 		privileged,
 		acceptInvitation,

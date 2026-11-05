@@ -30,8 +30,17 @@ export ASAFARIM_CORE_NETWORK="asafarim-os_os_core"
 [[ -f "$BREINHAP_REDIS_CONFIG" && ! -L "$BREINHAP_REDIS_CONFIG" ]] || { echo "Management Redis configuration not installed" >&2; exit 1; }
 [[ -f "$BREINHAP_MANAGEMENT_ENV_FILE" ]] || { echo "Management environment not installed" >&2; exit 1; }
 docker network inspect "$ASAFARIM_CORE_NETWORK" > /dev/null
-compose=(docker compose -p breinhap-management -f "$here/compose.yml")
-"${compose[@]}" up -d --wait --wait-timeout 90 redis
+# breinhap#25: the database joins once the operator installs its password file (never a symlink).
+export BREINHAP_POSTGRES_PASSWORD_FILE="$repo/.postgres.management.password"
+files=(-f "$here/compose.yml")
+stores=(redis)
+if [[ -e "$BREINHAP_POSTGRES_PASSWORD_FILE" || -L "$BREINHAP_POSTGRES_PASSWORD_FILE" ]]; then
+  [[ -f "$BREINHAP_POSTGRES_PASSWORD_FILE" && ! -L "$BREINHAP_POSTGRES_PASSWORD_FILE" ]] || { echo "Management Postgres password must be a regular file" >&2; exit 1; }
+  files+=(-f "$here/compose.postgres.yml")
+  stores+=(postgres)
+fi
+compose=(docker compose -p breinhap-management "${files[@]}")
+"${compose[@]}" up -d --wait --wait-timeout 90 "${stores[@]}"
 current=$("${compose[@]}" ps -aq management)
 previous=''
 if [[ -n "$current" ]]; then

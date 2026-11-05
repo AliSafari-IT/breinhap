@@ -9,6 +9,14 @@ import {
 	ORIGIN,
 	readForm,
 } from "./identity.mjs";
+import { connectDatabase } from "./db.mjs";
+import { Directory } from "./directory.mjs";
+import {
+	adminDirectoryAction,
+	adminDirectoryPage,
+	DIRECTORY_ERRORS,
+	learnersPage,
+} from "./directory-pages.mjs";
 import { createPlatform, managementAccess, manifest } from "./platform.mjs";
 import { connectStore } from "./store.mjs";
 
@@ -25,7 +33,9 @@ const routes = new Map([
 		"/bibliotheek",
 		["Bibliotheek", "Er is nog geen inhoudsbibliotheek beschikbaar."],
 	],
+	["/leerlingen", ["Leerlingen", ""]],
 ]);
+const DIRECTORY_PATHS = /^\/beheer\/(leerlingen|groepen|koppelingen|rechten)(\/|$)/;
 const esc = (value) =>
 	String(value).replace(
 		/[&<>"']/g,
@@ -60,7 +70,16 @@ function page(title, content, active, session) {
 export function createHandler({
 	identity,
 	resolveAccess = identity?.access ?? (async () => "anonymous"),
+	// breinhap#25: the workspace directory (Postgres); absent, its pages say they are not available yet
+	directory,
 } = {}) {
+	const directoryUnavailable = (session) =>
+		page(
+			"Nog niet beschikbaar",
+			"Leerlingen en groepen zijn nog niet ingericht op deze server. Probeer later opnieuw.",
+			undefined,
+			session,
+		);
 	return async (req, res) => {
 		const send = (
 			status,
@@ -214,6 +233,19 @@ export function createHandler({
 					page("Bevestig je toegang", check.response.body),
 				);
 			const { value } = check;
+			const adminPrincipal = { sub: value.saved.sub, role: "breinhap.admin" };
+			if (req.method === "GET" && url.pathname === "/beheer/leerlingen") {
+				if (!directory) return send(503, directoryUnavailable(req.managementSession));
+				return send(
+					200,
+					page(
+						"Leerlingen en groepen",
+						adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf),
+						null,
+						req.managementSession,
+					),
+				);
+			}
 			if (req.method === "GET" && url.pathname === "/beheer") {
 				const requests = await identity.store.roleRequests();
 				const pending = requests.length
@@ -228,7 +260,7 @@ export function createHandler({
 					200,
 					page(
 						"Toegang beheren",
-						"Nieuwe volwassenen registreren zich zelf en kiezen een rol. Keur hun aanvraag hieronder goed.</p>" +
+						'Nieuwe volwassenen registreren zich zelf en kiezen een rol. Keur hun aanvraag hieronder goed. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p>' +
 							pending +
 							'Je kunt ook een bestaand account rechtstreeks uitnodigen. Alleen bestaande actieve ASafariM-accounts met de juiste Breinhap-rol kunnen worden uitgenodigd.</p><form method="post" action="/beheer/uitnodigen"><label>ASafariM-accountcode <input name="subject" required maxlength="400"></label><label>Rol <select name="role"><option value="breinhap.parent">Ouder</option><option value="breinhap.tutor">Begeleider</option><option value="breinhap.teacher">Leerkracht</option></select></label><input type="hidden" name="csrf" value="' +
 							value.saved.csrf +
@@ -252,6 +284,25 @@ export function createHandler({
 				!isFresh(value.saved)
 			)
 				return send(403, "Aanvraag geweigerd.");
+			if (DIRECTORY_PATHS.test(url.pathname)) {
+				if (!directory) return send(503, directoryUnavailable(req.managementSession));
+				const result = await adminDirectoryAction(url.pathname, form, {
+					directory,
+					principal: adminPrincipal,
+					store: identity.store,
+				});
+				if (!result) return send(404, "Niet gevonden");
+				if (result.ok) return send(303, "", undefined, { Location: "/beheer/leerlingen" });
+				return send(
+					result.error === "invalid" ? 400 : 409,
+					page(
+						"Niet gewijzigd",
+						`${DIRECTORY_ERRORS[result.error] ?? DIRECTORY_ERRORS.forbidden} <a href="/beheer/leerlingen">Terug</a>`,
+						null,
+						req.managementSession,
+					),
+				);
+			}
 			if (["/beheer/goedkeuren", "/beheer/weigeren"].includes(url.pathname)) {
 				const id = form.get("request");
 				if (
@@ -299,6 +350,8 @@ export function createHandler({
 			if (url.pathname === "/beheer/intrekken") {
 				await identity.audit("membership.revoke", value.saved.sub, subject);
 				await identity.store.revokeMember(subject);
+				// the adult's links and extra rights end with their membership (breinhap#25)
+				if (directory) await directory.revokeAdult(adminPrincipal, subject);
 				return send(
 					200,
 					page(
@@ -365,7 +418,12 @@ export function createHandler({
 					(await identity.ready().then(
 						() => true,
 						() => false,
-					))
+					)) &&
+					(!directory ||
+						(await directory.pool.query("SELECT 1").then(
+							() => true,
+							() => false,
+						)))
 					? 200
 					: 503,
 				"readiness\n",
@@ -464,6 +522,20 @@ export function createHandler({
 					req.managementSession,
 				),
 			);
+		if (url.pathname === "/leerlingen") {
+			if (!directory) return send(503, directoryUnavailable(req.managementSession));
+			const principal = await identity?.principal(req);
+			if (!principal)
+				return send(403, page("Geen toegang", "Je hebt geen toegang tot deze pagina."));
+			const [learners, groups] = await Promise.all([
+				directory.learners(principal),
+				directory.groups(principal),
+			]);
+			return send(
+				200,
+				page("Leerlingen", learnersPage(learners, groups), url.pathname, req.managementSession),
+			);
+		}
 		const route = routes.get(url.pathname);
 		if (!route)
 			return send(
@@ -532,5 +604,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 			console.error("Management identity unavailable; access remains closed");
 		}
 	}
-	createManagementServer({ identity }).listen(8080, "0.0.0.0");
+	// breinhap#25: optional until the operator installs the database; without it those pages say so
+	let directory;
+	if (identity && process.env.DATABASE_URL) {
+		try {
+			const pool = await connectDatabase(process.env.DATABASE_URL);
+			directory = await new Directory({
+				pool,
+				workspace: process.env.BREINHAP_WORKSPACE_ID ?? "pilot",
+			}).ready();
+			console.log("Management directory ready");
+		} catch {
+			console.error("Management directory unavailable; learner pages stay closed");
+			directory = undefined;
+		}
+	}
+	createManagementServer({ identity, directory }).listen(8080, "0.0.0.0");
 }
