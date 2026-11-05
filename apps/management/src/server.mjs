@@ -17,6 +17,8 @@ import {
 	DIRECTORY_ERRORS,
 	learnersPage,
 } from "./directory-pages.mjs";
+import { ContentStore } from "./content.mjs";
+import { handleLibrary } from "./library-routes.mjs";
 import { createPlatform, managementAccess, manifest } from "./platform.mjs";
 import { connectStore } from "./store.mjs";
 
@@ -26,7 +28,7 @@ const routes = new Map([
 		"/",
 		[
 			"Overzicht",
-			"Je beheerwerkplek is klaar. De inhoudsbibliotheek volgt later.",
+			'Je beheerwerkplek is klaar. Maak en bewerk leerobjecten in de <a href="/bibliotheek">bibliotheek</a>.',
 		],
 	],
 	[
@@ -63,7 +65,7 @@ function page(title, content, active, session) {
 		active === undefined
 			? ""
 			: `<nav aria-label="Beheernavigatie">${[...routes].map(([path, [label]]) => `<a href="${path}"${active === path ? ' aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a><header>Breinhap beheer<button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header>${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
+	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a><header>Breinhap beheer<button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header>${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -72,6 +74,8 @@ export function createHandler({
 	resolveAccess = identity?.access ?? (async () => "anonymous"),
 	// breinhap#25: the workspace directory (Postgres); absent, its pages say they are not available yet
 	directory,
+	// breinhap#27: the content library, on the same database
+	content = directory ? new ContentStore({ directory }) : undefined,
 } = {}) {
 	const directoryUnavailable = (session) =>
 		page(
@@ -203,7 +207,7 @@ export function createHandler({
 					200,
 					page(
 						"Aanvraag verstuurd",
-						`Je hebt gevraagd om toegang als <strong>${esc(roleName[result.pending.role] ?? "volwassene")}</strong>. Een beheerder van Breinhap bekijkt je aanvraag. Zodra die is goedgekeurd, kom je hier meteen in je werkplek.`,
+						`Je hebt gevraagd om toegang als <strong>${esc(roleName[result.pending.role] ?? "volwassene")}</strong>.</p><h2>Wat gebeurt er nu?</h2><ol><li>Een <strong>beheerder van Breinhap</strong> ziet je aanvraag op de pagina <em>Toegang beheren</em> en keurt ze goed of af.</li><li>Je krijgt daarover <strong>geen e-mail</strong>. Kom later terug naar deze pagina (of meld je opnieuw aan): zodra je aanvraag is goedgekeurd, kom je meteen in je werkplek.</li><li>Duurt het lang? Neem contact op met de persoon die je naar Breinhap heeft verwezen.</li></ol><p>Je aanvraag is bewaard; je hoeft niets opnieuw te versturen.`,
 						undefined,
 						session,
 					),
@@ -408,6 +412,48 @@ export function createHandler({
 				),
 			);
 		}
+		// breinhap#27: the content library (its forms POST, so it comes before the GET-only routes)
+		if (
+			identity &&
+			(url.pathname === "/bibliotheek" || url.pathname.startsWith("/bibliotheek/"))
+		) {
+			let access;
+			try {
+				access = await resolveAccess(req);
+			} catch {
+				return send(
+					503,
+					page(
+						"Tijdelijk niet beschikbaar",
+						"Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw. Wat je typte, is niet opgeslagen.",
+					),
+				);
+			}
+			if (access === "anonymous")
+				return send(303, "", undefined, { Location: "/login" });
+			// signed in, not a member yet: the same way in as every other page
+			if (access !== "management" && req.managementSession?.canRequest)
+				return send(303, "", undefined, { Location: "/registreren" });
+			if (access !== "management")
+				return send(
+					403,
+					page(
+						"Geen toegang",
+						"Dit is de beheeromgeving voor bevoegde begeleiders.",
+						undefined,
+						req.managementSession,
+					),
+				);
+			const result = await handleLibrary(req, url, { identity, content });
+			if (result.status === 303)
+				return send(303, "", undefined, result.headers);
+			return send(
+				result.status,
+				page(result.title, result.body, result.active ?? null, req.managementSession),
+				undefined,
+				result.headers ?? {},
+			);
+		}
 		if (!["GET", "HEAD"].includes(req.method))
 			return send(405, "Method not allowed", "text/plain; charset=utf-8", {
 				Allow: "GET, HEAD",
@@ -445,6 +491,12 @@ export function createHandler({
 			return send(
 				200,
 				await readFile(new URL("../../site/public/theme.js", import.meta.url)),
+				"text/javascript; charset=utf-8",
+			);
+		if (url.pathname === "/editor.js")
+			return send(
+				200,
+				await readFile(new URL("./editor.js", import.meta.url)),
 				"text/javascript; charset=utf-8",
 			);
 		if (url.pathname === "/session.js")
@@ -517,16 +569,21 @@ export function createHandler({
 					req.managementSession,
 				),
 			);
-		if (req.managementSession?.admin && url.pathname === "/")
+		if (req.managementSession?.admin && url.pathname === "/") {
+			// administrators see waiting role requests first: nobody else is told about them
+			const waiting = identity ? (await identity.store.roleRequests()).length : 0;
 			return send(
 				200,
 				page(
 					"Overzicht",
-					'Je beheerwerkplek is klaar. <a href="/beheer">Toegang beheren</a>',
+					waiting
+						? `<strong>${waiting} ${waiting === 1 ? "aanvraag wacht" : "aanvragen wachten"} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a>`
+						: 'Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a>',
 					url.pathname,
 					req.managementSession,
 				),
 			);
+		}
 		if (url.pathname === "/leerlingen") {
 			if (!directory) return send(503, directoryUnavailable(req.managementSession));
 			const principal = await identity?.principal(req);

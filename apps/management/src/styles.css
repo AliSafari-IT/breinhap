@@ -144,3 +144,90 @@ form.inline {
 	display: inline-block;
 	margin: 0 0.5rem 0.5rem 0;
 }
+
+/* breinhap#27: the library and the mission editor */
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	margin-block: 0.6rem;
+}
+.field input,
+.field textarea,
+.field select {
+	width: 100%;
+	max-width: 42rem;
+	box-sizing: border-box;
+}
+.field.invalid input,
+.field.invalid textarea,
+.field.invalid select {
+	border-color: var(--danger, #b42318);
+	outline: 2px solid var(--danger, #b42318);
+}
+.error {
+	color: var(--danger, #b42318);
+	font-weight: 600;
+	margin: 0;
+}
+.alert,
+.notice {
+	border-left: 4px solid var(--accent);
+	padding: 0.5rem 1rem;
+	margin-block: 1rem;
+	background: var(--surface, transparent);
+}
+.alert {
+	border-left-color: var(--danger, #b42318);
+}
+fieldset.mission,
+fieldset.question {
+	margin-block: 1rem;
+}
+.answers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+}
+.answers label,
+label.remove {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+.filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+	align-items: end;
+}
+table.library {
+	width: 100%;
+	border-collapse: collapse;
+}
+table.library th,
+table.library td {
+	text-align: left;
+	padding: 0.4rem 0.6rem;
+	border-bottom: 1px solid var(--line);
+}
+.state {
+	font-weight: 600;
+}
+@media (max-width: 40rem) {
+	/* narrow screens: each row becomes a small card */
+	table.library thead {
+		position: absolute;
+		left: -10000px;
+	}
+	table.library tr {
+		display: block;
+		border-bottom: 1px solid var(--line);
+		padding-block: 0.4rem;
+	}
+	table.library td {
+		display: block;
+		border: 0;
+		padding: 0.1rem 0;
+	}
+}

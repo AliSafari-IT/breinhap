@@ -1,7 +1,7 @@
 {
 	"id": "breinhap",
 	"name": "Breinhap beheer",
-	"version": "0.2.6",
+	"version": "0.2.7",
 	"platform": ">=0.1 <1",
 	"owner": "ASafariM Digital",
 	"domains": {
@@ -36,6 +36,7 @@
 			"/auth/backchannel-logout",
 			"/auth/invite-link",
 			"/session.js",
+			"/editor.js",
 			"/theme.js",
 			"/styles.css",
 			"/theme.css"

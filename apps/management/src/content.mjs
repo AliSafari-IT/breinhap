@@ -55,9 +55,13 @@ const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** The issues of a refused object: paths and messages only, at most 20. */
 const issuesOf = (error) =>
-	error.issues.slice(0, 20).map((issue) => ({
+	error.issues.slice(0, 40).map((issue) => ({
 		path: issue.path.join("."),
 		message: issue.message,
+		code: issue.code,
+		origin: issue.origin,
+		minimum: issue.minimum === undefined ? undefined : Number(issue.minimum),
+		maximum: issue.maximum === undefined ? undefined : Number(issue.maximum),
 	}));
 
 /**
@@ -205,7 +209,7 @@ export class ContentStore {
 	}
 
 	/** The owner's learning objects, optionally by subject or year; newest change first. */
-	async list(principal, { subject, grade } = {}) {
+	async list(principal, { subject, grade, q } = {}) {
 		await this.author(principal, "content.list");
 		const params = [this.workspace, principal.sub];
 		let filter = "";
@@ -217,10 +221,19 @@ export class ContentStore {
 			params.push(Number(grade));
 			filter += ` AND lo.grade = $${params.length}`;
 		}
+		if (q) {
+			params.push(`%${String(q).slice(0, 100).replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+			filter += ` AND lo.title ILIKE $${params.length}`;
+		}
 		const { rows } = await this.pool.query(
 			`SELECT lo.id, lo.subject, lo.grade, lo.title, d.version, d.updated_at AS "updatedAt",
-			   (SELECT max(revision) FROM learning_object_revisions r WHERE r.workspace_id = lo.workspace_id AND r.learning_object_id = lo.id) AS "latestRevision"
+			   latest.revision AS "latestRevision", latest.decision AS "latestDecision"
 			 FROM learning_objects lo JOIN learning_object_drafts d ON d.workspace_id = lo.workspace_id AND d.learning_object_id = lo.id
+			 LEFT JOIN LATERAL (
+			   SELECT r.revision, v.decision FROM learning_object_revisions r
+			   LEFT JOIN revision_reviews v ON v.workspace_id = r.workspace_id AND v.learning_object_id = r.learning_object_id AND v.revision = r.revision
+			   WHERE r.workspace_id = lo.workspace_id AND r.learning_object_id = lo.id ORDER BY r.revision DESC LIMIT 1
+			 ) latest ON TRUE
 			 WHERE lo.workspace_id = $1 AND lo.owner_sub = $2 AND lo.archived_at IS NULL${filter}
 			 ORDER BY d.updated_at DESC, lo.id`,
 			params,
@@ -261,6 +274,19 @@ export class ContentStore {
 			[this.workspace, id, Number.isInteger(revision) ? revision : -1],
 		);
 		return rows[0] ?? fail("not_found");
+	}
+
+	/**
+	 * Copies the owner's draft as a new learning object `newId` (owned by the same adult). Its missions
+	 * get new ids (`<newId>-m1`, …) so both stay valid in one pack; revisions are not copied.
+	 */
+	async duplicate(principal, id, newId) {
+		await this.author(principal, "content.duplicate");
+		const draft = await this.owned(this.pool, principal, id);
+		const copy = structuredClone(draft.content);
+		copy.id = newId;
+		copy.missions = copy.missions.map((mission, i) => ({ ...mission, id: `${newId}-m${i + 1}` }));
+		return this.create(principal, copy, draft.sources);
 	}
 
 	/** Archives the owner's object: it leaves every list; its id and revisions stay reserved. */

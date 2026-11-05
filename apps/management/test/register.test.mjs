@@ -158,6 +158,10 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	const waiting = await call("/registreren", { cookie });
 	assert.match(waiting.body, /Aanvraag verstuurd/);
 	assert.match(waiting.body, /Leerkracht/);
+	// the requester is told who decides, where, and that no e-mail follows
+	assert.match(waiting.body, /beheerder van Breinhap/);
+	assert.match(waiting.body, /Toegang beheren/);
+	assert.match(waiting.body, /geen e-mail/);
 	assert.equal((await call("/bibliotheek", { cookie })).status, 303);
 	// A second request does not replace the first.
 	await call("/registreren", {
@@ -168,6 +172,10 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	assert.equal((await store.roleRequest("newcomer")).role, "breinhap.teacher");
 
 	const admin = await login("admin");
+	// the administrator's overview says a request is waiting, with the way to it
+	const overview = await call("/", { cookie: admin });
+	assert.match(overview.body, /1 aanvraag wacht op jouw goedkeuring/);
+	assert.match(overview.body, /href="\/beheer"/);
 	const manage = await call("/beheer", { cookie: admin });
 	assert.equal(manage.status, 200);
 	assert.match(
