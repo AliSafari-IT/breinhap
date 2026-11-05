@@ -55,3 +55,21 @@ test("login and register are branded adult entry pages and create no student ses
     assert.match(html,new RegExp(`rel="canonical" href="https://breinhap\\.com/${language}${kind}"`));
   }
 });
+
+test("a signed-in adult sees it in the navbar: the page asks management, and the CSP allows only that", () => {
+  const nginx = readFileSync(new URL("../nginx.conf", import.meta.url), "utf8");
+  assert.match(nginx, /connect-src https:\/\/management\.breinhap\.com;/);
+  const script = read("account.js");
+  assert.match(script, /"https:\/\/management\.breinhap\.com"/);
+  assert.match(script, /\/auth\/session/);
+  assert.match(script, /credentials: "include"/);
+  for (const [file, label] of [
+    ["index.html", "Naar Breinhap beheer"], ["en/index.html", "Go to Breinhap management"],
+    ["login/index.html", "Naar Breinhap beheer"], ["en/login/index.html", "Go to Breinhap management"],
+  ]) {
+    const html = read(file);
+    assert.ok(html.includes('<script src="/account.js" defer></script>'), file);
+    assert.match(html, new RegExp(`data-account="login" data-signed-in-label="${label}"`), file);
+    assert.match(html, /data-account="register"/, file);
+  }
+});

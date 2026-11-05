@@ -462,6 +462,11 @@ export function createHandler({
 				),
 			);
 		if (["/login", "/register", "/aanmelden"].includes(url.pathname)) {
+			if (identity) {
+				// Someone who is already signed in goes to the overview instead of being asked to sign in again.
+				const signedIn = await identity.current(req, false).catch(() => null);
+				if (signedIn) return send(303, "", undefined, { Location: "/" });
+			}
 			if (identity)
 				return send(
 					200,

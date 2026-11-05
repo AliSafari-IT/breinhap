@@ -6,6 +6,7 @@ import { managementAccess, roleLabels } from "./platform.mjs";
 import { ABSOLUTE_MS, SELF_SERVICE_ROLES } from "./store.mjs";
 
 export const ORIGIN = "https://management.breinhap.com";
+export const SITE_ORIGIN = "https://breinhap.com";
 const SESSION = "__Host-breinhap-session";
 const FLOW = "__Host-breinhap-login";
 const INVITE = "__Host-breinhap-invitation";
@@ -254,10 +255,22 @@ export function createIdentity({
 		if (path === "/auth/session") {
 			if (req.method !== "GET") return message(405, "Method not allowed");
 			const value = await current(req, false);
+			// breinhap.com is same-site, so the SameSite=Lax host-only cookie is sent with its credentialed
+			// fetch; only that origin may read whether someone is signed in, to show it in its navbar.
+			const site = req.headers.origin === SITE_ORIGIN;
 			return {
 				status: value?.allowed ? 200 : value ? 403 : 401,
 				body: JSON.stringify({ active: value?.allowed === true }),
 				type: "application/json; charset=utf-8",
+				headers: {
+					Vary: "Origin",
+					...(site
+						? {
+								"Access-Control-Allow-Origin": SITE_ORIGIN,
+								"Access-Control-Allow-Credentials": "true",
+							}
+						: {}),
+				},
 			};
 		}
 		if (path === "/afmelden") {
