@@ -8,6 +8,7 @@ COPY --chown=node:node management/platform.app.json management/platform.app.json
 COPY --chown=node:node site/src/theme.css site/src/theme.css
 COPY --chown=node:node site/public/theme.js site/public/theme.js
 COPY --chown=node:node site/public/logo.svg site/public/logo.svg
+COPY --chown=node:node site/public/locale-selector.js site/public/locale-selector.css site/public/
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \

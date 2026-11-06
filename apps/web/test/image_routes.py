@@ -1,3 +1,22 @@
+    # The links this site used to have for sign in and registration go to management, in the same language.
+    for language in ['', '/en', '/fr', '/de']:
+        for kind in ['login', 'register']:
+            for slash in ['', '/']:
+                route = f'{language}/{kind}{slash}'
+                status, headers, _ = get(route)
+                lang = language.strip('/') or 'nl'
+                assert status == 302, (route, status)
+                assert headers.get('Location') == f'https://management.breinhap.com/{kind}?lang={lang}', (route, headers.get('Location'))
+                assert 'Content-Security-Policy' in headers, route
+    for language in ['/', '/en/', '/fr/', '/de/']:
+        status, headers, body = get(language)
+        assert status == 200 and 'Location' not in headers, (language, status)
+        assert b'/locale-selector.js' in body and b'https://management.breinhap.com/login?lang=' in body, language
+    status, headers, _ = get('/en')
+    assert status == 200 and 'Location' not in headers, headers
+    assert get('/locale-selector.js')[0] == 200 and get('/locale-selector.css')[0] == 200
+    assert get('/missing-route')[0] == 404
+    print('Sixteen login/register routes redirect to management; four languages stay on-origin; 404 and CSP preserved')
 """Smoke-test the real website image with the public Host behind an HTTP proxy."""
 import http.client
 import subprocess

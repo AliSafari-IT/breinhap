@@ -563,7 +563,7 @@ export function createIdentity({
 		if (!current) return redirect("/login?verlopen=1", [cookie(FLOW, "", 0)]);
 		const { token, flow } = current;
 		const page = (status, errorCode) =>
-			html(status, codePage(lang, { masked: maskEmail(flow.email), csrf: flow.csrf, register: flow.register, errorCode, version }), status === 200 && url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {});
+			html(status, codePage(lang, { masked: maskEmail(flow.email), csrf: flow.csrf, register: flow.register, errorCode, version }), status === 200 && url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {});
 		if (req.method === "GET" || req.method === "HEAD") return page(200, url.searchParams.get("fout") ?? "");
 		if (req.method !== "POST") return { ...message(405, "Method not allowed"), headers: { Allow: "GET, POST" } };
 		const form = await readForm(req);
@@ -602,7 +602,7 @@ export function createIdentity({
 		return redirect(readCookie(req, INVITE) ? "/uitnodiging/bevestigen" : "/", [
 			cookie(SESSION, id, Math.floor(ABSOLUTE_MS / 1000)),
 			cookie(FLOW, "", 0),
-			langCookie(lang),
+			langCookie(lang, req.headers.host),
 		]);
 	}
 

@@ -12,6 +12,8 @@ on:
       - "apps/site/public/logo.svg"
       - "apps/site/public/favicon.svg"
       - "apps/site/public/theme.js"
+      - "apps/site/public/locale-selector.js"
+      - "apps/site/public/locale-selector.css"
       - "apps/site/nginx.conf"
       - "infra/site/**"
   workflow_dispatch: {}
