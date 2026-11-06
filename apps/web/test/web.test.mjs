@@ -46,7 +46,7 @@ test("login and register are branded adult entry pages and create no student ses
     assert.ok(html.includes(`property="og:url" content="https://breinhap.com/${language}${kind}"`));
     // one card that goes straight to the secure sign-in; the first sign-in creates the account
     assert.match(html,/<section class="auth-card" aria-labelledby="auth-title">/);
-    assert.match(html,/class="button button-block" href="https:\/\/management\.breinhap\.com\/auth\/start"/);
+    assert.match(html,new RegExp(`class="button button-block" href="https://management\\.breinhap\\.com/${kind}\\?lang=${language ? "en" : "nl"}"`));
     assert.match(html,new RegExp(`<h1 id="auth-title">${kind === "login" ? (language ? "Sign in" : "Aanmelden") : (language ? "Create an account" : "Account aanmaken")}</h1>`));
     assert.match(html,new RegExp(`href="/${language}${kind === "login" ? "register" : "login"}"`), "switch to the other page");
     assert.match(html,language ? /Student sign-in is not available/ : /Voor leerlingen is aanmelden nog niet beschikbaar/);

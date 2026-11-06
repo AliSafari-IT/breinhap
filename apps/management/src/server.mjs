@@ -17,7 +17,10 @@ import {
 	DIRECTORY_ERRORS,
 	learnersPage,
 } from "./directory-pages.mjs";
+import { langCookie, localeOf, T } from "./account/i18n.mjs";
+import { emailPage, pendingPage, profilePage } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
+import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
 import { handleImports } from "./imports/routes.mjs";
 import { ImportStore } from "./imports/store.mjs";
 import { handleLibrary } from "./library-routes.mjs";
@@ -57,7 +60,7 @@ const roleChoices = [
 	["breinhap.tutor", "Begeleider", "Je begeleidt leerlingen buiten de klas."],
 	["breinhap.teacher", "Leerkracht", "Je geeft les aan leerlingen."],
 ];
-const roleName = Object.fromEntries(roleChoices);
+const roleName = { ...Object.fromEntries(roleChoices), "breinhap.admin": "Beheerder" };
 const style = await readFile(new URL("./styles.css", import.meta.url));
 const theme = await readFile(
 	new URL("../../site/src/theme.css", import.meta.url),
@@ -195,6 +198,9 @@ export function createHandler({
 				return send(405, "Method not allowed", "text/plain; charset=utf-8", {
 					Allow: "GET, POST",
 				});
+			// breinhap#signup: the profile form completes a registration (who they are, which role); the
+			// administrator then approves it. In the person's language (nl, fr, en, de).
+			const lang = localeOf(req, url);
 			const result = await identity.roleRequest(req);
 			const session = req.managementSession;
 			if (result.anonymous)
@@ -211,23 +217,9 @@ export function createHandler({
 					),
 				);
 			if (result.refused)
-				return send(
-					403,
-					page(
-						"Aanvraag geweigerd",
-						"Laad de pagina opnieuw en probeer nog eens.",
-					),
-				);
+				return send(403, page("Aanvraag geweigerd", "Laad de pagina opnieuw en probeer nog eens."));
 			if (result.invalid)
-				return send(
-					400,
-					page(
-						"Kies een rol",
-						'Kies ouder, begeleider of leerkracht. <a href="/registreren">Terug</a>',
-						undefined,
-						session,
-					),
-				);
+				return send(400, profilePage(lang, { csrf: session.csrf, values: result.values ?? {}, errorCode: result.invalid, version: manifest.version }));
 			if (result.busy)
 				return send(
 					429,
@@ -240,30 +232,10 @@ export function createHandler({
 				);
 			if (req.method === "POST")
 				return send(303, "", undefined, { Location: "/registreren" });
+			const langHeader = url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {};
 			if (result.pending)
-				return send(
-					200,
-					authPage(
-						"Aanvraag verstuurd",
-						`<p class="auth-lead">Je hebt gevraagd om toegang als <strong>${esc(roleName[result.pending.role] ?? "volwassene")}</strong>. Je aanvraag is bewaard; je hoeft niets opnieuw te versturen.</p>${steps(2)}<h2 class="auth-h2">Wat gebeurt er nu?</h2><ul class="auth-facts"><li>Een <strong>beheerder van Breinhap</strong> ziet je aanvraag op de pagina <em>Toegang beheren</em> en keurt ze goed of af.</li><li>Je krijgt daarover <strong>geen e-mail</strong>. Kom later terug naar deze pagina (of meld je opnieuw aan): zodra je aanvraag is goedgekeurd, kom je meteen in je werkplek.</li><li>Duurt het lang? Neem contact op met de persoon die je naar Breinhap heeft verwezen.</li></ul><a class="action action-block" href="/registreren">Opnieuw controleren</a>`,
-						session,
-					),
-				);
-			return send(
-				200,
-				authPage(
-					"Kies je rol",
-					`<p class="auth-lead">Je bent aangemeld. Wie ben je? Een beheerder van Breinhap keurt je rol goed; daarna kun je aan de slag.</p>${steps(1)}<form method="post" action="/registreren"><fieldset class="role-cards"><legend>Ik ben</legend>${roleChoices
-						.map(
-							([key, label, hint], index) =>
-								`<label class="role-card"><input type="radio" name="role" value="${key}" required${index === 0 ? " checked" : ""}><span><strong>${label}</strong><small>${hint}</small></span></label>`,
-						)
-						.join(
-							"",
-						)}</fieldset><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit" class="action-block">Aanvraag versturen</button></form>${STUDENT}`,
-					session,
-				),
-			);
+				return send(200, pendingPage(lang, { csrf: session.csrf, request: result.pending, version: manifest.version }), undefined, langHeader);
+			return send(200, profilePage(lang, { csrf: session.csrf, version: manifest.version }), undefined, langHeader);
 		}
 		if (identity && url.pathname.startsWith("/beheer")) {
 			const check = await identity.privileged(req);
@@ -280,33 +252,45 @@ export function createHandler({
 					200,
 					page(
 						"Leerlingen en groepen",
-						adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf),
+						adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members()),
 						null,
 						req.managementSession,
 					),
 				);
 			}
 			if (req.method === "GET" && url.pathname === "/beheer") {
+				const csrf = value.saved.csrf;
+				const hiddenCsrf = `<input type="hidden" name="csrf" value="${csrf}">`;
 				const requests = await identity.store.roleRequests();
+				const members = await identity.store.members();
+				const when = (at) => new Date(at).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" });
+				const person = (p = {}) =>
+					`<strong>${esc([p.firstName, p.lastName].filter(Boolean).join(" ") || "(naam niet ingevuld)")}</strong>${p.email ? `<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}`;
 				const pending = requests.length
-					? `<h2>Aanvragen</h2><ul class="requests">${requests
+					? `<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Vraagt als</th><th scope="col">School of organisatie</th><th scope="col">Toelichting</th><th scope="col">Sinds</th><th scope="col"><span class="visually-hidden">Beslissing</span></th></tr></thead><tbody>${requests
 							.map(
-								(request) =>
-									`<li><p>Accountcode <code>${esc(request.subject)}</code> vraagt toegang als <strong>${esc(roleName[request.role] ?? request.role)}</strong>.</p><form method="post" action="/beheer/goedkeuren"><input type="hidden" name="request" value="${esc(request.id)}"><input type="hidden" name="csrf" value="${value.saved.csrf}"><button>Goedkeuren</button></form><form method="post" action="/beheer/weigeren"><input type="hidden" name="request" value="${esc(request.id)}"><input type="hidden" name="csrf" value="${value.saved.csrf}"><button>Weigeren</button></form></li>`,
+								(r) =>
+									`<tr><td>${person(r.profile)}</td><td>${esc(roleName[r.role] ?? r.role)}</td><td>${esc(r.profile?.organisation ?? "")}</td><td>${esc(r.profile?.note ?? "")}</td><td>${when(r.at)}</td><td class="actions"><form method="post" action="/beheer/goedkeuren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button>Goedkeuren</button></form><form method="post" action="/beheer/weigeren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button class="secondary">Weigeren</button></form></td></tr>`,
 							)
-							.join("")}</ul><p>`
-					: "<h2>Aanvragen</h2><p>Er zijn geen open aanvragen.</p><p>";
+							.join("")}</tbody></table>`
+					: "<p>Er zijn geen open aanvragen.</p>";
+				const people = members.length
+					? `<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Rol</th><th scope="col">School of organisatie</th><th scope="col"><span class="visually-hidden">Acties</span></th></tr></thead><tbody>${members
+							.map(
+								(m) =>
+									`<tr><td>${person(m.profile)}${m.subject === value.saved.sub ? " <small>(jij)</small>" : ""}</td><td>${esc(roleName[m.role] ?? m.role)}</td><td>${esc(m.profile?.organisation ?? "")}</td><td class="actions">${
+										m.subject === value.saved.sub || m.role === "breinhap.admin"
+											? ""
+											: `<form method="post" action="/beheer/intrekken"><input type="hidden" name="subject" value="${esc(m.subject)}">${hiddenCsrf}<button class="secondary">Toegang intrekken</button></form>`
+									}</td></tr>`,
+							)
+							.join("")}</tbody></table>`
+					: "<p>Nog geen leden.</p>";
 				return send(
 					200,
 					page(
 						"Toegang beheren",
-						'Nieuwe volwassenen registreren zich zelf en kiezen een rol. Keur hun aanvraag hieronder goed. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p>' +
-							pending +
-							'Je kunt ook een bestaand account rechtstreeks uitnodigen. Alleen bestaande actieve ASafariM-accounts met de juiste Breinhap-rol kunnen worden uitgenodigd.</p><form method="post" action="/beheer/uitnodigen"><label>ASafariM-accountcode <input name="subject" required maxlength="400"></label><label>Rol <select name="role"><option value="breinhap.parent">Ouder</option><option value="breinhap.tutor">Begeleider</option><option value="breinhap.teacher">Leerkracht</option></select></label><input type="hidden" name="csrf" value="' +
-							value.saved.csrf +
-							'"><button>Uitnodiging maken</button></form><form method="post" action="/beheer/intrekken"><label>Accountcode om toegang in te trekken <input name="subject" required maxlength="400"></label><input type="hidden" name="csrf" value="' +
-							value.saved.csrf +
-							'"><button>Toegang intrekken</button></form><p>',
+						`Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
 						null,
 						req.managementSession,
 					),
@@ -567,6 +551,19 @@ export function createHandler({
 				const signedIn = await identity.current(req, false).catch(() => null);
 				if (signedIn) return send(303, "", undefined, { Location: "/" });
 			}
+			// breinhap#signup: Breinhap's own pages; ASafariM only sends the e-mail code.
+			if (identity?.headless) {
+				const lang = localeOf(req, url);
+				const notice = url.searchParams.has("verlopen")
+					? `<p class="notice" role="status">${T[lang].errors.flow}</p>`
+					: "";
+				return send(
+					200,
+					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice }),
+					undefined,
+					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {},
+				);
+			}
 			if (identity)
 				return send(
 					200,
@@ -709,7 +706,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 				secret: process.env.SESSION_ENCRYPTION_KEY,
 				workspace: process.env.BREINHAP_WORKSPACE_ID ?? "pilot",
 			});
-			identity = createIdentity({ provider, grants: platform.grants, store });
+			// breinhap#signup: with its client secret, Breinhap shows its own sign-in pages (e-mail codes)
+			const headless = process.env.ASAFARIM_HEADLESS_SECRET
+				? createHeadlessAuth({
+						issuer: "https://id.asafarim.site",
+						clientId: "breinhap",
+						clientSecret: process.env.ASAFARIM_HEADLESS_SECRET,
+					})
+				: undefined;
+			identity = createIdentity({ provider, grants: platform.grants, store, headless, version: manifest.version });
 			console.log("Management identity ready");
 		} catch {
 			console.error("Management identity unavailable; access remains closed");
