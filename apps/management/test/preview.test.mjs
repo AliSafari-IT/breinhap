@@ -36,7 +36,7 @@ test("parity: every finished fixture answer survives the URL and the preview end
 		const state = encodeAnswers(finished, pages);
 		assert.deepEqual(decodeAnswers(state, pages), finished, c.name);
 		if (Object.keys(finished).length === questions)
-			assert.match(view(`stap=${pages.length}&a=${state}`), new RegExp(c.sentence.replace(/\./g, "\\.")), c.name);
+			assert.ok(view(`stap=${pages.length}&a=${state}`).includes(c.sentence), c.name);
 	}
 });
 
@@ -58,7 +58,7 @@ test("the preview walks Opwarmen → Leren → Doen → Check, with feedback and
 	const order = view("stap=4&a=3c1");
 	assert.match(order, /name="plaats3"/);
 	const shown = shuffleForDisplay(mission.practice[1].items, 5);
-	assert.match(order, new RegExp(`De stukjes: ${shown.join(" · ")}`));
+	assert.ok(order.includes(`De stukjes: ${shown.join(" · ")}`));
 	assert.match(view("stap=4&a=3c1&plaats0=1&plaats1=0&plaats2=2&plaats3=3"), /Nog niet\..*De juiste volgorde: Prikkel → Receptor → Zenuw → Reactie\./s);
 	assert.match(view("stap=4&a=3c1&plaats0=0&plaats1=0&plaats2=2&plaats3=3"), /Zet elk stukje op precies één plaats/);
 	assert.match(view("stap=6&a=3c1;4o0.1.2.3;5c0"), /<li aria-current="step">Check<\/li>.*Laatste vraag\./s);
