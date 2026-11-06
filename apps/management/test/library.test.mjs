@@ -20,6 +20,8 @@ import { ScannerUnavailable } from "../src/uploads/clamav.mjs";
 import { MemoryStorage } from "../src/uploads/s3.mjs";
 import { UploadStore } from "../src/uploads/store.mjs";
 import { docx, multipart, pdf, png } from "./upload-fixtures.mjs";
+import { objectNamed, packOf } from "./import-fixtures.mjs";
+import { TEMPLATE } from "../src/imports/routes.mjs";
 
 /** The fields of a complete, valid learning object with one mission, as the editor posts them. */
 const validFields = (id = "prikkel-reactie") => ({
@@ -593,4 +595,142 @@ test("uploads: quota, delete, and who may upload", async () => {
 	const boss = await s.login("admin");
 	assert.equal((await s.send(boss, pdf())).status, 403);
 	assert.equal((await s.call("/bibliotheek/bestanden")).status, 303);
+});
+
+// ── breinhap#30: imports ───────────────────────────────────────────────────────────────────────────
+
+const importFile = (s, who, name, text, { csrf = who.csrf, origin } = {}) =>
+	s.call("/bibliotheek/importeren", {
+		who,
+		method: "POST",
+		origin,
+		raw: multipart([
+			{ name: "csrf", value: csrf },
+			{ name: "bestand", filename: name, type: name.endsWith(".json") ? "application/json" : "text/csv", value: Buffer.from(text) },
+		]),
+	});
+const confirmOf = (body) => /action="(\/bibliotheek\/importeren\/[0-9a-f-]{36}\/bevestigen)"/.exec(body)?.[1];
+const objectsIn = async (workspace) =>
+	(await pool.query("SELECT lo.id, lo.owner_sub AS owner, d.version, d.content FROM learning_objects lo JOIN learning_object_drafts d ON d.workspace_id = lo.workspace_id AND d.learning_object_id = lo.id WHERE lo.workspace_id = $1 ORDER BY lo.id", [workspace])).rows;
+
+test("imports: a dry run shows exactly what would happen and writes nothing; confirming once creates drafts", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const form = await s.call("/bibliotheek/importeren", { who: teacher });
+	assert.equal(form.status, 200);
+	assert.match(form.body, /href="\/bibliotheek\/importeren\/sjabloon.csv"/);
+	const template = await s.call("/bibliotheek/importeren/sjabloon.csv", { who: teacher });
+	assert.equal(template.headers["content-type"], "text/csv; charset=utf-8");
+	assert.match(template.headers["content-disposition"], /attachment/);
+
+	const preview = await importFile(s, teacher, "les.csv", TEMPLATE);
+	assert.equal(preview.status, 200);
+	assert.match(preview.body, /Er is nog niets opgeslagen/);
+	assert.match(preview.body, /prikkel-reactie<\/code><\/td><td>Prikkel en reactie<\/td><td>1<\/td><td><span class="state ok">Nieuw/);
+	assert.deepEqual(await objectsIn(s.workspace), [], "a dry run writes nothing to the library");
+
+	const confirm = confirmOf(preview.body);
+	const done = await s.call(confirm, { who: teacher, method: "POST", form: {} });
+	assert.equal(done.status, 303);
+	const result = await s.call(done.headers.location, { who: teacher });
+	assert.match(result.body, /Import afgerond: 1 leerobject opgeslagen als concept/);
+	assert.match(result.body, /href="\/bibliotheek\/prikkel-reactie"/);
+	const [object] = await objectsIn(s.workspace);
+	assert.equal(object.owner, "teacher");
+	assert.equal(object.content.review.status, "draft");
+
+	// confirming again, or uploading the same file again, never makes a second copy
+	assert.equal((await s.call(confirm, { who: teacher, method: "POST", form: {} })).status, 303);
+	const again = await importFile(s, teacher, "les.csv", TEMPLATE);
+	assert.match(again.body, /Overslaan<\/span> <small>\(staat er al precies zo in\)/);
+	assert.equal(confirmOf(again.body), undefined, "nothing to confirm");
+	assert.equal((await objectsIn(s.workspace)).length, 1);
+
+	// a changed file updates the importer's own draft, as a new version
+	const changed = await importFile(s, teacher, "les.csv", TEMPLATE.replace("Prikkel en reactie", "Prikkel, receptor, reactie"));
+	assert.match(changed.body, /Bijwerken \(jouw concept\)/);
+	await s.call(confirmOf(changed.body), { who: teacher, method: "POST", form: {} });
+	const [updated] = await objectsIn(s.workspace);
+	assert.equal(updated.version, 2);
+	assert.equal(updated.content.title, "Prikkel, receptor, reactie");
+});
+
+test("imports: partial failures, review claims, markup and someone else's codes", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const parent = await s.login("parent");
+	await s.call("/bibliotheek/nieuw", { who: parent, method: "POST", form: validFields("van-de-ouder") });
+	const pack = packOf(
+		objectNamed("goed", { title: "<script>alert(1)</script>" }),
+		{ ...objectNamed("fout"), grade: 9 },
+		objectNamed("van-de-ouder"),
+	);
+	const preview = await importFile(s, teacher, "pakket.json", pack);
+	assert.equal(preview.status, 200);
+	assert.match(preview.body, /1 fout: deze leerobjecten worden niet geïmporteerd/);
+	assert.match(preview.body, /<code>objects\.1\.grade<\/code> \(fout\): Hoogstens 6\./);
+	assert.match(preview.body, /nagekeken.*genegeerd/);
+	assert.match(preview.body, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+	assert.doesNotMatch(preview.body, /<script>alert/);
+	assert.match(preview.body, /van-de-ouder<\/code>.*Overslaan<\/span> <small>\(deze code is al in gebruik in deze werkplek\)/s);
+	assert.match(preview.body, /1 leerobject importeren als concept/);
+	await s.call(confirmOf(preview.body), { who: teacher, method: "POST", form: {} });
+	const objects = await objectsIn(s.workspace);
+	assert.deepEqual(objects.map((o) => [o.id, o.owner]), [["goed", "teacher"], ["van-de-ouder", "parent"]]);
+	assert.equal(objects[0].content.review.status, "draft", "the file's 'reviewed' is never trusted");
+	assert.equal(objects[0].content.title, "<script>alert(1)</script>", "stored as plain text");
+	// unsupported files are explained, not guessed at
+	assert.equal((await importFile(s, teacher, "pakket.json", JSON.stringify({ schemaVersion: 7, objects: [] }))).body.includes("Schemaversie 7 wordt niet ondersteund"), true);
+	assert.equal((await importFile(s, teacher, "les.xlsx", "x")).status, 422);
+});
+
+test("imports: a draft edited after the preview is never overwritten; stale and foreign plans do nothing", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	await s.call(confirmOf((await importFile(s, teacher, "les.csv", TEMPLATE)).body), { who: teacher, method: "POST", form: {} });
+	const preview = await importFile(s, teacher, "les.csv", TEMPLATE.replace("Prikkel en reactie", "Nieuwe titel"));
+	// meanwhile, the editor saves version 2
+	const [current] = await objectsIn(s.workspace);
+	await pool.query("UPDATE learning_object_drafts SET version = version + 1, content = jsonb_set(content, '{title}', '\"In de editor\"') WHERE workspace_id = $1", [s.workspace]);
+	const done = await s.call(confirmOf(preview.body), { who: teacher, method: "POST", form: {} });
+	assert.match((await s.call(done.headers.location, { who: teacher })).body, /Niet gedaan: het is intussen gewijzigd/);
+	assert.equal((await objectsIn(s.workspace))[0].content.title, "In de editor");
+	assert.equal(current.version, 1);
+
+	// a plan nobody confirmed within the hour expires
+	const old = await importFile(s, teacher, "pakket.json", packOf(objectNamed("later")));
+	await pool.query("UPDATE imports SET created_at = now() - interval '2 hours' WHERE workspace_id = $1 AND status = 'planned'", [s.workspace]);
+	assert.equal((await s.call(confirmOf(old.body), { who: teacher, method: "POST", form: {} })).status, 410);
+
+	// someone else's import, or one from another workspace, does not exist for you
+	const mine = await importFile(s, teacher, "pakket.json", packOf(objectNamed("nog-een")));
+	const parent = await s.login("parent");
+	assert.equal((await s.call(confirmOf(mine.body), { who: parent, method: "POST", form: {} })).status, 404);
+	const elsewhere = await stack();
+	const stranger = await elsewhere.login("teacher");
+	assert.equal((await elsewhere.call(confirmOf(mine.body), { who: stranger, method: "POST", form: {} })).status, 404);
+	assert.equal((await elsewhere.call(confirmOf(mine.body).replace("/bevestigen", ""), { who: stranger })).status, 404);
+	// the same code in another workspace is simply another object
+	const theirs = await importFile(elsewhere, stranger, "les.csv", TEMPLATE);
+	assert.match(theirs.body, /Nieuw/);
+});
+
+test("imports: two confirms at once still create one object; forms and roles are checked", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const preview = await importFile(s, teacher, "pakket.json", packOf(objectNamed("een"), objectNamed("twee")));
+	const url = confirmOf(preview.body);
+	const results = await Promise.all([1, 2, 3].map(() => s.call(url, { who: teacher, method: "POST", form: {} })));
+	assert.ok(results.every((r) => [303, 409].includes(r.status)), results.map((r) => r.status).join());
+	assert.deepEqual((await objectsIn(s.workspace)).map((o) => o.id), ["een", "twee"]);
+	const { rows } = await pool.query("SELECT result FROM import_items WHERE workspace_id = $1 ORDER BY position", [s.workspace]);
+	assert.deepEqual(rows.map((r) => r.result), ["done", "done"]);
+
+	assert.equal((await importFile(s, teacher, "les.csv", TEMPLATE, { csrf: "forged" })).status, 403);
+	assert.equal((await importFile(s, teacher, "les.csv", TEMPLATE, { origin: "https://evil.example" })).status, 403);
+	assert.equal((await s.call(url, { who: teacher, method: "POST", form: { csrf: "forged" } })).status, 403);
+	const boss = await s.login("admin");
+	assert.equal((await s.call("/bibliotheek/importeren", { who: boss })).status, 403);
+	assert.equal((await importFile(s, boss, "les.csv", TEMPLATE)).status, 403);
+	assert.equal((await s.call("/bibliotheek/importeren")).status, 303);
 });

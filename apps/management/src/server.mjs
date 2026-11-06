@@ -18,6 +18,8 @@ import {
 	learnersPage,
 } from "./directory-pages.mjs";
 import { ContentStore } from "./content.mjs";
+import { handleImports } from "./imports/routes.mjs";
+import { ImportStore } from "./imports/store.mjs";
 import { handleLibrary } from "./library-routes.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
@@ -108,6 +110,8 @@ export function createHandler({
 	directory,
 	// breinhap#27: the content library, on the same database
 	content = directory ? new ContentStore({ directory }) : undefined,
+	// breinhap#30: imports, on the same content store
+	imports = content ? new ImportStore({ content }) : undefined,
 	// breinhap#29: uploads (private object store + virus scanner); absent, the page says it is not set up
 	uploads,
 } = {}) {
@@ -479,6 +483,7 @@ export function createHandler({
 			// uploads read their own (multipart) bodies, so they come before the library's form reader
 			const result =
 				(await handleUploads(req, url, { identity, uploads })) ??
+				(await handleImports(req, url, { identity, imports })) ??
 				(await handleLibrary(req, url, { identity, content }));
 			if (result.raw) return send(result.status, result.body, result.type, result.headers);
 			if (result.status === 303)
