@@ -20,12 +20,15 @@ function steps(lang, current) {
 		.join("")}</ol>`;
 }
 
-/** The page around a card, with the language switch (same path, ?lang=). */
+/**
+ * The page around a card, with the language switch (same path, ?lang=): the ASafariM country & language
+ * selector (locale-selector.client.jsx) mounts on it; without JavaScript its links remain.
+ */
 export function shell(lang, title, card, { path = "/login", version = "", signout = "" } = {}) {
 	const switcher = `<nav class="lang-switch" aria-label="Taal / Langue / Language / Sprache">${LANGUAGES.map((l) =>
 		l === lang ? `<span aria-current="true" lang="${l}">${l.toUpperCase()}</span>` : `<a href="${esc(path)}?lang=${l}" lang="${l}" hreflang="${l}" title="${LANGUAGE_NAMES[l]}">${l.toUpperCase()}</a>`,
 	).join("")}</nav>`;
-	return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} — Breinhap</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script></head><body class="auth-body"><a class="skip" href="#inhoud">${lang === "fr" ? "Aller au contenu" : lang === "en" ? "Skip to content" : lang === "de" ? "Zum Inhalt" : "Naar inhoud"}</a><header><a class="brand" href="https://breinhap.com/"><img src="/logo.svg" width="32" height="32" alt="">Breinhap</a>${switcher}<button type="button" data-theme-toggle aria-label="Thema" aria-pressed="false">◐</button></header><main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">${T[lang].eyebrow}</p><h1 id="auth-title">${esc(title)}</h1>${card}${signout}</section></main><footer>Breinhap beheer · ${esc(version)}</footer></body></html>`;
+	return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} — Breinhap</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">${lang === "fr" ? "Aller au contenu" : lang === "en" ? "Skip to content" : lang === "de" ? "Zum Inhalt" : "Naar inhoud"}</a><header><a class="brand" href="https://breinhap.com/"><img src="/logo.svg" width="32" height="32" alt="">Breinhap</a><div class="locale-selector" data-locale-selector data-lang="${lang}">${switcher}</div><button type="button" data-theme-toggle aria-label="Thema" aria-pressed="false">◐</button></header><main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">${T[lang].eyebrow}</p><h1 id="auth-title">${esc(title)}</h1>${card}${signout}</section></main><footer>Breinhap beheer · ${esc(version)}</footer></body></html>`;
 }
 
 /** Sign in or register: one e-mail field. */
