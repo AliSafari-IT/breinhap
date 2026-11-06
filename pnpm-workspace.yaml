@@ -4,3 +4,7 @@ packages:
 # Expo/React Native tooling expects a flat node_modules in a pnpm monorepo. pnpm 11+ reads this
 # setting only from here (.npmrc is auth/registry only).
 nodeLinker: hoisted
+# Build scripts are denied unless reviewed. esbuild (management's selector bundle, dev only) needs
+# none: its binary comes from the platform optional dependency.
+allowBuilds:
+  esbuild: false

@@ -23,6 +23,8 @@ test("each sign-in page mounts the selector for its language, with links as the 
 		assert.match(page, /<link rel="stylesheet" href="\/locale-selector\.css">/);
 		assert.match(page, /<script src="\/locale-selector\.js" defer><\/script>/);
 		assert.match(page, new RegExp(`<div class="locale-selector" data-locale-selector data-lang="${lang}"><nav class="lang-switch"`));
-		assert.doesNotMatch(page, /<script>|<style>|\sstyle="/, "nothing inline: the CSP allows only this host");
+		const lower = page.toLowerCase();
+		assert.ok(!lower.includes("<script>") && !lower.includes("<style") && !lower.includes(" style="), "nothing inline: the CSP allows only this host");
+		assert.equal(lower.split("<script").length - 1, 2, "only theme.js and locale-selector.js");
 	}
 });
