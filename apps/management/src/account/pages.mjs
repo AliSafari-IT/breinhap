@@ -12,8 +12,8 @@ const LOCK =
 const hidden = (name, value) => `<input type="hidden" name="${name}" value="${esc(value)}">`;
 const error = (lang, code) => (code ? `<p class="error" role="alert" id="form-error">${esc(T[lang].errors[code] ?? T[lang].errors.unavailable)}</p>` : "");
 
-function steps(lang, current) {
-	return `<ol class="auth-steps">${T[lang].steps
+function steps(lang, current, key = "steps") {
+	return `<ol class="auth-steps">${T[lang][key]
 		.map(
 			([title, text], i) =>
 				`<li${i === current ? ' aria-current="step"' : ""}${i < current ? ' class="done"' : ""}><span class="step-n" aria-hidden="true">${i < current ? "✓" : i + 1}</span><div><strong>${title}</strong><small>${text}</small></div></li>`,
@@ -40,6 +40,21 @@ export function emailPage(lang, { register = false, email = "", errorCode = "", 
 <form method="post" action="${register ? "/register" : "/login"}" class="auth-form" novalidate>
 <div class="field"><label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder="${esc(t.emailPlaceholder)}" value="${esc(email)}"${errorCode ? ' aria-invalid="true" aria-describedby="form-error"' : ""}></div>
 ${error(lang, errorCode)}<button type="submit" class="action-block">${t.sendCode} <span aria-hidden="true">→</span></button></form>
+<p class="auth-secure">${LOCK} ${t.secure}</p>
+<p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
+<p class="auth-student">${t.student}</p>`;
+	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : "/login", version });
+}
+
+/**
+ * The same page while ASafariM's headless sign-in is not switched on (ASAFARIM_HEADLESS_SECRET unset): one button to
+ * the ASafariM sign-in page. It follows the page's language and has the language selector like the main one.
+ */
+export function fallbackPage(lang, { register = false, version }) {
+	const t = T[lang];
+	const [switchText, switchLink] = register ? t.toSignin : t.toRegister;
+	const card = `<p class="auth-lead">${register ? t.fallbackRegisterLead : t.fallbackSigninLead}</p>${register ? steps(lang, 0, "fallbackSteps") : ""}
+<a class="action action-block" href="/auth/start">${register ? t.fallbackRegisterButton : t.fallbackSigninButton} <span aria-hidden="true">→</span></a>
 <p class="auth-secure">${LOCK} ${t.secure}</p>
 <p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
 <p class="auth-student">${t.student}</p>`;
