@@ -44,9 +44,14 @@ test("login and register are branded adult entry pages and create no student ses
   for (const language of ["", "en/"]) for (const kind of ["login", "register"]) {
     const html=read(`${language}${kind}/index.html`);
     assert.ok(html.includes(`property="og:url" content="https://breinhap.com/${language}${kind}"`));
-    assert.match(html,new RegExp(`https://management\\.breinhap\\.com/${kind}`));
+    // one card that goes straight to the secure sign-in; the first sign-in creates the account
+    assert.match(html,/<section class="auth-card" aria-labelledby="auth-title">/);
+    assert.match(html,/class="button button-block" href="https:\/\/management\.breinhap\.com\/auth\/start"/);
+    assert.match(html,new RegExp(`<h1 id="auth-title">${kind === "login" ? (language ? "Sign in" : "Aanmelden") : (language ? "Create an account" : "Account aanmaken")}</h1>`));
+    assert.match(html,new RegExp(`href="/${language}${kind === "login" ? "register" : "login"}"`), "switch to the other page");
     assert.match(html,language ? /Student sign-in is not available/ : /Voor leerlingen is aanmelden nog niet beschikbaar/);
     assert.match(html,language ? /secure sign-in platform/ : /beveiligde aanmeldplatform/);
+    assert.match(html,new RegExp(`<a aria-current="page" href="[^"]*" data-account="${kind}"`));
     if (kind === "register") {
       assert.match(html,language ? /No invitation needed/ : /geen uitnodiging nodig/);
       assert.match(html,language ? /parent, tutor or teacher/ : /ouder, begeleider of leerkracht/);
