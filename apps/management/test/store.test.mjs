@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
-import { ABSOLUTE_MS, IDLE_MS, IdentityStore } from "../src/store.mjs";
+import { ABSOLUTE_MS, connectStore, IDLE_MS, IdentityStore } from "../src/store.mjs";
 import { makeStore, member } from "./helpers.mjs";
 
 const session = (time, extra = {}) => ({
@@ -301,4 +301,25 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 		if (client.isOpen) await client.close();
 		await root.client.sendCommand(["ACL", "DELUSER", user]);
 	}
+});
+
+test("a quiet Redis connection stays up: the idle timeout no longer drops it, so a later request is not refused", async () => {
+	// Same options as production, scaled down: a 500 ms idle timeout with nothing in flight.
+	const connect = async (pingInterval) => {
+		const errors = [];
+		const store = await connectStore({ url: process.env.REDIS_TEST_URL, secret: randomBytes(32).toString("base64url"), workspace: `idle-${randomBytes(6).toString("hex")}`, socketTimeout: 500, pingInterval });
+		store.client.on("error", (error) => errors.push(error.message));
+		return { store, errors };
+	};
+	// without the keep-alive the client destroys the idle socket (the old behaviour)
+	const idle = await connect(0);
+	await new Promise((resolve) => setTimeout(resolve, 1500));
+	assert.match(idle.errors[0] ?? "", /Socket timeout/, "control: an idle socket is destroyed without a keep-alive");
+	await idle.store.client.close();
+	// with it, a connection that is only quiet stays up and answers at once
+	const kept = await connect(150);
+	await new Promise((resolve) => setTimeout(resolve, 1500));
+	assert.deepEqual(kept.errors, []);
+	assert.equal(await kept.store.client.ping(), "PONG");
+	await kept.store.client.close();
 });
