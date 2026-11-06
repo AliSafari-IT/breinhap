@@ -29,12 +29,13 @@ elif name == 'docker':
     elif args[0] == 'compose':
         if 'ps' in args: print('' if case == 'first-failure' else 'existing-container')
         if 'up' in args and 'redis' in args and case=='redis-failure': sys.exit(1)
+        if 'run' in args and case=='setup-failure': sys.exit(1)
         if 'up' in args and args[-1]=='management' and case in ['health-failure', 'first-failure'] and os.environ.get('BREINHAP_MANAGEMENT_IMAGE') != os.environ['PREVIOUS']: sys.exit(1)
 '''
 
 
 class DeployTests(unittest.TestCase):
-    def execute(self, case, request=None, postgres=None):
+    def execute(self, case, request=None, postgres=None, uploads=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git").mkdir()
@@ -45,9 +46,14 @@ class DeployTests(unittest.TestCase):
             elif postgres == "symlink":
                 (root / "elsewhere").write_text("test-only\n")
                 (root / ".postgres.management.password").symlink_to(root / "elsewhere")
+            if uploads == "file":
+                (root / ".uploads.management.env").write_text("MINIO_ROOT_USER=test-only\n")
+            elif uploads == "symlink":
+                (root / "elsewhere-uploads").write_text("MINIO_ROOT_USER=test-only\n")
+                (root / ".uploads.management.env").symlink_to(root / "elsewhere-uploads")
             site = root / "infra/management"
             site.mkdir(parents=True)
-            for name in ["deploy.sh", "compose.yml", "compose.postgres.yml"]:
+            for name in ["deploy.sh", "compose.yml", "compose.postgres.yml", "compose.uploads.yml", "uploads-policy.json"]:
                 shutil.copyfile(SOURCE / name, site / name)
             commands = root / "bin"
             commands.mkdir()
@@ -110,6 +116,43 @@ class DeployTests(unittest.TestCase):
         code, calls = self.execute("success", postgres="symlink")
         self.assertNotEqual(code, 0)
         self.assertFalse(any(name == "docker" and "up" in args for name, args, _ in calls))
+
+    def test_with_the_uploads_file_minio_starts_with_the_stores_the_bucket_is_set_up_and_clamav_starts(self):
+        code, calls = self.execute("success", postgres="file", uploads="file")
+        self.assertEqual(code, 0)
+        compose = [args for name, args, _ in calls if name == "docker" and args[:1] == ["compose"]]
+        ups = [args for args in compose if "up" in args]
+        self.assertEqual(ups[0][-3:], ["redis", "postgres", "minio"])
+        self.assertIn("--wait", ups[0])
+        run = [args for args in compose if "run" in args]
+        self.assertEqual(len(run), 1)
+        self.assertEqual(run[0][-3:], ["run", "--rm", "minio-setup"])
+        clamav = [args for args in ups if args[-1] == "clamav"]
+        self.assertEqual(len(clamav), 1)
+        self.assertNotIn("--wait", clamav[0], "management never waits for the scanner")
+        self.assertEqual(ups[-1][-1], "management")
+        for args in compose:
+            self.assertTrue(any(a.endswith("compose.uploads.yml") for a in args))
+
+    def test_uploads_need_the_database_and_a_regular_secrets_file(self):
+        for postgres, uploads in [(None, "file"), ("file", "symlink")]:
+            with self.subTest(postgres=postgres, uploads=uploads):
+                code, calls = self.execute("success", postgres=postgres, uploads=uploads)
+                self.assertNotEqual(code, 0)
+                self.assertFalse(any(name == "docker" and "up" in args for name, args, _ in calls))
+
+    def test_without_the_uploads_file_minio_and_clamav_stay_out(self):
+        code, calls = self.execute("success", postgres="file")
+        self.assertEqual(code, 0)
+        for name, args, _ in calls:
+            if name == "docker" and args[:1] == ["compose"]:
+                self.assertFalse(any(a.endswith("compose.uploads.yml") for a in args))
+                self.assertNotIn("minio", args)
+
+    def test_a_failed_bucket_setup_never_restarts_management(self):
+        code, calls = self.execute("setup-failure", postgres="file", uploads="file")
+        self.assertNotEqual(code, 0)
+        self.assertFalse(any(name == "docker" and "up" in args and args[-1] == "management" for name, args, _ in calls))
 
     def test_redis_failure_does_not_start_management(self):
         code, calls = self.execute("redis-failure")
