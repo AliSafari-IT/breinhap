@@ -469,3 +469,40 @@ button.link {
 	color: inherit;
 	text-decoration: none;
 }
+
+/* breinhap#29: uploaded files */
+section.upload-card input[type="file"] {
+	padding: 0.5rem;
+}
+.quota {
+	margin-bottom: 0.25rem;
+}
+progress {
+	width: 100%;
+	max-width: 42rem;
+	accent-color: var(--accent);
+}
+.state.ok {
+	color: var(--good);
+}
+.state.bad {
+	color: var(--bad);
+}
+.state.pending {
+	color: var(--warn);
+}
+td.actions {
+	white-space: nowrap;
+}
+td.actions form {
+	display: inline;
+	margin: 0 0 0 0.75rem;
+}
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}

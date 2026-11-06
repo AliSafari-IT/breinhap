@@ -39,8 +39,24 @@ if [[ -e "$BREINHAP_POSTGRES_PASSWORD_FILE" || -L "$BREINHAP_POSTGRES_PASSWORD_F
   files+=(-f "$here/compose.postgres.yml")
   stores+=(postgres)
 fi
+# breinhap#29: uploads (MinIO + ClamAV) join once the operator installs their secrets file; they need the database.
+export BREINHAP_UPLOADS_ENV_FILE="$repo/.uploads.management.env"
+uploads=0
+if [[ -e "$BREINHAP_UPLOADS_ENV_FILE" || -L "$BREINHAP_UPLOADS_ENV_FILE" ]]; then
+  [[ -f "$BREINHAP_UPLOADS_ENV_FILE" && ! -L "$BREINHAP_UPLOADS_ENV_FILE" ]] || { echo "Management uploads secrets must be a regular file" >&2; exit 1; }
+  [[ " ${stores[*]} " == *" postgres "* ]] || { echo "Uploads need the management database (install its password file first)" >&2; exit 1; }
+  files+=(-f "$here/compose.uploads.yml")
+  stores+=(minio)
+  uploads=1
+fi
 compose=(docker compose -p breinhap-management "${files[@]}")
 "${compose[@]}" up -d --wait --wait-timeout 90 "${stores[@]}"
+if [[ "$uploads" == 1 ]]; then
+  # the private bucket and its least-privilege user (idempotent), then the scanner; management does not
+  # wait for the scanner: until it answers, uploads stay in quarantine
+  "${compose[@]}" --profile setup run --rm minio-setup
+  "${compose[@]}" up -d clamav
+fi
 current=$("${compose[@]}" ps -aq management)
 previous=''
 if [[ -n "$current" ]]; then

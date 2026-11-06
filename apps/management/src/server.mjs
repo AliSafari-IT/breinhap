@@ -19,6 +19,10 @@ import {
 } from "./directory-pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { handleLibrary } from "./library-routes.mjs";
+import { createClamav } from "./uploads/clamav.mjs";
+import { handleUploads } from "./uploads/routes.mjs";
+import { S3Client } from "./uploads/s3.mjs";
+import { UploadStore } from "./uploads/store.mjs";
 import { createPlatform, managementAccess, manifest } from "./platform.mjs";
 import { connectStore } from "./store.mjs";
 
@@ -104,6 +108,8 @@ export function createHandler({
 	directory,
 	// breinhap#27: the content library, on the same database
 	content = directory ? new ContentStore({ directory }) : undefined,
+	// breinhap#29: uploads (private object store + virus scanner); absent, the page says it is not set up
+	uploads,
 } = {}) {
 	const directoryUnavailable = (session) =>
 		page(
@@ -470,7 +476,11 @@ export function createHandler({
 						req.managementSession,
 					),
 				);
-			const result = await handleLibrary(req, url, { identity, content });
+			// uploads read their own (multipart) bodies, so they come before the library's form reader
+			const result =
+				(await handleUploads(req, url, { identity, uploads })) ??
+				(await handleLibrary(req, url, { identity, content }));
+			if (result.raw) return send(result.status, result.body, result.type, result.headers);
 			if (result.status === 303)
 				return send(303, "", undefined, result.headers);
 			return send(
@@ -669,7 +679,8 @@ export function createManagementServer(options) {
 			);
 		});
 	});
-	server.requestTimeout = 10_000;
+	// long enough for one upload on a slow connection (breinhap#29); headers still have to arrive quickly
+	server.requestTimeout = 120_000;
 	server.headersTimeout = 10_000;
 	server.maxHeadersCount = 50;
 	return server;
@@ -714,5 +725,34 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 			directory = undefined;
 		}
 	}
-	createManagementServer({ identity, directory }).listen(8080, "0.0.0.0");
+	// breinhap#29: uploads need the database, the private bucket, the scanner and a link secret
+	let uploads;
+	const env = process.env;
+	if (directory && env.UPLOADS_S3_ENDPOINT && env.CLAMAV_HOST && env.UPLOADS_LINK_SECRET) {
+		try {
+			const storage = new S3Client({
+				endpoint: env.UPLOADS_S3_ENDPOINT,
+				bucket: env.UPLOADS_S3_BUCKET ?? "breinhap-uploads",
+				accessKeyId: env.UPLOADS_S3_ACCESS_KEY_ID,
+				secretAccessKey: env.UPLOADS_S3_SECRET_ACCESS_KEY,
+			});
+			if (!(await storage.ready())) throw new Error("bucket");
+			uploads = new UploadStore({
+				directory,
+				storage,
+				scanner: createClamav({ host: env.CLAMAV_HOST, port: Number(env.CLAMAV_PORT ?? 3310) }),
+				linkSecret: env.UPLOADS_LINK_SECRET,
+				log: (event, detail) => console.log(JSON.stringify({ event, ...detail })),
+			});
+			// files left in quarantine while the scanner was down are scanned again every minute
+			setInterval(() => {
+				uploads.scanPending().catch(() => console.error("Upload rescan failed; will retry"));
+			}, 60_000).unref();
+			console.log("Management uploads ready");
+		} catch {
+			console.error("Management uploads unavailable; the upload page stays closed");
+			uploads = undefined;
+		}
+	}
+	createManagementServer({ identity, directory, uploads }).listen(8080, "0.0.0.0");
 }

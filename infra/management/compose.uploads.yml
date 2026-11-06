@@ -1,0 +1,89 @@
+# breinhap#29: uploads. A private MinIO bucket for the files and a ClamAV daemon that scans each one
+# before it leaves quarantine. deploy.sh adds this file only when the operator has installed the
+# uploads secrets file (.uploads.management.env, mode 0600, never a symlink) and the database is on.
+#
+# Neither service has a host port or joins the edge network: only management reaches them, each on
+# its own internal network. ClamAV alone has an extra network with outbound access, for freshclam's
+# signature updates. Management does not wait for ClamAV (its first signature download takes minutes):
+# until clamd answers, uploads stay in quarantine and are never served.
+services:
+  management:
+    networks:
+      objects: {}
+      scan: {}
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: [server, /data, --address, ":9000", --console-address, ":9001"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    cpus: 0.5
+    # MINIO_ROOT_USER and MINIO_ROOT_PASSWORD come from the operator's uploads secrets file
+    env_file:
+      - ${BREINHAP_UPLOADS_ENV_FILE:?Set the private uploads environment file}
+    environment:
+      MINIO_BROWSER: "off"
+      MINIO_UPDATE: "off"
+    volumes:
+      - objects:/data
+    networks: [objects]
+    healthcheck:
+      test: [CMD, mc, ready, local]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  # One-shot: the private bucket, a user that may only read, write and delete in it, and no anonymous access.
+  minio-setup:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    profiles: [setup]
+    read_only: true
+    tmpfs:
+      - /tmp:size=4m
+      - /root/.mc:size=1m
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 64m
+    env_file:
+      - ${BREINHAP_UPLOADS_ENV_FILE:?Set the private uploads environment file}
+    volumes:
+      - ./uploads-policy.json:/policy.json:ro
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" > /dev/null
+        mc mb --ignore-existing local/breinhap-uploads
+        mc anonymous set none local/breinhap-uploads
+        mc admin policy create local breinhap-uploads /policy.json
+        mc admin user add local "$$UPLOADS_S3_ACCESS_KEY_ID" "$$UPLOADS_S3_SECRET_ACCESS_KEY"
+        mc admin policy attach local breinhap-uploads --user "$$UPLOADS_S3_ACCESS_KEY_ID" 2>/dev/null || true
+    networks: [objects]
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    cpus: 1.0
+    volumes:
+      - signatures:/var/lib/clamav
+    networks: [scan, clamav_updates]
+    healthcheck:
+      test: [CMD-SHELL, "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15m
+
+volumes:
+  objects:
+  signatures:
+
+networks:
+  objects:
+    internal: true
+  scan:
+    internal: true
+  clamav_updates: {}

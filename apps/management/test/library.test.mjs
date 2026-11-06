@@ -16,6 +16,10 @@ import { createIdentity, ORIGIN } from "../src/identity.mjs";
 import { fieldOf, fromForm, labelOf, toValues } from "../src/library.mjs";
 import { createManagementServer } from "../src/server.mjs";
 import { makeStore, member } from "./helpers.mjs";
+import { ScannerUnavailable } from "../src/uploads/clamav.mjs";
+import { MemoryStorage } from "../src/uploads/s3.mjs";
+import { UploadStore } from "../src/uploads/store.mjs";
+import { docx, multipart, pdf, png } from "./upload-fixtures.mjs";
 
 /** The fields of a complete, valid learning object with one mission, as the editor posts them. */
 const validFields = (id = "prikkel-reactie") => ({
@@ -97,7 +101,14 @@ before(async () => {
 	await migrate(pool);
 });
 after(async () => {
-	await Promise.all(servers.map((s) => new Promise((resolve) => s.close(resolve))));
+	// the server allows a slow upload up to two minutes; tests must not wait for idle keep-alive sockets
+	await Promise.all(
+		servers.map((s) => {
+			const closed = new Promise((resolve) => s.close(resolve));
+			s.closeAllConnections();
+			return closed;
+		}),
+	);
 	await pool?.end();
 	await admin?.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
 	await admin?.end();
@@ -106,7 +117,7 @@ after(async () => {
 const internal = (cookie) =>
 	Object.assign(Readable.from([""]), { method: "GET", headers: { cookie, origin: ORIGIN } });
 
-async function stack({ withDirectory = true } = {}) {
+async function stack({ withDirectory = true, uploadsOf } = {}) {
 	let next = "teacher";
 	const time = Date.now();
 	const store = await makeStore(() => time);
@@ -153,12 +164,13 @@ async function stack({ withDirectory = true } = {}) {
 		await identity.current(probe);
 		return { cookie, csrf: probe.managementSession.csrf };
 	}
-	const server = createManagementServer({ identity, directory });
+	const uploads = uploadsOf && directory ? uploadsOf(directory) : undefined;
+	const server = createManagementServer({ identity, directory, uploads });
 	servers.push(server);
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-	const call = (path, { who, method = "GET", form, origin = ORIGIN } = {}) =>
+	const call = (path, { who, method = "GET", form, origin = ORIGIN, raw } = {}) =>
 		new Promise((resolve, reject) => {
-			const body = form ? new URLSearchParams({ ...form, csrf: form.csrf ?? who?.csrf ?? "" }).toString() : undefined;
+			const body = raw ? raw.body : form ? new URLSearchParams({ ...form, csrf: form.csrf ?? who?.csrf ?? "" }).toString() : undefined;
 			const req = http.request(
 				{
 					hostname: "127.0.0.1",
@@ -168,22 +180,22 @@ async function stack({ withDirectory = true } = {}) {
 					headers: {
 						Host: "management.breinhap.com",
 						Cookie: who?.cookie ?? "",
-						...(body ? { "Content-Type": "application/x-www-form-urlencoded", Origin: origin } : {}),
+						...(body ? { "Content-Type": raw?.contentType ?? "application/x-www-form-urlencoded", Origin: origin } : {}),
 					},
 				},
 				(res) => {
-					let text = "";
-					res.setEncoding("utf8");
-					res.on("data", (chunk) => {
-						text += chunk;
+					const chunks = [];
+					res.on("data", (chunk) => chunks.push(chunk));
+					res.on("end", () => {
+						const bytes = Buffer.concat(chunks);
+						resolve({ status: res.statusCode, headers: res.headers, body: bytes.toString("utf8"), bytes });
 					});
-					res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
 				},
 			);
 			req.on("error", reject);
 			req.end(body);
 		});
-	return { login, call, workspace: store.workspace };
+	return { login, call, workspace: store.workspace, uploads };
 }
 
 test("an author creates, finds, edits and snapshots a learning object; the library shows its state", async () => {
@@ -397,4 +409,188 @@ test("preview (breinhap#28): the owner sees the draft or a revision as a student
 	const invalid = await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher });
 	assert.equal(invalid.status, 422);
 	assert.match(invalid.body, /nog niet geldig/);
+});
+
+// ── breinhap#29: uploads ───────────────────────────────────────────────────────────────────────────
+
+class FakeScanner {
+	constructor() {
+		this.mode = "clean";
+		this.scanned = 0;
+	}
+	async scan() {
+		this.scanned += 1;
+		if (this.mode === "down") throw new ScannerUnavailable("connection");
+		return this.mode === "infected" ? { result: "infected", signature: "Eicar-Test-Signature" } : { result: "clean" };
+	}
+}
+
+async function uploadStack(quota) {
+	const storage = new MemoryStorage();
+	const scanner = new FakeScanner();
+	const clock = { now: Date.now() };
+	const s = await stack({
+		uploadsOf: (directory) =>
+			new UploadStore({ directory, storage, scanner, linkSecret: "s".repeat(40), now: () => clock.now, ...(quota ? { quota } : {}) }),
+	});
+	const send = (who, file, { name = "les.pdf", type = "application/pdf", csrf = who.csrf, origin, bron = "own", licentie = "own_work" } = {}) =>
+		s.call("/bibliotheek/bestanden", {
+			who,
+			method: "POST",
+			origin,
+			raw: multipart([
+				{ name: "csrf", value: csrf },
+				{ name: "bestand", filename: name, type, value: file },
+				{ name: "bron", value: bron },
+				{ name: "licentie", value: licentie },
+				{ name: "notitie", value: "Biologie voor jou 3" },
+			]),
+		});
+	const rows = async () =>
+		(await pool.query("SELECT id, status, reason, file_name, storage_key, deleted_at FROM uploads WHERE workspace_id = $1 ORDER BY created_at", [s.workspace])).rows;
+	return { ...s, storage, scanner, clock, send, rows };
+}
+const linkIn = (body) => /href="(\/bibliotheek\/bestanden\/[0-9a-f-]{36}\/download\?[^"]+)"/.exec(body)?.[1]?.replaceAll("&amp;", "&");
+
+test("uploads: a clean file is stored under a generated key, listed, and downloads safely for its uploader only", async () => {
+	const s = await uploadStack();
+	const teacher = await s.login("teacher");
+	const page = await s.call("/bibliotheek/bestanden", { who: teacher });
+	assert.equal(page.status, 200);
+	assert.match(page.body, /enctype="multipart\/form-data"/);
+	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /href="\/bibliotheek\/bestanden"/);
+
+	const res = await s.send(teacher, pdf(), { name: "../Les <1>.pdf" });
+	assert.equal(res.status, 303);
+	assert.equal(res.headers.location, "/bibliotheek/bestanden?opgeladen=clean");
+	const [row] = await s.rows();
+	assert.equal(row.status, "clean");
+	assert.equal(row.file_name, "Les 1.pdf");
+	assert.match(row.storage_key, /^uploads\/[0-9a-f-]{36}$/);
+	assert.deepEqual([...s.storage.objects.keys()], [row.storage_key]);
+
+	const list = await s.call("/bibliotheek/bestanden?opgeladen=clean", { who: teacher });
+	assert.match(list.body, /Opgeladen en gecontroleerd/);
+	assert.match(list.body, /Les 1\.pdf/);
+	const link = linkIn(list.body);
+	assert.ok(link, "a download link for the clean file");
+	const download = await s.call(link, { who: teacher });
+	assert.equal(download.status, 200);
+	assert.ok(download.bytes.equals(pdf()));
+	assert.equal(download.headers["content-type"], "application/pdf");
+	assert.equal(download.headers["content-disposition"], "attachment; filename=\"Les 1.pdf\"; filename*=UTF-8''Les%201.pdf");
+	assert.equal(download.headers["content-security-policy"], "sandbox; default-src 'none'");
+	assert.equal(download.headers["x-content-type-options"], "nosniff");
+	assert.equal(download.headers["cache-control"], "private, no-store");
+
+	// the link is bound to its account, its time and its signature
+	const parent = await s.login("parent");
+	assert.equal((await s.call(link, { who: parent })).status, 404);
+	assert.doesNotMatch((await s.call("/bibliotheek/bestanden", { who: parent })).body, /Les 1\.pdf/);
+	assert.equal((await s.call(link.replace(/handtekening=[^&]+/, "handtekening=AAAA"), { who: teacher })).status, 404);
+	assert.equal((await s.call(link.replace(/verloopt=\d+/, (m) => `verloopt=${Number(m.split("=")[1]) + 60}`), { who: teacher })).status, 404);
+	assert.equal((await s.call(link)).status, 303); // signed out: to the login
+	s.clock.now += 6 * 60 * 1000;
+	const expired = await s.call(link, { who: teacher });
+	assert.equal(expired.status, 410);
+	assert.match(expired.body, /verlopen/);
+});
+
+test("uploads: refused files store nothing; the uploader sees why", async () => {
+	const s = await uploadStack();
+	const teacher = await s.login("teacher");
+	const cases = [
+		[Buffer.concat([Buffer.from("MZ"), Buffer.alloc(200)]), { name: "les.pdf" }, /Programma's kunnen niet/],
+		[docx([["word/vbaProject.bin", "x"]]), { name: "werkblad.docx", type: "" }, /macro's/],
+		[png({ after: Buffer.from("PK\u0003\u0004") }), { name: "a.png", type: "image/png" }, /ook nog een ander bestand/],
+		[pdf("1 0 obj<</S/JavaScript>>endobj\n"), {}, /scripts, bijlagen of acties/],
+	];
+	for (const [file, options, message] of cases) {
+		const res = await s.send(teacher, file, options);
+		assert.equal(res.status, 422);
+		assert.match(res.body, message);
+	}
+	assert.equal((await s.send(teacher, pdf(), { bron: "made-up" })).status, 422);
+	assert.equal((await s.rows()).length, 0);
+	assert.equal(s.storage.objects.size, 0);
+	assert.equal(s.scanner.scanned, 0);
+});
+
+test("uploads: scanner down keeps the file in quarantine, never served; a later rescan releases it", async () => {
+	const s = await uploadStack();
+	const teacher = await s.login("teacher");
+	s.scanner.mode = "down";
+	const res = await s.send(teacher, png(), { name: "schema.png", type: "image/png" });
+	assert.equal(res.headers.location, "/bibliotheek/bestanden?opgeladen=quarantined");
+	const [row] = await s.rows();
+	assert.equal(row.status, "quarantined");
+	const list = await s.call("/bibliotheek/bestanden?opgeladen=quarantined", { who: teacher });
+	assert.match(list.body, /quarantaine/);
+	assert.match(list.body, /Wordt gecontroleerd/);
+	assert.equal(linkIn(list.body), undefined);
+	// a forged link to a quarantined file gets nothing either
+	const forged = `/bibliotheek/bestanden/${row.id}/download?verloopt=${Math.floor(s.clock.now / 1000) + 60}&handtekening=${s.uploads.sign("teacher", row.id, Math.floor(s.clock.now / 1000) + 60)}`;
+	assert.equal((await s.call(forged, { who: teacher })).status, 404);
+	await assert.rejects(s.uploads.link({ sub: "teacher", role: "breinhap.teacher" }, row.id), /not_ready/);
+
+	// still down: the rescan leaves it where it is
+	await s.uploads.scanPending({ minAgeSeconds: 0 });
+	assert.equal((await s.rows())[0].status, "quarantined");
+	s.scanner.mode = "clean";
+	await s.uploads.scanPending({ minAgeSeconds: 0 });
+	assert.equal((await s.rows())[0].status, "clean");
+	assert.ok(linkIn((await s.call("/bibliotheek/bestanden", { who: teacher })).body));
+});
+
+test("uploads: infected files are deleted at once; quarantine that never clears is cleaned up", async () => {
+	const s = await uploadStack();
+	const teacher = await s.login("teacher");
+	s.scanner.mode = "infected";
+	const res = await s.send(teacher, pdf());
+	assert.equal(res.headers.location, "/bibliotheek/bestanden?opgeladen=rejected");
+	assert.deepEqual((await s.rows()).map((r) => [r.status, r.reason]), [["rejected", "infected"]]);
+	assert.equal(s.storage.objects.size, 0);
+	assert.match((await s.call("/bibliotheek/bestanden", { who: teacher })).body, /schadelijke inhoud/);
+
+	s.scanner.mode = "down";
+	await s.send(teacher, pdf(), { name: "later.pdf" });
+	assert.equal(s.storage.objects.size, 1);
+	await pool.query("UPDATE uploads SET created_at = now() - interval '8 days' WHERE workspace_id = $1 AND status = 'quarantined'", [s.workspace]);
+	await s.uploads.scanPending({ minAgeSeconds: 0 });
+	assert.deepEqual((await s.rows()).map((r) => r.reason).sort(), ["infected", "scan_timeout"]);
+	assert.equal(s.storage.objects.size, 0);
+	// a clean file never goes back, a deleted one never comes back (the database refuses)
+	await assert.rejects(pool.query("UPDATE uploads SET status = 'clean' WHERE workspace_id = $1 AND reason = 'infected'", [s.workspace]), /rejected upload can only be deleted/);
+});
+
+test("uploads: quota, delete, and who may upload", async () => {
+	const s = await uploadStack({ bytes: 1_000_000, files: 2 });
+	const teacher = await s.login("teacher");
+	assert.equal((await s.send(teacher, pdf())).status, 303);
+	assert.equal((await s.send(teacher, pdf(), { name: "b.pdf" })).status, 303);
+	const full = await s.send(teacher, pdf(), { name: "c.pdf" });
+	assert.equal(full.status, 409);
+	assert.match(full.body, /opslag van deze werkplek is vol/);
+	assert.match((await s.call("/bibliotheek/bestanden", { who: teacher })).body, /2 van 2 bestanden/);
+
+	const [first] = await s.rows();
+	const parent = await s.login("parent");
+	assert.equal((await s.call(`/bibliotheek/bestanden/${first.id}/verwijderen`, { who: parent, method: "POST", form: {} })).status, 404);
+	assert.equal((await s.call(`/bibliotheek/bestanden/${first.id}/verwijderen`, { who: teacher, method: "POST", form: { csrf: "forged" } })).status, 403);
+	const removed = await s.call(`/bibliotheek/bestanden/${first.id}/verwijderen`, { who: teacher, method: "POST", form: {} });
+	assert.equal(removed.headers.location, "/bibliotheek/bestanden?verwijderd=1");
+	const after = (await s.rows())[0];
+	assert.equal(after.status, "deleted");
+	assert.equal(after.file_name, null);
+	assert.ok(after.deleted_at);
+	assert.ok(!s.storage.objects.has(first.storage_key));
+	assert.equal((await s.send(teacher, pdf(), { name: "c.pdf" })).status, 303, "a deleted file frees its quota");
+
+	// forms need the session's CSRF token and the management origin
+	assert.equal((await s.send(teacher, pdf(), { csrf: "forged" })).status, 403);
+	assert.equal((await s.send(teacher, pdf(), { origin: "https://evil.example" })).status, 403);
+	// administrators manage people, not content; a signed-out visitor goes to the login
+	const boss = await s.login("admin");
+	assert.equal((await s.send(boss, pdf())).status, 403);
+	assert.equal((await s.call("/bibliotheek/bestanden")).status, 303);
 });
