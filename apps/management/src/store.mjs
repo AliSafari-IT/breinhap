@@ -477,14 +477,22 @@ export class IdentityStore {
 	}
 }
 
-export async function connectStore({ url, secret, workspace }) {
+/**
+ * `socketTimeout` is the client's idle timeout: it destroys a socket that received nothing for that long, even
+ * with nothing in flight. With the offline queue off, a request that arrived while the socket was reconnecting
+ * then failed ("session store unavailable"), which at pilot traffic is every few seconds of quiet. A PING well
+ * inside the timeout keeps a healthy connection busy, so only a connection that really stopped answering is dropped
+ * (`ping` is in the deployed Redis user's command list).
+ */
+export async function connectStore({ url, secret, workspace, socketTimeout = 5000, pingInterval = 2000 }) {
 	const client = createClient({
 		url,
 		disableOfflineQueue: true,
 		commandsQueueMaxLength: 1000,
+		pingInterval,
 		socket: {
 			connectTimeout: 5000,
-			socketTimeout: 5000,
+			socketTimeout,
 			reconnectStrategy: (retries) =>
 				Math.min(100 * 2 ** Math.min(retries, 5), 2000),
 		},
