@@ -19,7 +19,15 @@ export function localeOf(req, url) {
 	}
 	return "nl";
 }
-export const langCookie = (lang) => `${LANG_COOKIE}=${lang}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`;
+/**
+ * The language cookie. On breinhap.com's hosts it is set for the parent domain, so a choice made on the website
+ * holds here and the other way round; anywhere else (localhost, tests) it stays on the host.
+ */
+export const langCookie = (lang, host = "") => {
+	const name = String(host).replace(/:\d+$/, "").toLowerCase();
+	const shared = name === "breinhap.com" || name.endsWith(".breinhap.com") ? "; Domain=breinhap.com" : "";
+	return `${LANG_COOKIE}=${lang}; Path=/; Secure; SameSite=Lax; Max-Age=31536000${shared}`;
+};
 
 const ROLES = {
 	nl: { "breinhap.parent": ["Ouder", "Je volgt je kind op."], "breinhap.tutor": ["Begeleider", "Je begeleidt leerlingen buiten de klas."], "breinhap.teacher": ["Leerkracht", "Je geeft les aan leerlingen."] },

@@ -9,6 +9,10 @@ on:
       - ".github/workflows/management-image.yml"
       - "apps/.dockerignore"
       - "apps/site/src/theme.css"
+      - "apps/site/public/theme.js"
+      - "apps/site/public/logo.svg"
+      - "apps/site/public/locale-selector.js"
+      - "apps/site/public/locale-selector.css"
       - "infra/management/**"
   workflow_dispatch: {}
 

@@ -18,6 +18,7 @@ import {
 	learnersPage,
 } from "./directory-pages.mjs";
 import { langCookie, localeOf, T } from "./account/i18n.mjs";
+import { header } from "./header.mjs";
 import { emailPage, pendingPage, profilePage } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
@@ -74,7 +75,7 @@ function page(title, content, active, session) {
 		active === undefined
 			? ""
 			: `<nav aria-label="Beheernavigatie">${[...routes].map(([path, [label]]) => `<a href="${path}"${active === path ? ' aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a><header>Breinhap beheer<button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header>${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
+	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer", href: "/" })}${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
 }
 
 const LOCK =
@@ -102,7 +103,7 @@ function authPage(title, card, session) {
 	const account = session
 		? `<form method="post" action="/afmelden" class="auth-signout"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit" class="link">Afmelden</button></form>`
 		: "";
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">Naar inhoud</a><header><a class="brand" href="https://breinhap.com/"><img src="/logo.svg" width="32" height="32" alt="">Breinhap beheer</a><button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header><main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">Voor ouders, begeleiders en leerkrachten</p><h1 id="auth-title">${title}</h1>${card}${account}</section></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
+	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer" })}<main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">Voor ouders, begeleiders en leerkrachten</p><h1 id="auth-title">${title}</h1>${card}${account}</section></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -232,7 +233,7 @@ export function createHandler({
 				);
 			if (req.method === "POST")
 				return send(303, "", undefined, { Location: "/registreren" });
-			const langHeader = url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {};
+			const langHeader = url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {};
 			if (result.pending)
 				return send(200, pendingPage(lang, { csrf: session.csrf, request: result.pending, version: manifest.version }), undefined, langHeader);
 			return send(200, profilePage(lang, { csrf: session.csrf, version: manifest.version }), undefined, langHeader);
@@ -518,11 +519,11 @@ export function createHandler({
 				await readFile(new URL("../../site/public/theme.js", import.meta.url)),
 				"text/javascript; charset=utf-8",
 			);
-		// breinhap#signup: the country & language selector, bundled (scripts/build-locale-selector.mjs)
+		// the country & language selector, bundled once for breinhap.com and here (scripts/build-locale-selector.mjs)
 		if (url.pathname === "/locale-selector.js")
-			return send(200, await readFile(new URL("./vendor/locale-selector.js", import.meta.url)), "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
+			return send(200, await readFile(new URL("../../site/public/locale-selector.js", import.meta.url)), "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
 		if (url.pathname === "/locale-selector.css")
-			return send(200, await readFile(new URL("./vendor/locale-selector.css", import.meta.url)), "text/css; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
+			return send(200, await readFile(new URL("../../site/public/locale-selector.css", import.meta.url)), "text/css; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
 		if (url.pathname === "/logo.svg")
 			return send(
 				200,
@@ -566,7 +567,7 @@ export function createHandler({
 					200,
 					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice }),
 					undefined,
-					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {},
+					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);
 			}
 			if (identity)
