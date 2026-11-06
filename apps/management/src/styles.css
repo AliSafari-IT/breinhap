@@ -231,3 +231,54 @@ table.library td {
 		padding: 0.1rem 0;
 	}
 }
+
+/* breinhap#28: the preview of the student mission experience */
+.notice.preview {
+	border-left-style: dashed;
+}
+ol.steps {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	list-style: none;
+	padding: 0;
+	margin-block: 1rem 0.25rem;
+}
+ol.steps li {
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 0.2rem 0.8rem;
+}
+ol.steps li[aria-current="step"] {
+	background: var(--accent);
+	color: var(--accent-ink);
+	border-color: var(--accent);
+	font-weight: 600;
+}
+section.card {
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	padding: 1rem;
+	margin-block: 1rem;
+	max-width: 42rem;
+}
+.muted {
+	opacity: 0.8;
+}
+label.option {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	margin-block: 0.4rem;
+}
+ul.options li.chosen {
+	font-weight: 600;
+}
+.feedback {
+	border-left: 4px solid var(--accent);
+	padding: 0.25rem 1rem;
+	margin-block: 1rem;
+}
+.feedback.not-yet {
+	border-left-style: dashed;
+}

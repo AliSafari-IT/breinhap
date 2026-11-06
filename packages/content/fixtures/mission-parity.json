@@ -1,0 +1,296 @@
+{
+  "$comment": "breinhap#28: every client of the student mission experience must give these results. Scores and sentences are written by hand; `shuffles` is a golden snapshot of the display order (changing it changes what students see).",
+  "object": {
+    "schemaVersion": 1,
+    "id": "pariteit-demo",
+    "subject": "biologie",
+    "title": "Pariteit",
+    "grade": 3,
+    "curriculum": {
+      "leerdoel": "Prikkel en reactie uitleggen.",
+      "references": [
+        "LPD 12"
+      ]
+    },
+    "review": {
+      "status": "reviewed",
+      "reviewedBy": "Een begeleider",
+      "reviewedAt": "2026-11-01"
+    },
+    "missions": [
+      {
+        "id": "pariteit-demo-m1",
+        "title": "Prikkel, receptor, reactie",
+        "minutes": 4,
+        "warmup": {
+          "text": "Denk aan iets dat je laat schrikken."
+        },
+        "learn": [
+          {
+            "text": "Een prikkel is een verandering die je waarneemt.",
+            "example": "Een harde knal."
+          },
+          {
+            "text": "Een receptor neemt de prikkel waar."
+          }
+        ],
+        "practice": [
+          {
+            "kind": "choice",
+            "prompt": "Wat is een prikkel?",
+            "options": [
+              "Een spier",
+              "Een verandering",
+              "Een zenuw"
+            ],
+            "answerIndex": 1,
+            "explanation": "Een prikkel is een verandering in of rond je lichaam."
+          },
+          {
+            "kind": "order",
+            "prompt": "Zet in volgorde.",
+            "items": [
+              "Prikkel",
+              "Receptor",
+              "Zenuw",
+              "Reactie"
+            ],
+            "explanation": "Eerst de prikkel, dan de receptor, de zenuw en de reactie."
+          }
+        ],
+        "check": [
+          {
+            "kind": "choice",
+            "prompt": "Wat neemt een prikkel waar?",
+            "options": [
+              "Een receptor",
+              "Een spier"
+            ],
+            "answerIndex": 0,
+            "explanation": "Receptoren nemen prikkels waar."
+          },
+          {
+            "kind": "order",
+            "prompt": "Van klein naar groot.",
+            "items": [
+              "Cel",
+              "Weefsel",
+              "Orgaan"
+            ],
+            "explanation": "Cellen vormen weefsels, weefsels vormen organen."
+          }
+        ],
+        "commonMistakes": [
+          {
+            "mistake": "Een prikkel is een reactie.",
+            "why": "De reactie komt pas na de prikkel."
+          }
+        ]
+      }
+    ]
+  },
+  "pages": [
+    "Opwarmen:card",
+    "Leren:card",
+    "Leren:card",
+    "Doen:question",
+    "Doen:question",
+    "Check:question",
+    "Check:question"
+  ],
+  "cases": [
+    {
+      "name": "all right",
+      "answers": {
+        "3": {
+          "kind": "choice",
+          "chosen": 1
+        },
+        "4": {
+          "kind": "order",
+          "placed": [
+            "Prikkel",
+            "Receptor",
+            "Zenuw",
+            "Reactie"
+          ],
+          "checked": true
+        },
+        "5": {
+          "kind": "choice",
+          "chosen": 0
+        },
+        "6": {
+          "kind": "order",
+          "placed": [
+            "Cel",
+            "Weefsel",
+            "Orgaan"
+          ],
+          "checked": true
+        }
+      },
+      "score": 4,
+      "sentence": "Je had 4 van de 4 vragen juist."
+    },
+    {
+      "name": "all wrong",
+      "answers": {
+        "3": {
+          "kind": "choice",
+          "chosen": 0
+        },
+        "4": {
+          "kind": "order",
+          "placed": [
+            "Receptor",
+            "Prikkel",
+            "Zenuw",
+            "Reactie"
+          ],
+          "checked": true
+        },
+        "5": {
+          "kind": "choice",
+          "chosen": 1
+        },
+        "6": {
+          "kind": "order",
+          "placed": [
+            "Orgaan",
+            "Weefsel",
+            "Cel"
+          ],
+          "checked": true
+        }
+      },
+      "score": 0,
+      "sentence": "Je hebt 4 vragen geoefend. Lees de uitleg nog eens rustig na."
+    },
+    {
+      "name": "mixed",
+      "answers": {
+        "3": {
+          "kind": "choice",
+          "chosen": 1
+        },
+        "4": {
+          "kind": "order",
+          "placed": [
+            "Prikkel",
+            "Zenuw",
+            "Receptor",
+            "Reactie"
+          ],
+          "checked": true
+        },
+        "5": {
+          "kind": "choice",
+          "chosen": 0
+        },
+        "6": {
+          "kind": "order",
+          "placed": [
+            "Cel",
+            "Orgaan",
+            "Weefsel"
+          ],
+          "checked": true
+        }
+      },
+      "score": 2,
+      "sentence": "Je had 2 van de 4 vragen juist."
+    },
+    {
+      "name": "a right order that is not checked yet does not count",
+      "answers": {
+        "3": {
+          "kind": "choice",
+          "chosen": 1
+        },
+        "4": {
+          "kind": "order",
+          "placed": [
+            "Prikkel",
+            "Receptor",
+            "Zenuw",
+            "Reactie"
+          ],
+          "checked": false
+        }
+      },
+      "score": 1,
+      "sentence": "Je had 1 van de 4 vragen juist."
+    },
+    {
+      "name": "invalid answers never count",
+      "answers": {
+        "3": {
+          "kind": "choice",
+          "chosen": 7
+        },
+        "4": {
+          "kind": "order",
+          "placed": [
+            "Prikkel",
+            "Prikkel",
+            "Zenuw",
+            "Reactie"
+          ],
+          "checked": true
+        },
+        "5": {
+          "kind": "order",
+          "placed": [],
+          "checked": false
+        }
+      },
+      "score": 0,
+      "sentence": "Je hebt 4 vragen geoefend. Lees de uitleg nog eens rustig na."
+    }
+  ],
+  "shuffles": [
+    {
+      "items": [
+        "Prikkel",
+        "Receptor",
+        "Zenuw",
+        "Reactie"
+      ],
+      "seed": 5,
+      "shown": [
+        "Zenuw",
+        "Receptor",
+        "Reactie",
+        "Prikkel"
+      ]
+    },
+    {
+      "items": [
+        "Cel",
+        "Weefsel",
+        "Orgaan"
+      ],
+      "seed": 7,
+      "shown": [
+        "Weefsel",
+        "Orgaan",
+        "Cel"
+      ]
+    },
+    {
+      "items": [
+        "A",
+        "B"
+      ],
+      "seed": 1,
+      "shown": [
+        "B",
+        "A"
+      ]
+    }
+  ],
+  "studentPayloadOmits": [
+    "review"
+  ]
+}

@@ -11,7 +11,7 @@ import pg from "pg";
 import { ContentError, ContentStore, validate } from "../src/content.mjs";
 import { migrate } from "../src/db.mjs";
 import { Directory } from "../src/directory.mjs";
-import { render, TARGET } from "../scripts/vendor-content.mjs";
+import { renderAll } from "../scripts/vendor-content.mjs";
 
 let admin;
 let pool;
@@ -97,14 +97,15 @@ function object(id = `lo-${n++}`, missionId = `${id}-m1`) {
 	};
 }
 
-test("the vendored schema is exactly the shared packages/content schema", async (t) => {
-	const fresh = await render();
+test("the vendored schema and mission rules are exactly the shared packages/content code", async (t) => {
+	const fresh = await renderAll();
 	if (!fresh) return t.skip("TypeScript not installed here; the workspace CI checks this");
-	assert.equal(
-		await readFile(TARGET, "utf8"),
-		fresh,
-		"run: node apps/management/scripts/vendor-content.mjs",
-	);
+	for (const { target, text } of fresh)
+		assert.equal(
+			await readFile(target, "utf8"),
+			text,
+			`${target.pathname} is stale; run: node apps/management/scripts/vendor-content.mjs`,
+		);
 });
 
 test("the existing Android sample learning objects validate and store unchanged (apart from review)", async (t) => {
