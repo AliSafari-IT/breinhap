@@ -320,3 +320,81 @@ test("without the database the library says it is not set up, and refuses saves"
 	assert.match(res.body, /nog niet ingericht/);
 	assert.equal((await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() })).status, 503);
 });
+
+test("preview (breinhap#28): the owner sees the draft or a revision as a student would; nothing is stored or published", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() });
+	const count = async () =>
+		(
+			await pool.query(
+				`SELECT (SELECT count(*) FROM learning_object_revisions WHERE workspace_id = $1)::int AS revisions,
+				        (SELECT max(version) FROM learning_object_drafts WHERE workspace_id = $1)::int AS version,
+				        (SELECT count(*) FROM revision_reviews WHERE workspace_id = $1)::int AS reviews`,
+				[s.workspace],
+			)
+		).rows[0];
+	const before = await count();
+
+	assert.match((await s.call("/bibliotheek/prikkel-reactie", { who: teacher })).body, /href="\/bibliotheek\/prikkel-reactie\/voorbeeld"/);
+	const first = await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher });
+	assert.equal(first.status, 200);
+	assert.equal(first.headers["cache-control"], "no-store");
+	assert.match(first.body, /Voorbeeld van het concept \(versie 1\)/);
+	assert.match(first.body, /<li aria-current="step">Opwarmen<\/li>/);
+	assert.match(first.body, /Denk aan iets dat je laat schrikken\./);
+	// the author's sources never reach the student view
+	assert.doesNotMatch(first.body, /Biologie voor jou 3/);
+	// warm-up, two learn cards, then the practice question at page 3
+	const answered = await s.call("/bibliotheek/prikkel-reactie/voorbeeld?stap=3&kies=0", { who: teacher });
+	assert.match(answered.body, /Klopt\./);
+	assert.match(answered.body, /Een prikkel is een verandering in de omgeving\./);
+	const done = await s.call("/bibliotheek/prikkel-reactie/voorbeeld?stap=5&a=3c0;4o0.1.2", { who: teacher });
+	assert.match(done.body, /Missie klaar\./);
+	assert.match(done.body, /Je had 2 van de 2 vragen juist\./);
+
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	await s.call("/bibliotheek/prikkel-reactie", { who: teacher, method: "POST", form: { ...validFields(), title: "Nieuwe titel", expectedVersion: "1" } });
+	const revision = await s.call("/bibliotheek/prikkel-reactie/voorbeeld?revisie=1", { who: teacher });
+	assert.equal(revision.status, 200);
+	assert.match(revision.body, /Voorbeeld van revisie 1/);
+	assert.match((await s.call("/bibliotheek/prikkel-reactie", { who: teacher })).body, /voorbeeld\?revisie=1/);
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld?revisie=9", { who: teacher })).status, 404);
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld?revisie=abc", { who: teacher })).status, 404);
+
+	// read-only: walking the preview changed nothing; it has no POST at all
+	const afterwards = await count();
+	assert.deepEqual(afterwards, { revisions: before.revisions + 1, version: before.version + 1, reviews: before.reviews });
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher, method: "POST", form: {} })).status, 405);
+
+	// scope: another author, an administrator and a signed-out visitor see nothing
+	const parent = await s.login("parent");
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: parent })).status, 404);
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld?revisie=1", { who: parent })).status, 404);
+	const boss = await s.login("admin");
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: boss })).status, 403);
+	assert.equal((await s.call("/bibliotheek/prikkel-reactie/voorbeeld")).status, 303);
+
+	// content of a schema version this service does not know is refused clearly, never guessed at
+	await pool.query(
+		`UPDATE learning_object_drafts SET content = jsonb_set(content, '{schemaVersion}', '2')
+		 WHERE workspace_id = $1 AND learning_object_id = 'prikkel-reactie'`,
+		[s.workspace],
+	);
+	const unknown = await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher });
+	assert.equal(unknown.status, 422);
+	assert.match(unknown.body, /schemaversie die deze preview niet kent/);
+	await pool.query(
+		`UPDATE learning_object_drafts SET content = jsonb_set(content, '{missions}', '[]')
+		 WHERE workspace_id = $1 AND learning_object_id = 'prikkel-reactie'`,
+		[s.workspace],
+	);
+	await pool.query(
+		`UPDATE learning_object_drafts SET content = jsonb_set(content, '{schemaVersion}', '1')
+		 WHERE workspace_id = $1 AND learning_object_id = 'prikkel-reactie'`,
+		[s.workspace],
+	);
+	const invalid = await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher });
+	assert.equal(invalid.status, 422);
+	assert.match(invalid.body, /nog niet geldig/);
+});

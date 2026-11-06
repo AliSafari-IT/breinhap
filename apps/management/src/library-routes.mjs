@@ -1,3 +1,4 @@
+import { validate } from "./content.mjs";
 import { ORIGIN, readForm } from "./identity.mjs";
 import {
 	ContentError,
@@ -8,6 +9,8 @@ import {
 	SUBJECTS,
 	toValues,
 } from "./library.mjs";
+import { previewPage } from "./preview.mjs";
+import { assertSupported, studentPayload, SUPPORTED_SCHEMA_VERSIONS } from "./vendor/content-mission.mjs";
 
 /**
  * Routes of the content library (breinhap#27), under /bibliotheek. Every request resolves the
@@ -95,9 +98,14 @@ export async function handleLibrary(req, url, { identity, content }) {
 		});
 	}
 
-	const match = /^\/bibliotheek\/([a-z0-9-]{1,80})(?:\/(vastleggen|dupliceren|archiveren))?$/.exec(path);
+	const match = /^\/bibliotheek\/([a-z0-9-]{1,80})(?:\/(vastleggen|dupliceren|archiveren|voorbeeld))?$/.exec(path);
 	if (!match || !ID.test(match[1])) return { status: 404, title: "Niet gevonden", body: '<a href="/bibliotheek">Naar de bibliotheek</a>' };
 	const [, id, action] = match;
+	// breinhap#28: the preview only reads; its state lives in the URL
+	if (action === "voorbeeld") {
+		if (req.method === "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET" } };
+		return guard(() => preview(content, principal, id, url));
+	}
 	if (action && req.method !== "POST")
 		return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "POST" } };
 
@@ -189,4 +197,52 @@ export async function handleLibrary(req, url, { identity, content }) {
 		await content.archive(principal, id);
 		return redirect("/bibliotheek?gearchiveerd=1");
 	});
+}
+
+/**
+ * breinhap#28: the preview of the owner's draft, or of one of its revisions (`?revisie=N`). It reads
+ * through the same owner-scoped store as the editor, renders only the student payload, and writes
+ * nothing anywhere.
+ */
+async function preview(content, principal, id, url) {
+	const asked = url.searchParams.get("revisie");
+	const back = `/bibliotheek/${id}`;
+	let stored;
+	let label;
+	if (asked !== null) {
+		if (!/^[1-9]\d{0,5}$/.test(asked)) return { status: 404, title: "Niet gevonden", body: `Deze revisie bestaat niet. <a href="${back}">Terug</a>` };
+		stored = (await content.revision(principal, id, Number(asked))).content;
+		label = `revisie ${Number(asked)}`;
+	} else {
+		const draft = await content.get(principal, id);
+		stored = draft.content;
+		label = `het concept (versie ${draft.version})`;
+	}
+	try {
+		assertSupported(stored);
+	} catch {
+		return {
+			status: 422,
+			title: "Voorbeeld niet mogelijk",
+			body: `Deze inhoud gebruikt een schemaversie die deze preview niet kent (deze preview kent versie ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}). Ze toont niets wat ze niet begrijpt. <a href="${back}">Terug naar het leerobject</a>`,
+		};
+	}
+	let object;
+	try {
+		({ object } = validate(stored, []));
+	} catch (error) {
+		if (!(error instanceof ContentError)) throw error;
+		return {
+			status: 422,
+			title: "Voorbeeld niet mogelijk",
+			body: `Dit concept is nog niet geldig, dus een leerling kan het zo niet krijgen. Sla het eerst correct op in de editor. <a href="${back}">Terug naar het leerobject</a>`,
+		};
+	}
+	const payload = studentPayload(object);
+	return {
+		status: 200,
+		title: `Voorbeeld: ${payload.title}`,
+		body: previewPage(payload, url.searchParams, { base: `${back}/voorbeeld`, back, label }),
+		headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
+	};
 }

@@ -1,5 +1,5 @@
 // GENERATED from packages/content/src/schema.ts by apps/management/scripts/vendor-content.mjs.
-// Do not edit: change the schema there, then run the script (breinhap#26).
+// Do not edit: change it there, then run the script (breinhap#26, #28).
 import { z } from "zod";
 /**
  * A Breinhap learning object: one topic, aligned to official leerdoelen,

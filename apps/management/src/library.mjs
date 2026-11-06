@@ -346,10 +346,10 @@ export function editorPage({ values, errors = {}, notice = "", csrf, id, version
 	const slots = Math.min(SLOTS.missions, missionCount + 1);
 	const errorCount = Object.keys(errors).length;
 	const history = id
-		? `<h2>Geschiedenis</h2>${
+		? `<p><a href="/bibliotheek/${esc(id)}/voorbeeld">Voorbeeld bekijken zoals een leerling</a> <small>(het laatst opgeslagen concept)</small></p><h2>Geschiedenis</h2>${
 				revisions.length
 					? `<ol class="history">${revisions
-							.map((r) => `<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })} · ${r.decision === "approved" ? "goedgekeurd" : r.decision === "changes_requested" ? "aanpassen gevraagd" : "nog niet nagekeken"}</li>`)
+							.map((r) => `<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })} · ${r.decision === "approved" ? "goedgekeurd" : r.decision === "changes_requested" ? "aanpassen gevraagd" : "nog niet nagekeken"} · <a href="/bibliotheek/${esc(id)}/voorbeeld?revisie=${r.revision}">Voorbeeld</a></li>`)
 							.join("")}</ol>`
 					: "<p>Nog geen vastgelegde revisies. Leg een revisie vast wanneer de inhoud klaar is om na te kijken.</p>"
 			}<form method="post" action="/bibliotheek/${esc(id)}/vastleggen"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="expectedVersion" value="${esc(version)}"><button>Revisie vastleggen</button></form>

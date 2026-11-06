@@ -343,3 +343,17 @@ test("direct removal accepts the same long IDs as the content schema", async () 
   await store.clear(long.id);
   assert.equal(disk.values.size, 0);
 });
+
+// breinhap#28: the app scores exactly like the shared mission rules (the same fixture the management
+// preview and a later web client check against).
+test("the app follows the shared mission parity fixture", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { shuffleForDisplay } = await import("../../../packages/content/src/pick.ts");
+  const fixture = JSON.parse(await readFile(new URL("../../../packages/content/fixtures/mission-parity.json", import.meta.url), "utf8"));
+  const mission = fixture.object.missions[0];
+  const parityPages = missionPages(mission);
+  assert.deepEqual(parityPages.map((p) => `${p.step}:${p.kind}`), fixture.pages);
+  for (const c of fixture.cases)
+    assert.equal(score({ index: parityPages.length, answers: c.answers }, parityPages), c.score, c.name);
+  for (const s of fixture.shuffles) assert.deepEqual(shuffleForDisplay(s.items, s.seed), s.shown);
+});
