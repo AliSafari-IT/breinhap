@@ -111,7 +111,11 @@ test("the register page explains one simple path and needs no invitation", async
 	assert.equal(anonymous.headers.Location, "/register");
 });
 
-test("a new account chooses a role, waits for approval, and then gets in", async () => {
+/** The profile form that completes a registration (breinhap#signup). */
+const profile = (role, token, extra = {}) =>
+	new URLSearchParams({ firstName: "Kim", lastName: "Peeters", role, organisation: "Sint-Jozefcollege", note: "Klas 3B", consent: "1", csrf: token, ...extra }).toString();
+
+test("a new account fills in its profile and role, waits for approval, and then gets in", async () => {
 	const { store, call, login, csrf } = await setup();
 	const cookie = await login("newcomer");
 	const home = await call("/", { cookie });
@@ -119,7 +123,9 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	assert.equal(home.headers.Location, "/registreren");
 	const form = await call("/registreren", { cookie });
 	assert.equal(form.status, 200);
-	assert.match(form.body, /Kies je rol/);
+	assert.match(form.body, /Je gegevens/);
+	assert.match(form.body, /name="firstName"/);
+	assert.match(form.body, /name="consent"/);
 	for (const role of ["breinhap.parent", "breinhap.tutor", "breinhap.teacher"])
 		assert.match(form.body, new RegExp(`value="${role}"`));
 	assert.doesNotMatch(form.body, /breinhap\.admin|breinhap\.student/);
@@ -131,17 +137,29 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 				await call("/registreren", {
 					cookie,
 					method: "POST",
-					body: `role=${role}&csrf=${token}`,
+					body: profile(role, token),
 				})
 			).status,
 			400,
 		);
+	// the profile is complete: a name, a school for teachers and tutors, and consent; typed text stays
+	for (const [extra, message] of [
+		[{ firstName: "" }, /Vul je voornaam en achternaam in/],
+		[{ organisation: "" }, /Vul je school of organisatie in/],
+		[{ consent: "" }, /Ga akkoord met de voorwaarden/],
+	]) {
+		const refused = await call("/registreren", { cookie, method: "POST", body: profile("breinhap.teacher", token, extra) });
+		assert.equal(refused.status, 400);
+		assert.match(refused.body, message);
+		assert.match(refused.body, /value="Peeters"/);
+	}
+	assert.equal(await store.roleRequest("newcomer"), null);
 	assert.equal(
 		(
 			await call("/registreren", {
 				cookie,
 				method: "POST",
-				body: "role=breinhap.teacher&csrf=forged",
+				body: profile("breinhap.teacher", "forged"),
 			})
 		).status,
 		403,
@@ -151,7 +169,7 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 			await call("/registreren", {
 				cookie,
 				method: "POST",
-				body: `role=breinhap.teacher&csrf=${token}`,
+				body: profile("breinhap.teacher", token),
 				origin: "https://evil.example",
 			})
 		).status,
@@ -160,22 +178,24 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	const sent = await call("/registreren", {
 		cookie,
 		method: "POST",
-		body: `role=breinhap.teacher&csrf=${token}`,
+		body: profile("breinhap.teacher", token),
 	});
 	assert.equal(sent.status, 303);
 	const waiting = await call("/registreren", { cookie });
 	assert.match(waiting.body, /Aanvraag verstuurd/);
 	assert.match(waiting.body, /Leerkracht/);
-	// the requester is told who decides, where, and that no e-mail follows
+	assert.match(waiting.body, /Kim Peeters/);
+	assert.match(waiting.body, /Sint-Jozefcollege/);
+	// the requester is told who decides
 	assert.match(waiting.body, /beheerder van Breinhap/);
-	assert.match(waiting.body, /Toegang beheren/);
-	assert.match(waiting.body, /geen e-mail/);
+	// in their language
+	assert.match((await call("/registreren?lang=fr", { cookie })).body, /Demande envoyée/);
 	assert.equal((await call("/bibliotheek", { cookie })).status, 303);
 	// A second request does not replace the first.
 	await call("/registreren", {
 		cookie,
 		method: "POST",
-		body: `role=breinhap.parent&csrf=${token}`,
+		body: profile("breinhap.parent", token),
 	});
 	assert.equal((await store.roleRequest("newcomer")).role, "breinhap.teacher");
 
@@ -186,10 +206,9 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	assert.match(overview.body, /href="\/beheer"/);
 	const manage = await call("/beheer", { cookie: admin });
 	assert.equal(manage.status, 200);
-	assert.match(
-		manage.body,
-		/<code>newcomer<\/code> vraagt toegang als <strong>Leerkracht/,
-	);
+	// the administrator sees who asks, by name, with what they told; never an account code
+	assert.match(manage.body, /<strong>Kim Peeters<\/strong>.*<td>Leerkracht<\/td><td>Sint-Jozefcollege<\/td><td>Klas 3B<\/td>/s);
+	assert.doesNotMatch(manage.body, /newcomer|Accountcode|ASafariM-accountcode/);
 	const id = /name="request" value="([^"]+)"/.exec(manage.body)[1];
 	const approved = await call("/beheer/goedkeuren", {
 		cookie: admin,
@@ -203,6 +222,9 @@ test("a new account chooses a role, waits for approval, and then gets in", async
 	assert.match(inside.body, /Je rollen: Leerkracht/);
 	assert.equal((await call("/registreren", { cookie })).headers.Location, "/");
 	assert.deepEqual(await store.roleRequests(), []);
+	// and the new member is in the administrator's list, with a button to withdraw their access
+	const members = await call("/beheer", { cookie: admin });
+	assert.match(members.body, /<h2>Leden<\/h2>.*Kim Peeters.*Leerkracht.*name="subject" value="newcomer".*Toegang intrekken/s);
 	// Revoking takes access away again.
 	await store.revokeMember("newcomer");
 	assert.equal((await call("/bibliotheek", { cookie })).status, 303);
@@ -215,7 +237,7 @@ test("only an administrator can approve, and a rejected request grants nothing",
 	await call("/registreren", {
 		cookie,
 		method: "POST",
-		body: `role=breinhap.parent&csrf=${csrf(form.body)}`,
+		body: profile("breinhap.parent", csrf(form.body)),
 	});
 	const [request] = await store.roleRequests();
 	assert.equal(

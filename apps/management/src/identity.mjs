@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import * as oidc from "openid-client";
+import { localeOf, langCookie } from "./account/i18n.mjs";
+import { codePage, emailPage, maskEmail } from "./account/pages.mjs";
 import { managementAccess, roleLabels } from "./platform.mjs";
 import { ABSOLUTE_MS, SELF_SERVICE_ROLES } from "./store.mjs";
 
@@ -19,11 +21,12 @@ const redirect = (location, cookies = []) => ({
 	body: "",
 });
 const message = (status, body) => ({ status, body });
-const stepUp = () =>
-	message(
-		428,
-		'Bevestig eerst opnieuw je identiteit. <a href="/auth/start?fresh=1">Opnieuw aanmelden</a>',
-	);
+const stepUpTo = (href) =>
+	message(428, `Bevestig eerst opnieuw je identiteit. <a href="${href}">Opnieuw aanmelden</a>`);
+const html = (status, body, headers = {}) => ({ status, body, type: "text/html; charset=utf-8", headers });
+/** How long a headless account check is reused before asking identity again. */
+const STATUS_CACHE_MS = 60_000;
+const EMAIL = /^[^\s@<>"]{1,64}@[^\s@<>"]{1,190}\.[^\s@<>"]{2,}$/;
 export const readCookie = (req, name) => {
 	const matches = (req.headers.cookie ?? "")
 		.split(";")
@@ -63,8 +66,27 @@ export function createIdentity({
 	store,
 	now = Date.now,
 	audit = store ? store.audit.bind(store) : async () => {},
+	// breinhap#signup: Breinhap's own sign-in pages, e-mail codes sent by ASafariM (app-sdk/headless).
+	headless,
+	version = "",
 }) {
 	if (!store) throw new Error("A shared identity store is required");
+	const stepUp = () => stepUpTo(headless ? "/login?opnieuw=1" : "/auth/start?fresh=1");
+	const statusCache = new Map();
+	/** Whether identity still lets this account use Breinhap (revoked accounts lose their session). */
+	async function stillActive(sub) {
+		const cached = statusCache.get(sub);
+		if (cached && cached.at > now() - STATUS_CACHE_MS) return cached;
+		const answer = { ...(await headless.principal(sub)), at: now() };
+		if (statusCache.size > 5000) statusCache.clear();
+		statusCache.set(sub, answer);
+		return answer;
+	}
+	const requesterOf = (req) => {
+		// Caddy overwrites this header with its transport peer, only for rate limiting.
+		const forwarded = req.headers["x-breinhap-client-address"];
+		return typeof forwarded === "string" && isIP(forwarded) ? forwarded : (req.socket?.remoteAddress ?? "direct");
+	};
 	async function session(req, touch = true) {
 		const id = readCookie(req, SESSION);
 		let saved = id ? await store.getSession(id, touch) : null;
@@ -151,20 +173,30 @@ export function createIdentity({
 	async function current(req, touch = true) {
 		const value = await session(req, touch);
 		if (!value) return null;
-		try {
-			const profile = await provider.userInfo(
-				value.saved.accessToken,
-				value.saved.sub,
-			);
-			if (profile.sub !== value.saved.sub)
-				throw new Error("Identity subject mismatch");
-		} catch (error) {
-			if (error.status === 401) {
+		if (value.saved.method === "headless") {
+			if (!headless) {
 				await store.destroySession(value.id);
 				return null;
 			}
-			throw error;
-		}
+			if (!(await stillActive(value.saved.sub)).active) {
+				await store.destroySession(value.id);
+				return null;
+			}
+		} else
+			try {
+				const profile = await provider.userInfo(
+					value.saved.accessToken,
+					value.saved.sub,
+				);
+				if (profile.sub !== value.saved.sub)
+					throw new Error("Identity subject mismatch");
+			} catch (error) {
+				if (error.status === 401) {
+					await store.destroySession(value.id);
+					return null;
+				}
+				throw error;
+			}
 		const grant = managementAccess(
 			await grants(value.saved.sub),
 			value.saved.sub,
@@ -194,6 +226,8 @@ export function createIdentity({
 				grant.permissions.includes("breinhap.memberships.manage"),
 		};
 		req.managementSession.canRequest = !allowed && !studentOnly;
+		// the administrator's list of people: members from before the index appear on their next visit
+		if (allowed) await store.indexMember(value.saved.sub, value.saved.email ? { email: value.saved.email } : {});
 		return {
 			...value,
 			grant,
@@ -211,6 +245,12 @@ export function createIdentity({
 	}
 	async function handle(req, url) {
 		const path = url.pathname;
+		if (headless) {
+			if ((path === "/login" || path === "/register") && req.method === "POST")
+				return startEmail(req, url, path === "/register");
+			if (path === "/login/code") return enterCode(req, url);
+			if (path === "/login/opnieuw") return resend(req, url);
+		}
 		if (
 			![
 				"/auth/start",
@@ -289,11 +329,13 @@ export function createIdentity({
 				return message(403, "Afmelden geweigerd.");
 			await store.destroySession(id);
 			let location = "/login?logged-out=1";
-			try {
-				location = provider.logoutUrl();
-			} catch {
-				/* Local session has already ended. */
-			}
+			// a headless session has nothing to end at ASafariM; an OIDC one ends its provider session too
+			if (saved.method !== "headless")
+				try {
+					location = provider.logoutUrl();
+				} catch {
+					/* Local session has already ended. */
+				}
 			return redirect(location, [
 				cookie(SESSION, "", 0),
 				cookie(FLOW, "", 0),
@@ -406,17 +448,42 @@ export function createIdentity({
 		if (value.studentOnly) return { student: true };
 		if (req.method !== "POST")
 			return { pending: await store.roleRequest(value.saved.sub) };
-		const form = await readForm(req);
+		const form = await readForm(req, 8192);
 		if (!csrfValid(req, form, value.saved)) return { refused: true };
-		const role = form.get("role");
-		if (form.getAll("role").length !== 1 || !SELF_SERVICE_ROLES.includes(role))
-			return { invalid: true };
+		const one = (name) => (form.getAll(name).length === 1 ? form.get(name).trim() : "");
+		const values = {
+			firstName: one("firstName"),
+			lastName: one("lastName"),
+			role: one("role"),
+			organisation: one("organisation"),
+			note: one("note"),
+			consent: one("consent") === "1",
+		};
+		// The profile completes a registration: who they are and which role they ask for.
+		const invalid = !SELF_SERVICE_ROLES.includes(values.role)
+			? "role"
+			: !values.firstName || !values.lastName || values.firstName.length > 60 || values.lastName.length > 80
+				? "name"
+				: values.role !== "breinhap.parent" && !values.organisation
+					? "organisation"
+					: values.organisation.length > 120 || values.note.length > 500
+						? "name"
+						: !values.consent
+							? "consent"
+							: null;
+		if (invalid) return { invalid, values };
 		if (!(await store.budget("request", 10, 3600, value.saved.sub)))
 			return { busy: true };
-		const result = await store.requestRole(value.saved.sub, role);
+		const result = await store.requestRole(value.saved.sub, values.role, {
+			firstName: values.firstName,
+			lastName: values.lastName,
+			email: value.saved.email ?? "",
+			organisation: values.organisation,
+			note: values.note,
+		});
 		if (result === "full") return { busy: true };
 		if (result === "created")
-			await audit("role.requested", value.saved.sub, role);
+			await audit("role.requested", value.saved.sub, values.role);
 		return { pending: await store.roleRequest(value.saved.sub) };
 	}
 	async function acceptInvitation(req) {
@@ -459,8 +526,102 @@ export function createIdentity({
 		if (!(await store.accept(token, invitation, inviter, value.saved.sub)))
 			return message(409, "De uitnodiging is al gebruikt of gewijzigd.");
 		await audit("invitation.accepted", value.saved.sub, data.inviter);
+		await store.indexMember(value.saved.sub, value.saved.email ? { email: value.saved.email } : {});
 		return redirect("/", [cookie(INVITE, "", 0)]);
 	}
+	// ── breinhap#signup: Breinhap's own e-mail-code sign-in (identity sends the code) ───────────────────
+
+	/** POST /login or /register: send a code, then ask for it. */
+	async function startEmail(req, url, register) {
+		const lang = localeOf(req, url);
+		if (req.headers.origin !== ORIGIN) return message(403, "Aanvraag geweigerd.");
+		const form = await readForm(req);
+		const email = (form.getAll("email").length === 1 ? form.get("email") : "").trim().toLowerCase().slice(0, 254);
+		const page = (status, errorCode) => html(status, emailPage(lang, { register, email, errorCode, version }));
+		if (!EMAIL.test(email)) return page(400, "invalid_email");
+		const requester = requesterOf(req);
+		if (!(await store.budget("start", 30, 60, requester)) || !(await store.budget("start-global", 3000)))
+			return page(429, "rate_limited");
+		const sent = await headless.startEmail({ email, locale: lang, intent: register ? "register" : "signin", ...(isIP(requester) ? { clientIp: requester } : {}) });
+		if (!sent.ok) return page(sent.error === "invalid_email" ? 400 : sent.error === "send_failed" || sent.error === "unavailable" ? 503 : 429, sent.error);
+		const flow = random();
+		await store.putFlow(flow, { kind: "email", email, challenge: sent.challenge, register, csrf: random(), expires: now() + 600_000 });
+		await audit("login.code_sent", "anonymous");
+		return redirect("/login/code", [cookie(FLOW, flow, 600)]);
+	}
+
+	async function readEmailFlow(req) {
+		const token = readCookie(req, FLOW);
+		const flow = token ? await store.readFlow(token) : null;
+		return flow?.kind === "email" && flow.expires > now() ? { token, flow } : null;
+	}
+
+	/** GET shows the code form; POST checks the code and starts a Breinhap session. */
+	async function enterCode(req, url) {
+		const lang = localeOf(req, url);
+		const current = await readEmailFlow(req);
+		if (!current) return redirect("/login?verlopen=1", [cookie(FLOW, "", 0)]);
+		const { token, flow } = current;
+		const page = (status, errorCode) =>
+			html(status, codePage(lang, { masked: maskEmail(flow.email), csrf: flow.csrf, register: flow.register, errorCode, version }), status === 200 && url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang) } : {});
+		if (req.method === "GET" || req.method === "HEAD") return page(200, url.searchParams.get("fout") ?? "");
+		if (req.method !== "POST") return { ...message(405, "Method not allowed"), headers: { Allow: "GET, POST" } };
+		const form = await readForm(req);
+		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== flow.csrf) return message(403, "Aanvraag geweigerd.");
+		const code = (form.get("code") ?? "").replace(/\s/g, "");
+		if (!/^\d{6}$/.test(code)) return page(400, "invalid_code");
+		const requester = requesterOf(req);
+		const result = await headless.verifyEmail({ challenge: flow.challenge, email: flow.email, code, ...(isIP(requester) ? { clientIp: requester } : {}) });
+		if (!result.ok) {
+			if (result.error === "not_connected" || result.error === "revoked") {
+				await store.takeFlow(token);
+				return html(403, emailPage(lang, { register: flow.register, email: flow.email, errorCode: result.error, version }), { "Set-Cookie": cookie(FLOW, "", 0) });
+			}
+			return page(result.error === "rate_limited" ? 429 : result.error === "unavailable" ? 503 : 400, result.error);
+		}
+		await store.takeFlow(token);
+		const previous = readCookie(req, SESSION);
+		if (previous) await store.destroySession(previous);
+		const time = now();
+		const id = random();
+		const saved = {
+			method: "headless",
+			sub: result.sub,
+			sid: random(),
+			email: result.email,
+			authTime: Math.floor(time / 1000),
+			issuedAt: Math.floor(time / 1000),
+			accessToken: "headless",
+			csrf: random(),
+			expires: time + ABSOLUTE_MS,
+			tokenExpires: time + ABSOLUTE_MS,
+		};
+		statusCache.set(result.sub, { active: true, email: result.email, at: time });
+		if (!(await store.saveSession(id, saved))) return message(400, "Deze aanmelding is beëindigd. Probeer opnieuw.");
+		await audit("login.headless", result.sub);
+		return redirect(readCookie(req, INVITE) ? "/uitnodiging/bevestigen" : "/", [
+			cookie(SESSION, id, Math.floor(ABSOLUTE_MS / 1000)),
+			cookie(FLOW, "", 0),
+			langCookie(lang),
+		]);
+	}
+
+	/** POST: send a new code to the same address. */
+	async function resend(req, url) {
+		const lang = localeOf(req, url);
+		if (req.method !== "POST") return { ...message(405, "Method not allowed"), headers: { Allow: "POST" } };
+		const current = await readEmailFlow(req);
+		if (!current) return redirect("/login?verlopen=1", [cookie(FLOW, "", 0)]);
+		const { token, flow } = current;
+		const form = await readForm(req);
+		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== flow.csrf) return message(403, "Aanvraag geweigerd.");
+		const requester = requesterOf(req);
+		const sent = await headless.startEmail({ email: flow.email, locale: lang, intent: flow.register ? "register" : "signin", ...(isIP(requester) ? { clientIp: requester } : {}) });
+		if (!sent.ok) return redirect(`/login/code?fout=${encodeURIComponent(sent.error)}`);
+		await store.replaceFlow(token, { ...flow, challenge: sent.challenge });
+		return redirect("/login/code");
+	}
+
 	// The signed-in adult as this request resolved them: their subject and CURRENT membership role, for
 	// the workspace directory (breinhap#25). An administrator role counts only with its ASafariM grant.
 	async function principal(req) {
@@ -482,6 +643,8 @@ export function createIdentity({
 		audit,
 		ready: () => store.ready(),
 		readInvitation: (req) => readCookie(req, INVITE),
+		headless: Boolean(headless),
+		version,
 	};
 }
 

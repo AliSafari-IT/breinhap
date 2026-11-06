@@ -75,6 +75,22 @@ export const SELF_SERVICE_ROLES = Object.freeze([
 ]);
 export const MAX_PENDING_REQUESTS = 500;
 
+/** What a registering adult tells about themselves: short plain text only. */
+export const PROFILE_FIELDS = { firstName: 60, lastName: 80, email: 254, organisation: 120, note: 500 };
+export function cleanProfile(profile = {}) {
+	const out = {};
+	for (const [field, max] of Object.entries(PROFILE_FIELDS)) {
+		const value = typeof profile?.[field] === "string" ? profile[field].replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max) : "";
+		if (value) out[field] = value;
+	}
+	return out;
+}
+/** How a person is shown to an administrator: their name, else their e-mail, else "(onbekend)". */
+export function labelOf(person) {
+	const p = person?.profile ?? {};
+	return [p.firstName, p.lastName].filter(Boolean).join(" ") || p.email || "(onbekend)";
+}
+
 export class IdentityStore {
 	constructor({ client, secret, workspace = "pilot", now = Date.now }) {
 		const key = Buffer.from(secret ?? "", "base64url");
@@ -140,6 +156,15 @@ export class IdentityStore {
 	async putFlow(id, value) {
 		const key = this.keyFor("flow", id);
 		await this.client.set(key, this.encode(key, value), { EX: 600, NX: true });
+	}
+	async readFlow(id) {
+		const key = this.keyFor("flow", id);
+		return this.decode(key, await this.client.get(key));
+	}
+	/** Replaces a flow that still exists, keeping its expiry. */
+	async replaceFlow(id, value) {
+		const key = this.keyFor("flow", id);
+		await this.client.set(key, this.encode(key, value), { XX: true, KEEPTTL: true });
 	}
 	async takeFlow(id) {
 		const key = this.keyFor("flow", id);
@@ -254,6 +279,7 @@ export class IdentityStore {
 	}
 	async bootstrap(sub) {
 		const key = this.keyFor("member", sub);
+		await this.indexMember(sub);
 		return this.client.set(
 			key,
 			this.encode(key, {
@@ -266,14 +292,47 @@ export class IdentityStore {
 	}
 	async revokeMember(sub) {
 		await this.client.del(this.keyFor("member", sub));
+		await this.client.hDel(this.memberIndexKey(), digest(sub));
 		await this.rejectRequest(digest(sub));
+	}
+	// The administrator's list of people (breinhap#signup): who each member is, so nobody has to type an
+	// account code. A hash of member digest → encrypted { subject, profile }. Kept up to date when someone
+	// becomes or stops being a member, and filled in on a member's next visit for members from before it.
+	memberIndexKey() {
+		return `${prefix}${this.workspace}:member-index`;
+	}
+	async indexMember(subject, profile = {}, { replace = false } = {}) {
+		const field = digest(subject);
+		const value = this.encode(`${this.memberIndexKey()}:${field}`, { subject, profile: cleanProfile(profile) });
+		if (replace) await this.client.hSet(this.memberIndexKey(), field, value);
+		else await this.client.hSetNX(this.memberIndexKey(), field, value);
+	}
+	/** Current members with their role and profile, by name. Entries whose membership ended are dropped. */
+	async members() {
+		const all = await this.client.hGetAll(this.memberIndexKey());
+		const people = [];
+		for (const [field, raw] of Object.entries(all)) {
+			let entry;
+			try {
+				entry = this.decode(`${this.memberIndexKey()}:${field}`, raw);
+			} catch {
+				continue;
+			}
+			const membership = await this.membership(entry.subject);
+			if (membership?.active !== true) {
+				await this.client.hDel(this.memberIndexKey(), field);
+				continue;
+			}
+			people.push({ subject: entry.subject, role: membership.role, profile: entry.profile ?? {} });
+		}
+		return people.sort((a, b) => labelOf(a).localeCompare(labelOf(b), "nl"));
 	}
 	requestKeys(id) {
 		const base = `${prefix}${this.workspace}:`;
 		return [`${base}requests`, `${base}request:${id}`];
 	}
 	// A signed-in adult asks for one self-service role. Returns "created", "exists" or "full".
-	async requestRole(subject, role) {
+	async requestRole(subject, role, profile = {}) {
 		if (!SELF_SERVICE_ROLES.includes(role)) throw new Error("Invalid role");
 		const id = digest(subject);
 		const keys = this.requestKeys(id);
@@ -282,7 +341,7 @@ export class IdentityStore {
 				keys,
 				arguments: [
 					id,
-					this.encode(keys[1], { subject, role, at: this.now() }),
+					this.encode(keys[1], { subject, role, profile: cleanProfile(profile), at: this.now() }),
 					String(MAX_PENDING_REQUESTS),
 				],
 			}),
@@ -330,7 +389,7 @@ export class IdentityStore {
 		)
 			return false;
 		const recipient = this.keyFor("member", request.subject);
-		return (
+		const approved =
 			Number(
 				await this.client.eval(APPROVE, {
 					keys: [...keys, approverKey, recipient],
@@ -345,8 +404,9 @@ export class IdentityStore {
 						}),
 					],
 				}),
-			) === 1
-		);
+			) === 1;
+		if (approved) await this.indexMember(request.subject, request.profile, { replace: true });
+		return approved;
 	}
 	async invite(token, data) {
 		const memberKey = this.keyFor("member", data.inviter);

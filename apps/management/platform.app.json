@@ -1,7 +1,7 @@
 {
 	"id": "breinhap",
 	"name": "Breinhap beheer",
-	"version": "0.2.11",
+	"version": "0.2.12",
 	"platform": ">=0.1 <1",
 	"owner": "ASafariM Digital",
 	"domains": {
@@ -31,6 +31,8 @@
 			"/login",
 			"/register",
 			"/aanmelden",
+			"/login/code",
+			"/login/opnieuw",
 			"/auth/start",
 			"/auth/callback",
 			"/auth/backchannel-logout",

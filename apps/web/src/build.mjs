@@ -76,17 +76,17 @@ ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="
 }
 
 // breinhap.com/login and /register: the adult entry, as one sign-in card that goes straight to the
-// secure sign-in (management's /auth/start → ASafariM). A first sign-in creates the account; management
+// sign-in and registration pages on management (an e-mail code; ASafariM only sends it). Management
 // then asks for the role, so registering and signing in are the same safe flow with different words.
-const START = "https://management.breinhap.com/auth/start";
+const MANAGEMENT = "https://management.breinhap.com";
 const entry = {
   nl: {
     eyebrow: "Voor ouders, begeleiders en leerkrachten",
     login: { title: "Aanmelden", lead: "Welkom terug. Meld je aan om verder te werken met je leerlingen en je leerinhoud.", button: "Doorgaan naar aanmelden", switchText: "Nieuw bij Breinhap?", switchLink: "Account aanmaken" },
     register: { title: "Account aanmaken", lead: "Maak een account voor de Breinhap-werkplek. Je hebt geen uitnodiging nodig.", button: "Account aanmaken", switchText: "Heb je al een account?", switchLink: "Aanmelden" },
-    steps: [["Bevestig wie je bent", "Via het beveiligde ASafariM-account. De eerste keer maak je zo je account."], ["Kies je rol", "Je bent ouder, begeleider of leerkracht."], ["Een beheerder keurt goed", "Daarna kom je meteen in je werkplek."]],
+    steps: [["Bevestig je e-mailadres", "Met een code die we je mailen. Geen wachtwoord nodig."], ["Vul je gegevens in", "Je naam, je rol (ouder, begeleider of leerkracht) en je school."], ["Een beheerder keurt goed", "Daarna kom je meteen in je werkplek."]],
     stepsTitle: "Zo werkt het",
-    secure: "Je meldt je aan via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Breinhap krijgt nooit je wachtwoord of code te zien.",
+    secure: "Je account loopt via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Je meldt je aan met een code per e-mail: er is geen wachtwoord dat kan uitlekken.",
     student: "<strong>Ben je leerling?</strong> Je hebt geen account nodig. Voor leerlingen is aanmelden nog niet beschikbaar.",
     sideTitle: "Je werkplek bij Breinhap",
     side: [["Leerlingen en groepen", "Volg je kind of je leerlingen op, binnen de groepen die je beheert."], ["Leerinhoud maken", "Missies in vier vaste stappen, en een voorbeeld zoals een leerling ze ziet."], ["Rustig en veilig", "Geen advertenties, geen tracking en geen gezondheidsgegevens."]],
@@ -98,9 +98,9 @@ const entry = {
     eyebrow: "For parents, tutors and teachers",
     login: { title: "Sign in", lead: "Welcome back. Sign in to continue working with your students and your learning content.", button: "Continue to sign in", switchText: "New to Breinhap?", switchLink: "Create an account" },
     register: { title: "Create an account", lead: "Create an account for the Breinhap workspace. No invitation needed.", button: "Create an account", switchText: "Already have an account?", switchLink: "Sign in" },
-    steps: [["Confirm who you are", "With your secure ASafariM account. The first time, this creates your account."], ["Choose your role", "You are a parent, tutor or teacher."], ["An administrator approves", "Then your workspace opens right away."]],
+    steps: [["Confirm your e-mail", "With a code we send you. No password needed."], ["Fill in your details", "Your name, your role (parent, tutor or teacher) and your school."], ["An administrator approves", "Then your workspace opens right away."]],
     stepsTitle: "How it works",
-    secure: "You sign in through ASafariM, the secure sign-in platform behind Breinhap. Breinhap never sees your password or code.",
+    secure: "Your account runs through ASafariM, the secure sign-in platform behind Breinhap. You sign in with a code by e-mail: there is no password that could leak.",
     student: "<strong>Are you a student?</strong> You do not need an account. Student sign-in is not available yet.",
     sideTitle: "Your Breinhap workspace",
     side: [["Students and groups", "Follow your child or your students, within the groups you manage."], ["Create learning content", "Missions in four fixed steps, with a preview as a student sees them."], ["Calm and safe", "No ads, no tracking and no health data."]],
@@ -123,7 +123,7 @@ function entryPage(lang, kind) {
 <h1 id="auth-title">${k.title}</h1>
 <p class="auth-lead">${k.lead}</p>
 ${registering ? steps : ""}
-<a class="button button-block" href="${START}">${k.button} <span aria-hidden="true">→</span></a>
+<a class="button button-block" href="${MANAGEMENT}/${kind}?lang=${lang}">${k.button} <span aria-hidden="true">→</span></a>
 <p class="auth-secure"><svg class="lock" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> ${e.secure}</p>
 <p class="auth-switch">${k.switchText} <a href="${registering ? e.loginPath : e.registerPath}">${k.switchLink}</a></p>
 <p class="auth-student">${e.student}</p>

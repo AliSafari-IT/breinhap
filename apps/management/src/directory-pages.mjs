@@ -1,5 +1,6 @@
 import { DirectoryError, GRANTABLE, SCHOOL_YEARS } from "./directory.mjs";
 import { SELF_SERVICE_ROLES } from "./store.mjs";
+const ROLE_NAME = { "breinhap.parent": "ouder", "breinhap.tutor": "begeleider", "breinhap.teacher": "leerkracht", "breinhap.admin": "beheerder" };
 
 /**
  * The management pages of breinhap#25: the administrator's "Leerlingen en groepen" page with its
@@ -40,7 +41,15 @@ const button = (path, fields, label, csrf) =>
 		.join("")}${csrfField(csrf)}<button>${label}</button></form>`;
 
 /** The administrator's page. `content` goes inside the shell's paragraph, hence the leading </p>. */
-export function adminDirectoryPage(view, csrf) {
+export function adminDirectoryPage(view, csrf, members = []) {
+	// breinhap#signup: people by name and e-mail, never an account code to type
+	const nameOf = new Map(members.map((m) => [m.subject, [[m.profile?.firstName, m.profile?.lastName].filter(Boolean).join(" "), m.profile?.email].filter(Boolean).join(" · ") || "(onbekend lid)"]));
+	const who = (sub) => esc(nameOf.get(sub) ?? "(geen lid meer)");
+	const adults = members.filter((m) => m.role !== "breinhap.admin");
+	const peopleSelect = (label) =>
+		adults.length
+			? `<label>${label} <select name="subject" required>${adults.map((m) => `<option value="${esc(m.subject)}">${esc(nameOf.get(m.subject))} (${esc(ROLE_NAME[m.role] ?? m.role)})</option>`).join("")}</select></label>`
+			: "";
 	const learnerName = new Map(view.learners.map((l) => [l.id, l.displayName]));
 	const groupName = new Map(view.groups.map((g) => [g.id, g.name]));
 	const membersOf = (groupId) =>
@@ -95,7 +104,7 @@ export function adminDirectoryPage(view, csrf) {
 		? `<ul class="requests">${view.links
 				.map(
 					(k) =>
-						`<li><p>Accountcode <code>${esc(k.adultSub)}</code> → ${
+						`<li><p><strong>${who(k.adultSub)}</strong> → ${
 							k.learnerId
 								? `leerling <strong>${esc(learnerName.get(k.learnerId) ?? "(gearchiveerd)")}</strong>`
 								: `groep <strong>${esc(groupName.get(k.groupId) ?? "(gearchiveerd)")}</strong>`
@@ -107,7 +116,7 @@ export function adminDirectoryPage(view, csrf) {
 		? `<ul class="requests">${view.grants
 				.map(
 					(r) =>
-						`<li><p>Accountcode <code>${esc(r.adultSub)}</code>: ${esc(CAPABILITY[r.capability] ?? r.capability)}</p>${button("/beheer/rechten/intrekken", { grant: r.id }, "Recht intrekken", csrf)}</li>`,
+						`<li><p><strong>${who(r.adultSub)}</strong>: ${esc(CAPABILITY[r.capability] ?? r.capability)}</p>${button("/beheer/rechten/intrekken", { grant: r.id }, "Recht intrekken", csrf)}</li>`,
 				)
 				.join("")}</ul>`
 		: "<p>Nog geen extra rechten.</p>";
@@ -118,9 +127,9 @@ export function adminDirectoryPage(view, csrf) {
 <h2>Groepen</h2>${groups}
 <form method="post" action="/beheer/groepen/nieuw"><label>Naam van de groep <input name="name" required maxlength="60"></label>${csrfField(csrf)}<button>Groep maken</button></form>
 <h2>Koppelingen</h2><p>Een ouder of begeleider ziet alleen de leerlingen die je aan hen koppelt; een leerkracht of begeleider ziet de leerlingen van de groepen die je aan hen koppelt. Je kunt jezelf niet koppelen.</p>${links}
-${targets ? `<form method="post" action="/beheer/koppelingen/nieuw"><label>ASafariM-accountcode <input name="subject" required maxlength="400"></label><label>Koppelen aan <select name="target">${targets}</select></label>${csrfField(csrf)}<button>Koppeling maken</button></form>` : "<p>Maak eerst een leerling of groep.</p>"}
+${!targets ? "<p>Maak eerst een leerling of groep.</p>" : !adults.length ? '<p>Er zijn nog geen goedgekeurde ouders, begeleiders of leerkrachten. Keur eerst een aanvraag goed bij <a href="/beheer">Toegang beheren</a>.</p>' : `<form method="post" action="/beheer/koppelingen/nieuw">${peopleSelect("Wie")}<label>Koppelen aan <select name="target">${targets}</select></label>${csrfField(csrf)}<button>Koppeling maken</button></form>`}
 <h2>Extra rechten</h2><p>Nakijken en publiceren horen bij geen enkele rol vanzelf. Geef ze alleen aan wie dat werk doet.</p>${grants}
-<form method="post" action="/beheer/rechten/toekennen"><label>ASafariM-accountcode <input name="subject" required maxlength="400"></label><label>Recht <select name="capability">${GRANTABLE.map((c) => `<option value="${c}">${CAPABILITY[c]}</option>`).join("")}</select></label>${csrfField(csrf)}<button>Recht toekennen</button></form><p><a href="/beheer">Terug naar Toegang beheren</a>`;
+${adults.length ? "" : "<p>Er zijn nog geen leden om een recht aan te geven.</p>"}<form method="post" action="/beheer/rechten/toekennen"${adults.length ? "" : " hidden"}>${peopleSelect("Wie")}<label>Recht <select name="capability">${GRANTABLE.map((c) => `<option value="${c}">${CAPABILITY[c]}</option>`).join("")}</select></label>${csrfField(csrf)}<button>Recht toekennen</button></form><p><a href="/beheer">Terug naar Toegang beheren</a>`;
 }
 
 /** The adult's own page: only what the directory lets them see. */
