@@ -19,7 +19,7 @@ import {
 } from "./directory-pages.mjs";
 import { langCookie, localeOf, T } from "./account/i18n.mjs";
 import { header } from "./header.mjs";
-import { emailPage, pendingPage, profilePage } from "./account/pages.mjs";
+import { emailPage, fallbackPage, pendingPage, profilePage } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
 import { handleImports } from "./imports/routes.mjs";
@@ -76,34 +76,6 @@ function page(title, content, active, session) {
 			? ""
 			: `<nav aria-label="Beheernavigatie">${[...routes].map(([path, [label]]) => `<a href="${path}"${active === path ? ' aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
 	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer", href: "/" })}${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
-}
-
-const LOCK =
-	'<svg class="lock" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
-const SECURE = `<p class="auth-secure">${LOCK} Je meldt je aan via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Breinhap krijgt nooit je wachtwoord of code te zien.</p>`;
-const STUDENT =
-	'<p class="auth-student"><strong>Ben je leerling?</strong> Je hebt hier geen account nodig: gebruik <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.</p>';
-const steps = (current) =>
-	`<ol class="auth-steps">${[
-		["Bevestig wie je bent", "Via het beveiligde ASafariM-account. De eerste keer maak je zo je account."],
-		["Kies je rol", "Je bent ouder, begeleider of leerkracht."],
-		["Een beheerder keurt goed", "Daarna kom je meteen in je werkplek."],
-	]
-		.map(
-			([title, text], i) =>
-				`<li${i === current ? ' aria-current="step"' : ""}${i < current ? ' class="done"' : ""}><span class="step-n" aria-hidden="true">${i < current ? "✓" : i + 1}</span><div><strong>${title}</strong><small>${text}</small></div></li>`,
-		)
-		.join("")}</ol>`;
-
-/**
- * The sign-in, register and role pages: one card in the middle, the same as breinhap.com/login, so the
- * adult entry looks like one product from breinhap.com to the workspace.
- */
-function authPage(title, card, session) {
-	const account = session
-		? `<form method="post" action="/afmelden" class="auth-signout"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit" class="link">Afmelden</button></form>`
-		: "";
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer" })}<main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">Voor ouders, begeleiders en leerkrachten</p><h1 id="auth-title">${title}</h1>${card}${account}</section></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -570,19 +542,15 @@ export function createHandler({
 					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);
 			}
-			if (identity)
+			if (identity) {
+				const lang = localeOf(req, url);
 				return send(
 					200,
-					url.pathname === "/register"
-						? authPage(
-								"Account aanmaken",
-								`<p class="auth-lead">Maak een account voor de Breinhap-werkplek. Je hebt alleen een ASafariM-account en een rol nodig.</p>${steps(0)}<a class="action action-block" href="/auth/start">Account aanmaken <span aria-hidden="true">→</span></a>${SECURE}<p class="auth-switch">Heb je al een account? <a href="/login">Aanmelden</a></p>${STUDENT}`,
-							)
-						: authPage(
-								"Aanmelden",
-								`<p class="auth-lead">Welkom terug. Meld je aan om verder te werken met je leerlingen en je leerinhoud.</p><a class="action action-block" href="/auth/start">Aanmelden met ASafariM <span aria-hidden="true">→</span></a>${SECURE}<p class="auth-switch">Nieuw bij Breinhap? <a href="/register">Account aanmaken</a></p>${STUDENT}`,
-							),
+					fallbackPage(lang, { register: url.pathname === "/register", version: manifest.version }),
+					undefined,
+					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);
+			}
 
 			return send(
 				503,

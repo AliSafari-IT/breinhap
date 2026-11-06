@@ -208,6 +208,21 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	const signIn = await get("/aanmelden");
 	assert.equal(signIn.status, 200);
 	assert.match(signIn.body, /Aanmelden met ASafariM/);
+	// the same page in every language, with the selector and the shared cookie (ASafariM's headless sign-in is off)
+	for (const [lang, title, button] of [["en", "Sign in", "Sign in with ASafariM"], ["fr", "Se connecter", "Se connecter avec ASafariM"], ["de", "Anmelden", "Mit ASafariM anmelden"]]) {
+		const page = await get(`/login?lang=${lang}`);
+		assert.equal(page.status, 200);
+		assert.match(page.body, new RegExp(`<html lang="${lang}">`));
+		assert.match(page.body, new RegExp(`<h1 id="auth-title">${title}</h1>`));
+		assert.ok(page.body.includes(`href="/auth/start">${button} `), lang);
+		assert.ok(page.body.includes(`data-locale-selector data-lang="${lang}"`), lang);
+		assert.match([page.headers["set-cookie"] ?? ""].flat().join(), new RegExp(`breinhap-lang=${lang}; Path=/; Secure; SameSite=Lax; Max-Age=31536000; Domain=breinhap\\.com`));
+	}
+	const register = await get("/register?lang=en");
+	assert.match(register.body, /<h1 id="auth-title">Create an account<\/h1>/);
+	assert.match(register.body, /All you need is an ASafariM account and a role\./);
+	assert.match(register.body, /Confirm who you are/);
+	assert.doesNotMatch(register.body, /Maak een account voor|Bevestig wie je bent/);
 	assert.ok(signIn.body.includes(`Breinhap beheer · ${manifest.version}`));
 	assert.equal((await get("/readyz")).status, 200);
 	const start = await get("/auth/start");
