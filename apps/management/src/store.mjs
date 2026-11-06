@@ -68,6 +68,18 @@ if redis.call('GET',KEYS[2]) ~= ARGV[2] then return 0 end
 if redis.call('GET',KEYS[3]) ~= ARGV[3] then return 0 end
 if redis.call('EXISTS',KEYS[4])==1 then redis.call('DEL',KEYS[2]); drop(ARGV[1]); return 0 end
 redis.call('SET',KEYS[4],ARGV[4]); redis.call('DEL',KEYS[2]); drop(ARGV[1]); return 1`;
+// The member index (breinhap#signup), with only the commands the deployed Redis ACL allows (no hashes):
+// KEYS[1] the JSON list of ids, KEYS[2] the encrypted entry; ARGV id, value, replace ('1'), max.
+const INDEX = `
+if ARGV[3] ~= '1' and redis.call('EXISTS',KEYS[2])==1 then return 0 end
+local list = cjson.decode(redis.call('GET',KEYS[1]) or '[]'); local found = false
+for _, v in ipairs(list) do if v == ARGV[1] then found = true end end
+if not found then
+  if #list >= tonumber(ARGV[4]) then return 0 end
+  table.insert(list, ARGV[1]); redis.call('SET',KEYS[1],cjson.encode(list))
+end
+redis.call('SET',KEYS[2],ARGV[2]); return 1`;
+export const MAX_MEMBERS = 5000;
 export const SELF_SERVICE_ROLES = Object.freeze([
 	"breinhap.parent",
 	"breinhap.tutor",
@@ -292,35 +304,44 @@ export class IdentityStore {
 	}
 	async revokeMember(sub) {
 		await this.client.del(this.keyFor("member", sub));
-		await this.client.hDel(this.memberIndexKey(), digest(sub));
+		await this.client.eval(REMOVE, { keys: this.memberKeys(digest(sub)), arguments: [digest(sub)] });
 		await this.rejectRequest(digest(sub));
 	}
 	// The administrator's list of people (breinhap#signup): who each member is, so nobody has to type an
-	// account code. A hash of member digest → encrypted { subject, profile }. Kept up to date when someone
-	// becomes or stops being a member, and filled in on a member's next visit for members from before it.
-	memberIndexKey() {
-		return `${prefix}${this.workspace}:member-index`;
+	// account code. A JSON list of member digests and one encrypted { subject, profile } entry each, kept
+	// like the role requests (plain GET/SET in scripts: the deployed Redis ACL allows no hash commands).
+	// Kept up to date when someone becomes or stops being a member, and filled in on a member's next
+	// visit for members from before it.
+	memberKeys(id) {
+		const base = `${prefix}${this.workspace}:`;
+		return [`${base}member-ids`, `${base}member-entry:${id}`];
 	}
 	async indexMember(subject, profile = {}, { replace = false } = {}) {
-		const field = digest(subject);
-		const value = this.encode(`${this.memberIndexKey()}:${field}`, { subject, profile: cleanProfile(profile) });
-		if (replace) await this.client.hSet(this.memberIndexKey(), field, value);
-		else await this.client.hSetNX(this.memberIndexKey(), field, value);
+		const id = digest(subject);
+		const keys = this.memberKeys(id);
+		// the common case (every request of a member already listed) is one EXISTS, no script
+		if (!replace && (await this.client.exists(keys[1]))) return;
+		await this.client.eval(INDEX, {
+			keys,
+			arguments: [id, this.encode(keys[1], { subject, profile: cleanProfile(profile) }), replace ? "1" : "0", String(MAX_MEMBERS)],
+		});
 	}
 	/** Current members with their role and profile, by name. Entries whose membership ended are dropped. */
 	async members() {
-		const all = await this.client.hGetAll(this.memberIndexKey());
+		const ids = JSON.parse((await this.client.get(this.memberKeys("")[0])) ?? "[]");
 		const people = [];
-		for (const [field, raw] of Object.entries(all)) {
+		for (const id of Array.isArray(ids) ? ids : []) {
+			if (typeof id !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(id)) continue;
+			const keys = this.memberKeys(id);
 			let entry;
 			try {
-				entry = this.decode(`${this.memberIndexKey()}:${field}`, raw);
+				entry = this.decode(keys[1], await this.client.get(keys[1]));
 			} catch {
 				continue;
 			}
-			const membership = await this.membership(entry.subject);
+			const membership = entry ? await this.membership(entry.subject) : null;
 			if (membership?.active !== true) {
-				await this.client.hDel(this.memberIndexKey(), field);
+				await this.client.eval(REMOVE, { keys, arguments: [id] });
 				continue;
 			}
 			people.push({ subject: entry.subject, role: membership.role, profile: entry.profile ?? {} });

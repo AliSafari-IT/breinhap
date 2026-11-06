@@ -238,6 +238,13 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 		await restricted.putFlow("flow", { test: true });
 		assert.equal((await restricted.takeFlow("flow")).test, true);
 		await restricted.saveSession("session", session(Date.now()));
+		// breinhap#signup: the member index works within the same ACL (no hash commands)
+		await restricted.client.set(restricted.keyFor("member", "indexed"), restricted.encode(restricted.keyFor("member", "indexed"), { role: "breinhap.teacher", active: true }));
+		await restricted.indexMember("indexed", { firstName: "Kim", email: "kim@example.test" });
+		await restricted.indexMember("indexed");
+		assert.deepEqual(await restricted.members(), [{ subject: "indexed", role: "breinhap.teacher", profile: { firstName: "Kim", email: "kim@example.test" } }]);
+		await restricted.revokeMember("indexed");
+		assert.deepEqual(await restricted.members(), []);
 		assert.ok(await restricted.getSession("session"));
 		await restricted.audit("management.denied", "actor");
 		assert.equal(await restricted.budget("start"), true);
