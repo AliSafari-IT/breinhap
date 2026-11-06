@@ -518,6 +518,11 @@ export function createHandler({
 				await readFile(new URL("../../site/public/theme.js", import.meta.url)),
 				"text/javascript; charset=utf-8",
 			);
+		// breinhap#signup: the country & language selector, bundled (scripts/build-locale-selector.mjs)
+		if (url.pathname === "/locale-selector.js")
+			return send(200, await readFile(new URL("./vendor/locale-selector.js", import.meta.url)), "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
+		if (url.pathname === "/locale-selector.css")
+			return send(200, await readFile(new URL("./vendor/locale-selector.css", import.meta.url)), "text/css; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
 		if (url.pathname === "/logo.svg")
 			return send(
 				200,

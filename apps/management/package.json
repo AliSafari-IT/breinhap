@@ -1,12 +1,13 @@
 {
 	"name": "@breinhap/management",
-	"version": "0.2.12",
+	"version": "0.2.13",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"start": "node src/server.mjs",
 		"typecheck": "node --check src/server.mjs",
-		"test": "node test/run.mjs"
+		"test": "node test/run.mjs",
+		"build:selector": "node scripts/build-locale-selector.mjs"
 	},
 	"dependencies": {
 		"jose": "6.2.15",
@@ -16,6 +17,10 @@
 		"zod": "4.6.7"
 	},
 	"devDependencies": {
-		"playwright": "1.64.1"
+		"@asafarim/country-language-selector": "0.5.3",
+		"esbuild": "0.28.2",
+		"playwright": "1.64.1",
+		"react": "19.3.0",
+		"react-dom": "19.3.0"
 	}
 }

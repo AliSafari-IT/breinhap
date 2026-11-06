@@ -519,7 +519,6 @@ nav.lang-switch {
 .lang-switch {
 	display: flex;
 	gap: 0.25rem;
-	margin-left: auto;
 	font-size: 0.85rem;
 	font-weight: 600;
 }
@@ -608,4 +607,10 @@ button.secondary {
 	background: transparent;
 	color: var(--accent);
 	border: 1px solid var(--line);
+}
+/* the country & language selector in the dark top bar */
+.locale-selector {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
 }
