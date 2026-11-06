@@ -68,6 +68,34 @@ function page(title, content, active, session) {
 	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a><header>Breinhap beheer<button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header>${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
 }
 
+const LOCK =
+	'<svg class="lock" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const SECURE = `<p class="auth-secure">${LOCK} Je meldt je aan via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Breinhap krijgt nooit je wachtwoord of code te zien.</p>`;
+const STUDENT =
+	'<p class="auth-student"><strong>Ben je leerling?</strong> Je hebt hier geen account nodig: gebruik <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.</p>';
+const steps = (current) =>
+	`<ol class="auth-steps">${[
+		["Bevestig wie je bent", "Via het beveiligde ASafariM-account. De eerste keer maak je zo je account."],
+		["Kies je rol", "Je bent ouder, begeleider of leerkracht."],
+		["Een beheerder keurt goed", "Daarna kom je meteen in je werkplek."],
+	]
+		.map(
+			([title, text], i) =>
+				`<li${i === current ? ' aria-current="step"' : ""}${i < current ? ' class="done"' : ""}><span class="step-n" aria-hidden="true">${i < current ? "✓" : i + 1}</span><div><strong>${title}</strong><small>${text}</small></div></li>`,
+		)
+		.join("")}</ol>`;
+
+/**
+ * The sign-in, register and role pages: one card in the middle, the same as breinhap.com/login, so the
+ * adult entry looks like one product from breinhap.com to the workspace.
+ */
+function authPage(title, card, session) {
+	const account = session
+		? `<form method="post" action="/afmelden" class="auth-signout"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit" class="link">Afmelden</button></form>`
+		: "";
+	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">Naar inhoud</a><header><a class="brand" href="https://breinhap.com/"><img src="/logo.svg" width="32" height="32" alt="">Breinhap beheer</a><button type="button" data-theme-toggle aria-label="Donker thema" aria-pressed="false">◐</button></header><main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">Voor ouders, begeleiders en leerkrachten</p><h1 id="auth-title">${title}</h1>${card}${account}</section></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
+}
+
 // The resolver and identity adapter are server-only; no request header grants a role.
 export function createHandler({
 	identity,
@@ -95,7 +123,7 @@ export function createHandler({
 				"Content-Type": type,
 				"Cache-Control": "no-store",
 				"Content-Security-Policy":
-					"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; form-action 'self' https://id.asafarim.site; frame-ancestors 'none'",
+					"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self' https://id.asafarim.site; frame-ancestors 'none'",
 				"X-Content-Type-Options": "nosniff",
 				"Referrer-Policy": "same-origin",
 				"X-Frame-Options": "DENY",
@@ -205,26 +233,24 @@ export function createHandler({
 			if (result.pending)
 				return send(
 					200,
-					page(
+					authPage(
 						"Aanvraag verstuurd",
-						`Je hebt gevraagd om toegang als <strong>${esc(roleName[result.pending.role] ?? "volwassene")}</strong>.</p><h2>Wat gebeurt er nu?</h2><ol><li>Een <strong>beheerder van Breinhap</strong> ziet je aanvraag op de pagina <em>Toegang beheren</em> en keurt ze goed of af.</li><li>Je krijgt daarover <strong>geen e-mail</strong>. Kom later terug naar deze pagina (of meld je opnieuw aan): zodra je aanvraag is goedgekeurd, kom je meteen in je werkplek.</li><li>Duurt het lang? Neem contact op met de persoon die je naar Breinhap heeft verwezen.</li></ol><p>Je aanvraag is bewaard; je hoeft niets opnieuw te versturen.`,
-						undefined,
+						`<p class="auth-lead">Je hebt gevraagd om toegang als <strong>${esc(roleName[result.pending.role] ?? "volwassene")}</strong>. Je aanvraag is bewaard; je hoeft niets opnieuw te versturen.</p>${steps(2)}<h2 class="auth-h2">Wat gebeurt er nu?</h2><ul class="auth-facts"><li>Een <strong>beheerder van Breinhap</strong> ziet je aanvraag op de pagina <em>Toegang beheren</em> en keurt ze goed of af.</li><li>Je krijgt daarover <strong>geen e-mail</strong>. Kom later terug naar deze pagina (of meld je opnieuw aan): zodra je aanvraag is goedgekeurd, kom je meteen in je werkplek.</li><li>Duurt het lang? Neem contact op met de persoon die je naar Breinhap heeft verwezen.</li></ul><a class="action action-block" href="/registreren">Opnieuw controleren</a>`,
 						session,
 					),
 				);
 			return send(
 				200,
-				page(
+				authPage(
 					"Kies je rol",
-					`Je bent aangemeld. Wie ben je? Een beheerder van Breinhap keurt je rol goed; daarna kun je aan de slag.</p><form method="post" action="/registreren"><fieldset><legend>Ik ben</legend>${roleChoices
+					`<p class="auth-lead">Je bent aangemeld. Wie ben je? Een beheerder van Breinhap keurt je rol goed; daarna kun je aan de slag.</p>${steps(1)}<form method="post" action="/registreren"><fieldset class="role-cards"><legend>Ik ben</legend>${roleChoices
 						.map(
 							([key, label, hint], index) =>
-								`<label><input type="radio" name="role" value="${key}" required${index === 0 ? " checked" : ""}> ${label} <small>${hint}</small></label>`,
+								`<label class="role-card"><input type="radio" name="role" value="${key}" required${index === 0 ? " checked" : ""}><span><strong>${label}</strong><small>${hint}</small></span></label>`,
 						)
 						.join(
 							"",
-						)}</fieldset><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit">Aanvraag versturen</button></form><p>Ben je leerling? Je hebt hier geen account nodig: gebruik <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.`,
-					undefined,
+						)}</fieldset><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit" class="action-block">Aanvraag versturen</button></form>${STUDENT}`,
 					session,
 				),
 			);
@@ -493,6 +519,13 @@ export function createHandler({
 				await readFile(new URL("../../site/public/theme.js", import.meta.url)),
 				"text/javascript; charset=utf-8",
 			);
+		if (url.pathname === "/logo.svg")
+			return send(
+				200,
+				await readFile(new URL("../../site/public/logo.svg", import.meta.url)),
+				"image/svg+xml",
+				{ "Cache-Control": "public, max-age=86400" },
+			);
 		if (url.pathname === "/editor.js")
 			return send(
 				200,
@@ -523,13 +556,13 @@ export function createHandler({
 				return send(
 					200,
 					url.pathname === "/register"
-						? page(
-								"Registreren bij Breinhap",
-								'Voor ouders, begeleiders en leerkrachten. Zo werkt het:</p><ol><li>Maak een account aan of meld je aan. Breinhap gebruikt daarvoor het beveiligde ASafariM-account.</li><li>Kies of je ouder, begeleider of leerkracht bent.</li><li>Een beheerder van Breinhap keurt je rol goed. Daarna kun je aan de slag.</li></ol><p><a class="action" href="/auth/start">Registreren</a></p><p>Heb je al een account? <a href="/login">Aanmelden</a>. Ben je leerling? Je hebt geen account nodig: gebruik <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.',
+						? authPage(
+								"Account aanmaken",
+								`<p class="auth-lead">Maak een account voor de Breinhap-werkplek. Je hebt alleen een ASafariM-account en een rol nodig.</p>${steps(0)}<a class="action action-block" href="/auth/start">Account aanmaken <span aria-hidden="true">→</span></a>${SECURE}<p class="auth-switch">Heb je al een account? <a href="/login">Aanmelden</a></p>${STUDENT}`,
 							)
-						: page(
-								"Aanmelden bij Breinhap beheer",
-								'Voor ouders, begeleiders en leerkrachten. Je meldt je aan met je ASafariM-account.</p><p><a class="action" href="/auth/start">Aanmelden met ASafariM</a></p><p>Nog geen account? <a href="/register">Registreren</a>',
+						: authPage(
+								"Aanmelden",
+								`<p class="auth-lead">Welkom terug. Meld je aan om verder te werken met je leerlingen en je leerinhoud.</p><a class="action action-block" href="/auth/start">Aanmelden met ASafariM <span aria-hidden="true">→</span></a>${SECURE}<p class="auth-switch">Nieuw bij Breinhap? <a href="/register">Account aanmaken</a></p>${STUDENT}`,
 							),
 				);
 

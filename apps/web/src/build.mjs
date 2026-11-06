@@ -60,7 +60,7 @@ ${missing ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <a class="skip" href="#main">${t.skip}</a>
 <header class="os-topbar"><div class="wrap topbar-inner">
   <a class="brand" href="${path}"><img src="/logo.svg" width="40" height="40" alt=""><span>Breinhap</span></a>
-  <div class="tools"><a href="${lang === "nl" ? "/login" : "/en/login"}" data-account="login" data-signed-in-label="${lang === "nl" ? "Naar Breinhap beheer" : "Go to Breinhap management"}">${lang === "nl" ? "Aanmelden" : "Sign in"}</a><a href="${lang === "nl" ? "/register" : "/en/register"}" data-account="register">${lang === "nl" ? "Toegang aanvragen" : "Request access"}</a><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
+  <div class="tools"><a href="${lang === "nl" ? "/login" : "/en/login"}" data-account="login" data-signed-in-label="${lang === "nl" ? "Naar Breinhap beheer" : "Go to Breinhap management"}">${lang === "nl" ? "Aanmelden" : "Sign in"}</a><a href="${lang === "nl" ? "/register" : "/en/register"}" data-account="register">${lang === "nl" ? "Account aanmaken" : "Create account"}</a><a href="${t.otherPath}" lang="${lang === "nl" ? "en" : "nl-BE"}">${t.other}</a>
   <button type="button" data-theme-toggle aria-label="${t.theme}" aria-pressed="false">◐</button></div>
 </div></header>
 <aside class="release-banner" aria-label="${t.badge}"><div class="wrap"><strong>${t.badge}</strong><p>${t.notice}</p></div></aside>
@@ -75,22 +75,73 @@ ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="
 </body></html>`;
 }
 
+// breinhap.com/login and /register: the adult entry, as one sign-in card that goes straight to the
+// secure sign-in (management's /auth/start → ASafariM). A first sign-in creates the account; management
+// then asks for the role, so registering and signing in are the same safe flow with different words.
+const START = "https://management.breinhap.com/auth/start";
+const entry = {
+  nl: {
+    eyebrow: "Voor ouders, begeleiders en leerkrachten",
+    login: { title: "Aanmelden", lead: "Welkom terug. Meld je aan om verder te werken met je leerlingen en je leerinhoud.", button: "Doorgaan naar aanmelden", switchText: "Nieuw bij Breinhap?", switchLink: "Account aanmaken" },
+    register: { title: "Account aanmaken", lead: "Maak een account voor de Breinhap-werkplek. Je hebt geen uitnodiging nodig.", button: "Account aanmaken", switchText: "Heb je al een account?", switchLink: "Aanmelden" },
+    steps: [["Bevestig wie je bent", "Via het beveiligde ASafariM-account. De eerste keer maak je zo je account."], ["Kies je rol", "Je bent ouder, begeleider of leerkracht."], ["Een beheerder keurt goed", "Daarna kom je meteen in je werkplek."]],
+    stepsTitle: "Zo werkt het",
+    secure: "Je meldt je aan via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Breinhap krijgt nooit je wachtwoord of code te zien.",
+    student: "<strong>Ben je leerling?</strong> Je hebt geen account nodig. Voor leerlingen is aanmelden nog niet beschikbaar.",
+    sideTitle: "Je werkplek bij Breinhap",
+    side: [["Leerlingen en groepen", "Volg je kind of je leerlingen op, binnen de groepen die je beheert."], ["Leerinhoud maken", "Missies in vier vaste stappen, en een voorbeeld zoals een leerling ze ziet."], ["Rustig en veilig", "Geen advertenties, geen tracking en geen gezondheidsgegevens."]],
+    roles: [["Ouder", "Je volgt je kind op."], ["Begeleider", "Je begeleidt leerlingen buiten de klas."], ["Leerkracht", "Je geeft les aan leerlingen."]],
+    rolesTitle: "Voor wie?",
+    loginPath: "/login", registerPath: "/register",
+  },
+  en: {
+    eyebrow: "For parents, tutors and teachers",
+    login: { title: "Sign in", lead: "Welcome back. Sign in to continue working with your students and your learning content.", button: "Continue to sign in", switchText: "New to Breinhap?", switchLink: "Create an account" },
+    register: { title: "Create an account", lead: "Create an account for the Breinhap workspace. No invitation needed.", button: "Create an account", switchText: "Already have an account?", switchLink: "Sign in" },
+    steps: [["Confirm who you are", "With your secure ASafariM account. The first time, this creates your account."], ["Choose your role", "You are a parent, tutor or teacher."], ["An administrator approves", "Then your workspace opens right away."]],
+    stepsTitle: "How it works",
+    secure: "You sign in through ASafariM, the secure sign-in platform behind Breinhap. Breinhap never sees your password or code.",
+    student: "<strong>Are you a student?</strong> You do not need an account. Student sign-in is not available yet.",
+    sideTitle: "Your Breinhap workspace",
+    side: [["Students and groups", "Follow your child or your students, within the groups you manage."], ["Create learning content", "Missions in four fixed steps, with a preview as a student sees them."], ["Calm and safe", "No ads, no tracking and no health data."]],
+    roles: [["Parent", "You follow your child."], ["Tutor", "You support students outside the classroom."], ["Teacher", "You teach students."]],
+    rolesTitle: "Who is it for?",
+    loginPath: "/en/login", registerPath: "/en/register",
+  },
+};
+
 function entryPage(lang, kind) {
   const nl = lang === "nl";
+  const e = entry[lang];
+  const k = e[kind];
   const registering = kind === "register";
   const route = `${nl ? "" : "/en"}/${kind}`;
-  const title = registering ? (nl ? "Registreren bij Breinhap" : "Register for Breinhap") : (nl ? "Aanmelden bij Breinhap" : "Sign in to Breinhap");
-  const lead = nl ? "Voor ouders, begeleiders en leerkrachten." : "For parents, tutors and teachers.";
-  const text = registering
-    ? (nl ? "Maak een account aan of meld je aan, en kies of je ouder, begeleider of leerkracht bent. Een beheerder van Breinhap keurt je rol goed; daarna kun je aan de slag. Je hebt geen uitnodiging nodig." : "Create an account or sign in, then choose whether you are a parent, tutor or teacher. A Breinhap administrator approves your role, and then you can get started. No invitation needed.")
-    : (nl ? "Ga verder naar de Breinhap-beheerwerkplek. Je bevestigt je identiteit via ASafariM en keert daarna terug naar Breinhap." : "Continue to the Breinhap management workspace. Verify your identity through ASafariM, then return to Breinhap.");
-  const note = nl ? "Je account loopt via ASafariM, het beveiligde aanmeldplatform achter Breinhap. Leerlingen hebben geen account nodig. Voor leerlingen is aanmelden nog niet beschikbaar." : "Your account runs through ASafariM, the secure sign-in platform behind Breinhap. Students do not need an account. Student sign-in is not available yet.";
-  let html = page(lang).replace(/<main id="main" class="wrap">[\s\S]*?<\/main>/, `<main id="main" class="wrap"><section class="hero"><p class="eyebrow">Breinhap beheer</p><h1>${title}</h1><p class="lead">${lead}</p><p class="intro">${text}</p><a class="button" href="https://management.breinhap.com/${kind}">${registering ? (nl ? "Registreren" : "Register") : (nl ? "Verder naar Breinhap beheer" : "Continue to Breinhap management")}</a><p>${note}</p></section></main>`);
+  const steps = `<ol class="auth-steps" aria-label="${e.stepsTitle}">${e.steps.map(([title, text], i) => `<li><span class="step-n" aria-hidden="true">${i + 1}</span><div><strong>${title}</strong><small>${text}</small></div></li>`).join("")}</ol>`;
+  const card = `<section class="auth-card" aria-labelledby="auth-title">
+<img class="auth-logo" src="/logo.svg" width="56" height="56" alt="">
+<p class="eyebrow">${e.eyebrow}</p>
+<h1 id="auth-title">${k.title}</h1>
+<p class="auth-lead">${k.lead}</p>
+${registering ? steps : ""}
+<a class="button button-block" href="${START}">${k.button} <span aria-hidden="true">→</span></a>
+<p class="auth-secure"><svg class="lock" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> ${e.secure}</p>
+<p class="auth-switch">${k.switchText} <a href="${registering ? e.loginPath : e.registerPath}">${k.switchLink}</a></p>
+<p class="auth-student">${e.student}</p>
+</section>`;
+  const side = registering
+    ? `<aside class="auth-side" aria-labelledby="side-title"><h2 id="side-title">${e.rolesTitle}</h2><ul class="role-list">${e.roles.map(([name, text]) => `<li><strong>${name}</strong><span>${text}</span></li>`).join("")}</ul><h2>${e.sideTitle}</h2><ul class="side-list">${e.side.map(([t, x]) => `<li><strong>${t}</strong><span>${x}</span></li>`).join("")}</ul></aside>`
+    : `<aside class="auth-side" aria-labelledby="side-title"><h2 id="side-title">${e.sideTitle}</h2><ul class="side-list">${e.side.map(([t, x]) => `<li><strong>${t}</strong><span>${x}</span></li>`).join("")}</ul><h2>${e.stepsTitle}</h2>${steps}</aside>`;
+  const title = `${k.title} · Breinhap`;
+  let html = page(lang).replace(/<main id="main" class="wrap">[\s\S]*?<\/main>/, `<main id="main" class="wrap auth">${card}${side}</main>`);
   html = html.replace(/<aside class="release-banner"[\s\S]*?<\/aside>/, "");
-  html = html.replace(/<title>.*?<\/title>/, `<title>Breinhap · ${title}</title>`).replace(`href="${origin}${nl ? "/" : "/en/"}"`, `href="${origin}${route}"`);
+  html = html.replace(/<title>.*?<\/title>/, `<title>${title}</title>`).replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(k.lead)}">`);
+  html = html.replace(`href="${origin}${nl ? "/" : "/en/"}"`, `href="${origin}${route}"`);
   html = html.replace('href="/" lang="nl-BE"', `href="/${kind}" lang="nl-BE"`).replace('href="/en/" lang="en"', `href="/en/${kind}" lang="en"`);
   html = html.replace(/hreflang="nl-BE" href="[^"]*"/, `hreflang="nl-BE" href="${origin}/${kind}"`).replace(/hreflang="en" href="[^"]*"/, `hreflang="en" href="${origin}/en/${kind}"`).replace(/hreflang="x-default" href="[^"]*"/, `hreflang="x-default" href="${origin}/${kind}"`);
   html = html.replace(/property="og:url" content="[^"]*"/, `property="og:url" content="${origin}${route}"`);
+  html = html.replace(/property="og:title" content="[^"]*"/, `property="og:title" content="${esc(title)}"`);
+  // the page's own nav link is the current page
+  html = html.replace(new RegExp(`<a (href="[^"]*" data-account="${kind}")`), '<a aria-current="page" $1');
   return html;
 }
 

@@ -94,10 +94,18 @@ test("the register page explains one simple path and needs no invitation", async
 	const { call } = await setup();
 	const page = await call("/register");
 	assert.equal(page.status, 200);
-	assert.match(page.body, /Registreren bij Breinhap/);
+	assert.match(page.body, /<h1 id="auth-title">Account aanmaken<\/h1>/);
 	assert.match(page.body, /ouder, begeleider of leerkracht/);
-	assert.match(page.body, /href="\/auth\/start">Registreren</);
+	assert.match(page.body, /class="action action-block" href="\/auth\/start">Account aanmaken/);
+	assert.match(page.body, /href="\/login">Aanmelden</);
 	assert.doesNotMatch(page.body, /uitnodig/i);
+	// the sign-in card carries the Breinhap logo, which the page's CSP allows from this host only
+	assert.match(page.body, /<img src="\/logo.svg"/);
+	assert.match(page.headers["Content-Security-Policy"], /img-src 'self';/);
+	const logo = await call("/logo.svg");
+	assert.equal(logo.status, 200);
+	assert.equal(logo.headers["Content-Type"], "image/svg+xml");
+	assert.match(logo.body, /<svg/);
 	const anonymous = await call("/registreren");
 	assert.equal(anonymous.status, 303);
 	assert.equal(anonymous.headers.Location, "/register");

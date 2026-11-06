@@ -282,3 +282,190 @@ ul.options li.chosen {
 .feedback.not-yet {
 	border-left-style: dashed;
 }
+
+/* The sign-in, register and role pages: one card, the same as breinhap.com/login. */
+.auth {
+	max-width: 30rem;
+	padding-block: clamp(1.5rem, 6vw, 4rem);
+}
+.auth-card {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 20px;
+	box-shadow: var(--shadow);
+	padding: clamp(1.25rem, 4vw, 2.25rem);
+}
+.auth-card h1 {
+	margin: 0.25rem 0 0.5rem;
+}
+.eyebrow {
+	margin: 0;
+	color: var(--accent);
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	font-size: 0.75rem;
+	font-weight: 800;
+}
+.auth-lead {
+	color: var(--muted);
+	margin: 0 0 1.25rem;
+}
+.action-block {
+	display: flex;
+	justify-content: center;
+	gap: 0.75rem;
+	width: 100%;
+	text-decoration: none;
+	font-weight: 700;
+	border-radius: 12px;
+	padding: 0.9rem 1rem;
+	box-sizing: border-box;
+}
+.auth-secure {
+	display: flex;
+	gap: 0.6rem;
+	align-items: flex-start;
+	margin: 1rem 0 0;
+	padding: 0.75rem 0.9rem;
+	border-radius: 12px;
+	background: var(--card-2);
+	color: var(--muted);
+	font-size: 0.92rem;
+	line-height: 1.5;
+}
+.auth-secure .lock {
+	flex: 0 0 auto;
+	margin-top: 2px;
+	color: var(--accent);
+}
+.auth-switch {
+	margin: 1.25rem 0 0;
+	padding-top: 1.25rem;
+	border-top: 1px solid var(--line);
+	text-align: center;
+}
+.auth-switch a {
+	font-weight: 700;
+}
+.auth-student {
+	margin: 0.75rem 0 0;
+	font-size: 0.92rem;
+	color: var(--muted);
+	text-align: center;
+}
+.auth-steps {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 1.5rem;
+	display: grid;
+	gap: 0.85rem;
+}
+.auth-steps li {
+	display: flex;
+	gap: 0.85rem;
+	align-items: flex-start;
+}
+.auth-steps li:not([aria-current]):not(.done) {
+	opacity: 0.75;
+}
+.auth-steps strong,
+.auth-steps small,
+.role-card strong,
+.role-card small {
+	display: block;
+}
+.role-card small {
+	padding-left: 0;
+}
+.auth-steps small,
+.role-card small {
+	color: var(--muted);
+	font-size: 0.92rem;
+	line-height: 1.45;
+}
+.step-n {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	width: 1.9rem;
+	height: 1.9rem;
+	border-radius: 50%;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font-weight: 800;
+	font-size: 0.9rem;
+}
+.auth-steps li[aria-current] .step-n,
+.auth-steps li.done .step-n {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+.auth-h2 {
+	font-size: 1.1rem;
+	margin: 0 0 0.5rem;
+}
+.auth-facts {
+	padding-left: 1.2rem;
+	margin: 0 0 1.25rem;
+	color: var(--muted);
+}
+.auth-facts li + li {
+	margin-top: 0.4rem;
+}
+fieldset.role-cards {
+	border: 0;
+	padding: 0;
+	margin: 0 0 1.25rem;
+	display: grid;
+	gap: 0.6rem;
+}
+fieldset.role-cards legend {
+	font-weight: 700;
+	margin-bottom: 0.5rem;
+	padding: 0;
+}
+fieldset.role-cards label.role-card {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 0.75rem;
+	align-items: flex-start;
+	margin: 0;
+	padding: 0.85rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	cursor: pointer;
+}
+.role-card input[type="radio"] {
+	flex: 0 0 auto;
+	margin-top: 0.2rem;
+	accent-color: var(--accent);
+}
+.role-card:has(input:checked) {
+	border-color: var(--accent);
+	box-shadow: inset 4px 0 0 var(--accent);
+	background: var(--accent-soft);
+}
+.auth-card button.action-block {
+	font-size: 1rem;
+}
+.auth-signout {
+	margin-top: 1rem;
+	text-align: center;
+}
+button.link {
+	background: none;
+	color: var(--accent);
+	padding: 0;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+.auth-body footer {
+	text-align: center;
+}
+.auth-body header .brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.6rem;
+	color: inherit;
+	text-decoration: none;
+}
