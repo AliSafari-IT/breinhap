@@ -236,11 +236,16 @@ export class UploadStore {
 		await this.author(principal, "upload.delete");
 		const row = await this.owned(principal, id);
 		await this.storage.delete(row.key);
-		await this.pool.query(
-			`UPDATE uploads SET status = 'deleted', file_name = NULL, source_note = NULL, deleted_at = now()
-			 WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted'`,
-			[this.workspace, id],
-		);
+		await this.directory.transaction(async (db) => {
+			await db.query(
+				`UPDATE uploads SET status = 'deleted', file_name = NULL, source_note = NULL, deleted_at = now()
+				 WHERE workspace_id = $1 AND id = $2 AND status <> 'deleted'`,
+				[this.workspace, id],
+			);
+			// breinhap#31: the text extracted from the file goes with it (drafts saved from it stay); the
+			// upload row is locked first, so no extraction can be started in between
+			await db.query("DELETE FROM extractions WHERE workspace_id = $1 AND upload_id = $2", [this.workspace, id]);
+		});
 		await this.directory.audit(principal.sub, "upload.delete", id);
 	}
 }

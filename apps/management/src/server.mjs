@@ -22,6 +22,8 @@ import { header } from "./header.mjs";
 import { emailPage, fallbackPage, pendingPage, profilePage } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
+import { handleExtractions } from "./extract/routes.mjs";
+import { ExtractionStore } from "./extract/store.mjs";
 import { handleImports } from "./imports/routes.mjs";
 import { ImportStore } from "./imports/store.mjs";
 import { handleLibrary } from "./library-routes.mjs";
@@ -90,6 +92,8 @@ export function createHandler({
 	imports = content ? new ImportStore({ content }) : undefined,
 	// breinhap#29: uploads (private object store + virus scanner); absent, the page says it is not set up
 	uploads,
+	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
+	extractions,
 } = {}) {
 	const directoryUnavailable = (session) =>
 		page(
@@ -439,9 +443,10 @@ export function createHandler({
 				);
 			// uploads read their own (multipart) bodies, so they come before the library's form reader
 			const result =
-				(await handleUploads(req, url, { identity, uploads })) ??
+				(await handleUploads(req, url, { identity, uploads, extractions })) ??
 				(await handleImports(req, url, { identity, imports })) ??
-				(await handleLibrary(req, url, { identity, content }));
+				(await handleExtractions(req, url, { identity, extractions })) ??
+				(await handleLibrary(req, url, { identity, content, extractions }));
 			if (result.raw) return send(result.status, result.body, result.type, result.headers);
 			if (result.status === 303)
 				return send(303, "", undefined, result.headers);
@@ -711,6 +716,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	}
 	// breinhap#29: uploads need the database, the private bucket, the scanner and a link secret
 	let uploads;
+	let extractions;
 	const env = process.env;
 	if (directory && env.UPLOADS_S3_ENDPOINT && env.CLAMAV_HOST && env.UPLOADS_LINK_SECRET) {
 		try {
@@ -733,10 +739,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 				uploads.scanPending().catch(() => console.error("Upload rescan failed; will retry"));
 			}, 60_000).unref();
 			console.log("Management uploads ready");
+			// breinhap#31: one extraction at a time in this process; queued jobs and jobs whose worker
+			// died (lapsed lease) are picked up every few seconds, and stale extractions are removed hourly
+			extractions = new ExtractionStore({ uploads, log: (event) => console.log(JSON.stringify({ event })) });
+			setInterval(() => extractions.kick(), 5_000).unref();
+			setInterval(() => {
+				extractions.cleanup().catch(() => console.error("Extraction cleanup failed; will retry"));
+			}, 3_600_000).unref();
+			extractions.kick();
 		} catch {
 			console.error("Management uploads unavailable; the upload page stays closed");
 			uploads = undefined;
+			extractions = undefined;
 		}
 	}
-	createManagementServer({ identity, directory, uploads }).listen(8080, "0.0.0.0");
+	createManagementServer({ identity, directory, uploads, extractions }).listen(8080, "0.0.0.0");
 }

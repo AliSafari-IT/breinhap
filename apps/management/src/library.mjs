@@ -333,9 +333,10 @@ ${isNew ? "" : `<label class="remove"><input type="checkbox" name="${at("remove"
 
 /**
  * The editor. `values` are the fields to show (stored or as typed), `errors` field → message,
- * `notice` an alert above the form. New objects get the id field; existing ones keep theirs.
+ * `notice` an alert above the form. New objects get the id field; existing ones keep theirs. `hidden`
+ * fields travel with the form (breinhap#31: the extraction a new draft is made from).
  */
-export function editorPage({ values, errors = {}, notice = "", csrf, id, version, revisions = [] }) {
+export function editorPage({ values, errors = {}, notice = "", csrf, id, version, revisions = [], hidden = {} }) {
 	const missionCount = Math.max(
 		0,
 		...Object.keys(values)
@@ -364,7 +365,9 @@ export function editorPage({ values, errors = {}, notice = "", csrf, id, version
 		: "";
 	return `${notice}${summary}</p>
 <form method="post" action="${id ? `/bibliotheek/${esc(id)}` : "/bibliotheek/nieuw"}" class="editor" data-editor>
-<input type="hidden" name="csrf" value="${esc(csrf)}">${id ? `<input type="hidden" name="expectedVersion" value="${esc(version)}">` : ""}
+<input type="hidden" name="csrf" value="${esc(csrf)}">${id ? `<input type="hidden" name="expectedVersion" value="${esc(version)}">` : ""}${Object.entries(hidden)
+		.map(([name, value]) => `<input type="hidden" name="${esc(name)}" value="${esc(value)}">`)
+		.join("")}
 <fieldset><legend>Leerobject</legend>
 ${id ? `<p>Code: <code>${esc(id)}</code></p>` : input("id", "Code", values, errors, { required: true, max: 80, hint: "Kleine letters, cijfers en streepjes, bv. biologie-prikkel-reactie. Kan later niet meer veranderen." })}
 ${input("title", "Titel", values, errors, { required: true, max: 200 })}

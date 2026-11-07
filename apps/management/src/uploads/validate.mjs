@@ -181,7 +181,7 @@ export function zipEntries(buf) {
 	return entries;
 }
 
-function entryData(buf, entry, limit) {
+export function entryData(buf, entry, limit) {
 	const nameLength = buf.readUInt16LE(entry.local + 26);
 	const extra = buf.readUInt16LE(entry.local + 28);
 	const start = entry.local + 30 + nameLength + extra;

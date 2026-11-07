@@ -22,6 +22,9 @@ import { UploadStore } from "../src/uploads/store.mjs";
 import { docx, multipart, pdf, png } from "./upload-fixtures.mjs";
 import { objectNamed, packOf } from "./import-fixtures.mjs";
 import { TEMPLATE } from "../src/imports/routes.mjs";
+import { ExtractFailed } from "../src/extract/limits.mjs";
+import { ExtractionStore, MAX_ATTEMPTS } from "../src/extract/store.mjs";
+import { docxOf, para, textPdf } from "./extract-fixtures.mjs";
 
 /** The fields of a complete, valid learning object with one mission, as the editor posts them. */
 const validFields = (id = "prikkel-reactie") => ({
@@ -119,7 +122,7 @@ after(async () => {
 const internal = (cookie) =>
 	Object.assign(Readable.from([""]), { method: "GET", headers: { cookie, origin: ORIGIN } });
 
-async function stack({ withDirectory = true, uploadsOf } = {}) {
+async function stack({ withDirectory = true, uploadsOf, extractionsOf } = {}) {
 	let next = "teacher";
 	const time = Date.now();
 	const store = await makeStore(() => time);
@@ -167,10 +170,11 @@ async function stack({ withDirectory = true, uploadsOf } = {}) {
 		return { cookie, csrf: probe.managementSession.csrf };
 	}
 	const uploads = uploadsOf && directory ? uploadsOf(directory) : undefined;
-	const server = createManagementServer({ identity, directory, uploads });
+	const extractions = extractionsOf && uploads ? extractionsOf(uploads) : undefined;
+	const server = createManagementServer({ identity, directory, uploads, extractions });
 	servers.push(server);
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-	const call = (path, { who, method = "GET", form, origin = ORIGIN, raw } = {}) =>
+	const call = (path, { who, method = "GET", form, origin = ORIGIN, raw, cookie = "", headers = {} } = {}) =>
 		new Promise((resolve, reject) => {
 			const body = raw ? raw.body : form ? new URLSearchParams({ ...form, csrf: form.csrf ?? who?.csrf ?? "" }).toString() : undefined;
 			const req = http.request(
@@ -181,7 +185,8 @@ async function stack({ withDirectory = true, uploadsOf } = {}) {
 					method,
 					headers: {
 						Host: "management.breinhap.com",
-						Cookie: who?.cookie ?? "",
+						Cookie: [who?.cookie, cookie].filter(Boolean).join("; "),
+						...headers,
 						...(body ? { "Content-Type": raw?.contentType ?? "application/x-www-form-urlencoded", Origin: origin } : {}),
 					},
 				},
@@ -197,7 +202,7 @@ async function stack({ withDirectory = true, uploadsOf } = {}) {
 			req.on("error", reject);
 			req.end(body);
 		});
-	return { login, call, workspace: store.workspace, uploads };
+	return { login, call, workspace: store.workspace, uploads, extractions };
 }
 
 test("an author creates, finds, edits and snapshots a learning object; the library shows its state", async () => {
@@ -427,13 +432,14 @@ class FakeScanner {
 	}
 }
 
-async function uploadStack(quota) {
+async function uploadStack(quota, extra = {}) {
 	const storage = new MemoryStorage();
 	const scanner = new FakeScanner();
 	const clock = { now: Date.now() };
 	const s = await stack({
 		uploadsOf: (directory) =>
 			new UploadStore({ directory, storage, scanner, linkSecret: "s".repeat(40), now: () => clock.now, ...(quota ? { quota } : {}) }),
+		...extra,
 	});
 	const send = (who, file, { name = "les.pdf", type = "application/pdf", csrf = who.csrf, origin, bron = "own", licentie = "own_work" } = {}) =>
 		s.call("/bibliotheek/bestanden", {
@@ -733,4 +739,360 @@ test("imports: two confirms at once still create one object; forms and roles are
 	assert.equal((await s.call("/bibliotheek/importeren", { who: boss })).status, 403);
 	assert.equal((await importFile(s, boss, "les.csv", TEMPLATE)).status, 403);
 	assert.equal((await s.call("/bibliotheek/importeren")).status, 303);
+});
+
+// ── breinhap#31: text extraction from PDF and DOCX ─────────────────────────────────────────────────
+
+/** An upload stack with extraction. `run` replaces the parser (the real one when absent). */
+async function extractStack({ run, leaseSeconds = 1 } = {}) {
+	const s = await uploadStack(undefined, {
+		extractionsOf: (uploads) => new ExtractionStore({ uploads, leaseSeconds, ...(run ? { run } : {}) }),
+	});
+	const upload = async (who, bytes, name = "les.pdf", type = name.endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") => {
+		assert.equal((await s.send(who, bytes, { name, type })).status, 303);
+		const { rows } = await pool.query("SELECT id FROM uploads WHERE workspace_id = $1 AND uploader_sub = $2 ORDER BY created_at DESC LIMIT 1", [s.workspace, who.sub ?? "teacher"]);
+		return rows[0].id;
+	};
+	const start = async (who, uploadId) => {
+		const res = await s.call("/bibliotheek/uittreksels", { who, method: "POST", form: { bestand: uploadId } });
+		assert.equal(res.status, 303, res.body);
+		return { location: res.headers.location, id: /uittreksels\/([0-9a-f-]{36})/.exec(res.headers.location)?.[1] };
+	};
+	const job = async (id) => (await pool.query("SELECT * FROM extractions WHERE workspace_id = $1 AND id = $2", [s.workspace, id])).rows[0];
+	const settled = () => s.extractions.kick();
+	return { ...s, upload, start, job, settled };
+}
+const LESSON = textPdf([
+	[{ text: "Prikkel en reactie", size: 20 }, "Ik leg uit wat een prikkel en een reactie zijn.", "", "", "Een prikkel is een verandering die je waarneemt."],
+	["Wat is een prikkel?", "", "", "Een spier", "", "", "Een verandering"],
+]);
+
+test("extraction: a clean PDF is read in the background; the author maps it, and only their save makes a draft", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const uploadId = await s.upload(teacher, LESSON);
+	const files = await s.call("/bibliotheek/bestanden", { who: teacher });
+	assert.match(files.body, /action="\/bibliotheek\/uittreksels"/);
+	assert.match(files.body, /Extract text/);
+
+	const { id, location } = await s.start(teacher, uploadId);
+	assert.match(location, /notice=started/);
+	await s.settled();
+	const row = await s.job(id);
+	assert.equal(row.status, "done");
+	assert.equal(row.progress, 100);
+	assert.equal(row.lease_owner, null);
+	assert.deepEqual(row.blocks.map((b) => [b.text, b.ref.page]), [
+		["Prikkel en reactie", 1],
+		["Ik leg uit wat een prikkel en een reactie zijn.", 1],
+		["Een prikkel is een verandering die je waarneemt.", 1],
+		["Wat is een prikkel?", 2],
+		["Een spier", 2],
+		["Een verandering", 2],
+	]);
+	// starting again is the same job, not a second one
+	assert.equal((await s.start(teacher, uploadId)).id, id);
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM extractions WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+	assert.match((await s.call("/bibliotheek/bestanden", { who: teacher })).body, new RegExp(`href="/bibliotheek/uittreksels/${id}\\?lang=en"`));
+
+	const page = await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher });
+	assert.equal(page.status, 200);
+	assert.match(page.body, /<div lang="en" class="extraction">/);
+	assert.match(page.body, /Piece 1<\/strong> · Heading · page 1/);
+	assert.match(page.body, /name="r\.5"/);
+	assert.match(page.body, /choose the correct answers yourself and save it as a draft/);
+	assert.match((await s.call("/bibliotheek/uittreksels", { who: teacher })).body, /Breinhap never fills in correct answers and never marks anything as reviewed/);
+	assert.equal((await objectsIn(s.workspace)).length, 0, "reading a file makes no draft");
+
+	const mapped = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, {
+		who: teacher,
+		method: "POST",
+		form: { "r.0": "title", "r.1": "goal", "r.2": "learn", "r.3": "practice", "r.4": "option", "r.5": "option" },
+	});
+	assert.equal(mapped.status, 200);
+	assert.match(mapped.body, /Nothing is saved yet/);
+	assert.match(mapped.body, /name="uittreksel" value="[0-9a-f-]{36}"/);
+	assert.match(mapped.body, /name="missions.0.practice.0.options.1" type="text" value="Een verandering"/);
+	assert.doesNotMatch(mapped.body, /name="missions\.0\.practice\.0\.answerIndex" value="\d" checked/, "no answer is chosen for the author");
+	assert.match(mapped.body, /value="Biologie voor jou 3 · les\.pdf, p\. 1–2"/);
+	assert.equal((await objectsIn(s.workspace)).length, 0, "mapping saves nothing");
+	assert.equal((await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: {} })).headers.location, `/bibliotheek/uittreksels/${id}?error=nothing_chosen&lang=en`);
+
+	// the author completes the mission (their answer, their minutes) and saves it as a draft
+	const fields = {
+		uittreksel: id,
+		id: "prikkel-uit-pdf",
+		title: "Prikkel en reactie",
+		subject: "biologie",
+		grade: "3",
+		"curriculum.leerdoel": "Ik leg uit wat een prikkel en een reactie zijn.",
+		"missions.0.title": "Prikkel en reactie",
+		"missions.0.minutes": "3",
+		"missions.0.warmup.text": "Denk aan iets dat je laat schrikken.",
+		"missions.0.learn.0.text": "Een prikkel is een verandering die je waarneemt.",
+		"missions.0.practice.0.kind": "choice",
+		"missions.0.practice.0.prompt": "Wat is een prikkel?",
+		"missions.0.practice.0.options.0": "Een spier",
+		"missions.0.practice.0.options.1": "Een verandering",
+		"missions.0.practice.0.answerIndex": "1",
+		"missions.0.practice.0.explanation": "Een prikkel is een verandering.",
+		"missions.0.check.0.kind": "order",
+		"missions.0.check.0.prompt": "Zet in volgorde.",
+		"missions.0.check.0.items.0": "prikkel",
+		"missions.0.check.0.items.1": "reactie",
+		"missions.0.check.0.explanation": "Eerst de prikkel.",
+		"sources.0.kind": "school_material",
+		"sources.0.title": "les.pdf, p. 1–2",
+	};
+	const incomplete = await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: { ...fields, "missions.0.practice.0.answerIndex": "" } });
+	assert.equal(incomplete.status, 422);
+	assert.match(incomplete.body, /name="uittreksel" value="/, "the link survives a failed save");
+	assert.match(incomplete.body, /Oefenvraag 1/, "without the author choosing an answer there is no draft");
+	const saved = await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: fields });
+	assert.equal(saved.status, 303);
+	const [object] = await objectsIn(s.workspace);
+	assert.equal(object.content.review.status, "draft");
+	const { rows: sources } = await pool.query("SELECT sources FROM learning_object_drafts WHERE workspace_id = $1", [s.workspace]);
+	assert.deepEqual(sources[0].sources, [{ kind: "school_material", title: "les.pdf, p. 1–2" }]);
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body, /href="\/bibliotheek\/prikkel-uit-pdf">Prikkel en reactie/);
+	// saving the same form again cannot make a second draft
+	assert.equal((await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: fields })).status, 422);
+	assert.equal((await objectsIn(s.workspace)).length, 1);
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM extraction_drafts WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+});
+
+test("extraction: DOCX too; images, files still in quarantine and other people's files are refused", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const docId = await s.upload(teacher, docxOf(para("Prikkel", "Heading1") + para("Een prikkel is een verandering.") + para("&lt;script&gt;alert(1)&lt;/script&gt;")), "les.docx");
+	const { id } = await s.start(teacher, docId);
+	await s.settled();
+	assert.deepEqual((await s.job(id)).blocks.map((b) => [b.type, b.ref.paragraph]), [["heading", 1], ["paragraph", 2], ["paragraph", 3]]);
+	const shown = (await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body;
+	assert.match(shown, /paragraph 2/);
+	assert.match(shown, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+	assert.doesNotMatch(shown, /<script\b[^>]*>alert/i, "extracted text is always escaped");
+
+	await s.send(teacher, png(), { name: "schema.png", type: "image/png" });
+	const image = (await pool.query("SELECT id FROM uploads WHERE workspace_id = $1 AND kind = 'png'", [s.workspace])).rows[0].id;
+	assert.doesNotMatch((await s.call("/bibliotheek/bestanden", { who: teacher })).body, new RegExp(`name="bestand" value="${image}"`));
+	const refusedImage = await s.call("/bibliotheek/uittreksels", { who: teacher, method: "POST", form: { bestand: image } });
+	assert.equal(refusedImage.headers.location, "/bibliotheek/uittreksels?error=unsupported&lang=en");
+	assert.match((await s.call(refusedImage.headers.location, { who: teacher })).body, /only be read from PDF and Word/);
+
+	s.scanner.mode = "down";
+	const waiting = await s.upload(teacher, LESSON);
+	const notReady = await s.call("/bibliotheek/uittreksels", { who: teacher, method: "POST", form: { bestand: waiting } });
+	assert.match(notReady.headers.location, /error=not_ready/);
+
+	const parent = await s.login("parent");
+	assert.equal((await s.call("/bibliotheek/uittreksels", { who: parent, method: "POST", form: { bestand: docId } })).status, 404);
+	assert.equal((await s.call(`/bibliotheek/uittreksels/${id}`, { who: parent })).status, 404);
+	for (const action of ["stoppen", "opnieuw", "verwijderen", "overnemen"])
+		assert.equal((await s.call(`/bibliotheek/uittreksels/${id}/${action}`, { who: parent, method: "POST", form: { "r.0": "title" } })).status, 404, action);
+	assert.doesNotMatch((await s.call("/bibliotheek/uittreksels", { who: parent })).body, /les\.docx/);
+	const boss = await s.login("admin");
+	assert.equal((await s.call("/bibliotheek/uittreksels", { who: boss })).status, 403);
+	assert.equal((await s.call(`/bibliotheek/uittreksels/${id}`, { who: boss })).status, 403);
+	assert.equal((await s.call("/bibliotheek/uittreksels")).status, 303);
+	assert.equal((await s.call(`/bibliotheek/uittreksels/${id}/verwijderen`, { who: teacher, method: "POST", form: { csrf: "forged" } })).status, 403);
+	assert.equal((await s.call(`/bibliotheek/uittreksels/${id}/verwijderen`, { who: teacher, method: "POST", form: {}, origin: "https://evil.example" })).status, 403);
+	assert.ok(await s.job(id), "a refused request changed nothing");
+});
+
+test("extraction: a corrupt file fails with a useful report; a retry is the same job and never duplicates drafts", async () => {
+	let mode = "corrupt";
+	const s = await extractStack({
+		run: async ({ kind, bytes }) => {
+			if (mode === "corrupt") throw new ExtractFailed("corrupt");
+			const { runParser } = await import("../src/extract/sandbox.mjs");
+			return runParser({ kind, bytes });
+		},
+	});
+	const teacher = await s.login("teacher");
+	const { id } = await s.start(teacher, await s.upload(teacher, LESSON));
+	await s.settled();
+	assert.deepEqual([(await s.job(id)).status, (await s.job(id)).error], ["failed", "corrupt"]);
+	const failed = await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher });
+	assert.match(failed.body, /Did not work/);
+	assert.match(failed.body, /The file is damaged or not a valid PDF or Word file/);
+	assert.match(failed.body, /action="\/bibliotheek\/uittreksels\/[0-9a-f-]{36}\/opnieuw"/);
+
+	mode = "ok";
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}/opnieuw`, { who: teacher, method: "POST", form: {} })).headers.location, /notice=retried/);
+	await s.settled();
+	assert.equal((await s.job(id)).status, "done");
+	await pool.query(
+		"INSERT INTO learning_objects (workspace_id, id, owner_sub, subject, grade, title) VALUES ($1, 'uit-pdf', 'teacher', 'biologie', 3, 'Uit pdf')",
+		[s.workspace],
+	);
+	await s.extractions.linkDraft({ sub: "teacher", role: "breinhap.teacher" }, id, "uit-pdf");
+	// a done job is not retried; a failed one again runs the same job, and the saved draft is untouched
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}/opnieuw`, { who: teacher, method: "POST", form: {} })).headers.location, /error=not_retryable/);
+	await pool.query("UPDATE extractions SET status = 'failed', error = 'timeout', blocks = NULL WHERE workspace_id = $1 AND id = $2", [s.workspace, id]);
+	await s.call(`/bibliotheek/uittreksels/${id}/opnieuw`, { who: teacher, method: "POST", form: {} });
+	await s.settled();
+	assert.equal((await s.job(id)).status, "done");
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM extractions WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM learning_objects WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM extraction_drafts WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+});
+
+test("extraction: storage down goes back to the queue after a pause, then succeeds; it is not retried forever", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const uploadId = await s.upload(teacher, LESSON);
+	const storage = s.uploads.storage;
+	const get = storage.get.bind(storage);
+	storage.get = async () => {
+		throw new Error("storage down");
+	};
+	const { id } = await s.start(teacher, uploadId);
+	await s.settled();
+	let row = await s.job(id);
+	assert.deepEqual([row.status, row.attempts, row.error], ["queued", 1, null]);
+	assert.ok(new Date(row.lease_until) > new Date(), "it waits before the next attempt");
+	assert.equal(await s.extractions.runOnce(), false, "not picked up again at once");
+	const pauseOver = () => pool.query("UPDATE extractions SET lease_until = now() - interval '1 second' WHERE workspace_id = $1 AND id = $2", [s.workspace, id]);
+	await pauseOver();
+	await s.extractions.kick();
+	await pauseOver();
+	await s.extractions.kick();
+	row = await s.job(id);
+	assert.deepEqual([row.status, row.error], ["failed", "storage_unavailable"]);
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body, /could not be fetched from storage/);
+	storage.get = get;
+	await s.call(`/bibliotheek/uittreksels/${id}/opnieuw`, { who: teacher, method: "POST", form: {} });
+	await s.settled();
+	assert.equal((await s.job(id)).status, "done");
+});
+
+test("extraction: cancelling a queued job is immediate, a running one stops its parser", async () => {
+	let started;
+	const running = new Promise((resolve) => (started = resolve));
+	const s = await extractStack({
+		run: ({ signal }) =>
+			new Promise((_, reject) => {
+				started();
+				signal.addEventListener("abort", () => reject(new ExtractFailed("cancelled")));
+			}),
+	});
+	const teacher = await s.login("teacher");
+	const { id } = await s.start(teacher, await s.upload(teacher, LESSON));
+	await running;
+	assert.equal((await s.job(id)).status, "running");
+	const page = await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher });
+	assert.match(page.body, /<progress max="100" value="0"/);
+	assert.match(page.body, /Reading/);
+	const stop = await s.call(`/bibliotheek/uittreksels/${id}/stoppen`, { who: teacher, method: "POST", form: {} });
+	assert.match(stop.headers.location, /notice=stopping/);
+	assert.match((await s.call(stop.headers.location, { who: teacher })).body, /Stopping/);
+	await s.settled();
+	const row = await s.job(id);
+	assert.deepEqual([row.status, row.cancel_requested, row.lease_owner, row.blocks], ["cancelled", false, null, null]);
+
+	// queued (no worker free): cancelled at once
+	await pool.query("UPDATE extractions SET status = 'queued', finished_at = NULL WHERE workspace_id = $1 AND id = $2", [s.workspace, id]);
+	const busy = s.extractions.busy;
+	s.extractions.busy = Promise.resolve(); // this process is "busy": nothing picks the job up
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}/stoppen`, { who: teacher, method: "POST", form: {} })).headers.location, /notice=cancelled/);
+	s.extractions.busy = busy;
+	assert.equal((await s.job(id)).status, "cancelled");
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body, /Try again/);
+});
+
+test("extraction: after a worker restart the job is picked up again; a late answer from the old worker is dropped", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const { id } = await s.start(teacher, await s.upload(teacher, LESSON));
+	await s.settled();
+	// what a worker that died mid-parse leaves behind: running, its lease lapsing, nobody renewing it
+	const crashed = () =>
+		pool.query(
+			`UPDATE extractions SET status = 'running', lease_owner = 'old-worker', lease_until = now() - interval '1 second', attempts = $3,
+			   blocks = NULL, progress = 40 WHERE workspace_id = $1 AND id = $2`,
+			[s.workspace, id, 1],
+		);
+	await crashed();
+	// before the lease lapses nobody takes it; after, the next worker does
+	await pool.query("UPDATE extractions SET lease_until = now() + interval '1 hour' WHERE workspace_id = $1 AND id = $2", [s.workspace, id]);
+	assert.equal(await s.extractions.runOnce(), false);
+	await crashed();
+	const restarted = new ExtractionStore({ uploads: s.uploads, owner: "new-worker", leaseSeconds: 1 });
+	assert.equal(await restarted.runOnce(), true);
+	const row = await s.job(id);
+	assert.deepEqual([row.status, row.attempts, row.lease_owner], ["done", 2, null]);
+	assert.equal(row.blocks.length, 6);
+	// the old worker comes back with an answer: it no longer holds the lease, so nothing changes
+	const old = new ExtractionStore({ uploads: s.uploads, owner: "old-worker" });
+	await old.settle({ id }, { status: "done", result: { blocks: [{ type: "paragraph", text: "oud", ref: { page: 1 } }], warnings: [], units: 1 } });
+	assert.equal((await s.job(id)).blocks.length, 6);
+	// a cancel that lands after the last heartbeat still wins over a finished parse
+	await pool.query("UPDATE extractions SET status = 'running', lease_owner = 'old-worker', lease_until = now() + interval '1 minute', cancel_requested = true, blocks = NULL WHERE workspace_id = $1 AND id = $2", [s.workspace, id]);
+	await old.settle({ id }, { status: "done", result: { blocks: [{ type: "paragraph", text: "laat", ref: { page: 1 } }], warnings: [], units: 1 } });
+	assert.deepEqual([(await s.job(id)).status, (await s.job(id)).blocks], ["cancelled", null]);
+	// a job that keeps losing its worker is not tried forever
+	await pool.query(
+		"UPDATE extractions SET status = 'running', lease_owner = 'old-worker', lease_until = now() - interval '1 second', attempts = $3, blocks = NULL WHERE workspace_id = $1 AND id = $2",
+		[s.workspace, id, MAX_ATTEMPTS],
+	);
+	await restarted.runOnce();
+	assert.deepEqual([(await s.job(id)).status, (await s.job(id)).error], ["failed", "interrupted"]);
+	assert.match((await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body, /interrupted several times/);
+});
+
+test("extraction: deleting the file or the text cleans up; drafts saved from it stay; old and orphaned jobs are removed", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const first = await s.upload(teacher, LESSON);
+	const { id } = await s.start(teacher, first);
+	await s.settled();
+	await pool.query("INSERT INTO learning_objects (workspace_id, id, owner_sub, subject, grade, title) VALUES ($1, 'bewaard', 'teacher', 'biologie', 3, 'Bewaard')", [s.workspace]);
+	await s.extractions.linkDraft({ sub: "teacher", role: "breinhap.teacher" }, id, "bewaard");
+	assert.equal((await s.call(`/bibliotheek/bestanden/${first}/verwijderen`, { who: teacher, method: "POST", form: {} })).status, 303);
+	assert.equal(await s.job(id), undefined, "the extracted text went with the file");
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM extraction_drafts WHERE workspace_id = $1", [s.workspace])).rows[0].n, 0);
+	assert.equal((await pool.query("SELECT count(*)::int AS n FROM learning_objects WHERE workspace_id = $1", [s.workspace])).rows[0].n, 1);
+
+	const second = await s.start(teacher, await s.upload(teacher, LESSON));
+	await s.settled();
+	const removed = await s.call(`/bibliotheek/uittreksels/${second.id}/verwijderen`, { who: teacher, method: "POST", form: {} });
+	assert.equal(removed.headers.location, "/bibliotheek/uittreksels?notice=deleted&lang=en");
+	assert.match((await s.call(removed.headers.location, { who: teacher })).body, /The extracted text is deleted/);
+	assert.equal(await s.job(second.id), undefined);
+	assert.ok((await pool.query("SELECT 1 FROM uploads WHERE workspace_id = $1 AND status = 'clean'", [s.workspace])).rows.length, "the file stays");
+
+	const third = await s.start(teacher, await s.upload(teacher, LESSON));
+	const fourth = await s.start(teacher, await s.upload(teacher, LESSON));
+	await s.settled();
+	await pool.query("UPDATE extractions SET updated_at = now() - interval '31 days' WHERE workspace_id = $1 AND id = $2", [s.workspace, third.id]);
+	await pool.query("ALTER TABLE uploads DISABLE TRIGGER uploads_transition");
+	await pool.query("UPDATE uploads SET status = 'rejected', reason = 'missing' WHERE workspace_id = $1 AND id = (SELECT upload_id FROM extractions WHERE workspace_id = $1 AND id = $2)", [s.workspace, fourth.id]);
+	await pool.query("ALTER TABLE uploads ENABLE TRIGGER uploads_transition");
+	assert.equal(await s.extractions.cleanup(), 2);
+	assert.equal(await s.job(third.id), undefined);
+	assert.equal(await s.job(fourth.id), undefined);
+});
+
+test("extraction: the screens follow ?lang=, the ASafariM locale cookie and the browser, in en, nl, fr and de", async () => {
+	const s = await extractStack();
+	const teacher = await s.login("teacher");
+	const list = (opts) => s.call("/bibliotheek/uittreksels", { who: teacher, ...opts });
+	assert.match((await list()).body, /<div lang="en" class="extraction">[\s\S]*You have not extracted text from a file yet/);
+	assert.match((await list({ headers: { "Accept-Language": "nl-BE,nl;q=0.9" } })).body, /lang="nl" class="extraction">[\s\S]*Je hebt nog geen tekst/);
+	assert.match((await list({ cookie: "asafarim-locale=fr-BE" })).body, /lang="fr" class="extraction">[\s\S]*Vous n'avez encore extrait/);
+	assert.match((await s.call("/bibliotheek/uittreksels?lang=de", { who: teacher, cookie: "asafarim-locale=fr" })).body, /lang="de" class="extraction">[\s\S]*Sie haben noch keinen Text/);
+	// notices and errors of the redirects, in the language the form was sent in
+	const { id } = await s.start(teacher, await s.upload(teacher, LESSON));
+	await s.settled();
+	for (const [lang, text] of [["nl", "Stuk 1"], ["fr", "Passage 1"], ["de", "Abschnitt 1"]])
+		assert.match((await s.call(`/bibliotheek/uittreksels/${id}?lang=${lang}&notice=started`, { who: teacher })).body, new RegExp(`${text}[\\s\\S]*`));
+	const back = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: { lang: "fr" } });
+	assert.equal(back.headers.location, `/bibliotheek/uittreksels/${id}?error=nothing_chosen&lang=fr`);
+	assert.match((await s.call(back.headers.location, { who: teacher })).body, /Choisissez au moins un passage/);
+	assert.doesNotMatch((await s.call(`/bibliotheek/uittreksels/${id}?error=<script>`, { who: teacher })).body, /<script>/i);
+	// only the four languages: anything else (also an object key like toString) falls back
+	const odd = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: { lang: "toString", "r.0": "title", "r.4": "option" } });
+	assert.equal(odd.status, 200);
+	assert.match(odd.body, /Piece 5: an answer option needs a question above it/);
 });
