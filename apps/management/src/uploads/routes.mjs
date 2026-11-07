@@ -3,6 +3,9 @@ import { ORIGIN } from "../identity.mjs";
 import { boundaryOf, FormRefused, parseMultipart, readBody } from "./multipart.mjs";
 import { LICENCES, LINK_SECONDS, SOURCE_KINDS, UploadError } from "./store.mjs";
 import { MAX_FILE_BYTES, REFUSALS, TYPES, UploadRefused } from "./validate.mjs";
+import { fileAction } from "../extract/routes.mjs";
+import { extractLocale } from "../extract/i18n.mjs";
+import { SUPPORTED } from "../extract/store.mjs";
 
 /**
  * breinhap#29: /bibliotheek/bestanden, the author's uploaded teaching material and images. Returns
@@ -37,14 +40,14 @@ const UPLOADED = {
 	rejected: "Het bestand is geweigerd: er is schadelijke inhoud gevonden. Het is verwijderd.",
 };
 
-function listPage({ files, usage }, links, { csrf, message = "" }) {
+function listPage({ files, usage }, links, { csrf, message = "", extract }) {
 	const percent = Math.min(100, Math.round((usage.bytes / usage.quota.bytes) * 100));
 	const rows = files.length
 		? `<table class="library uploads"><thead><tr><th scope="col">Bestand</th><th scope="col">Soort</th><th scope="col">Grootte</th><th scope="col">Status</th><th scope="col">Opgeladen</th><th scope="col"><span class="visually-hidden">Acties</span></th></tr></thead><tbody>${files
 				.map((f) => {
 					const [label, tone] = STATUS[f.status] ?? ["?", "pending"];
 					const download = links.get(f.id);
-					return `<tr><td>${esc(f.name)}</td><td>${esc(KIND_LABEL[f.kind] ?? f.kind)}</td><td>${size(f.size)}</td><td><span class="state ${tone}">${label}</span>${f.reason && REASONS[f.reason] ? `<br><small>${REASONS[f.reason]}</small>` : ""}</td><td>${new Date(f.createdAt).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" })}</td><td class="actions">${download ? `<a href="${esc(download)}" download>Downloaden</a>` : ""}<form method="post" action="${BASE}/${esc(f.id)}/verwijderen"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit" class="link">Verwijderen</button></form></td></tr>`;
+					return `<tr><td>${esc(f.name)}</td><td>${esc(KIND_LABEL[f.kind] ?? f.kind)}</td><td>${size(f.size)}</td><td><span class="state ${tone}">${label}</span>${f.reason && REASONS[f.reason] ? `<br><small>${REASONS[f.reason]}</small>` : ""}</td><td>${new Date(f.createdAt).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" })}</td><td class="actions">${download ? `<a href="${esc(download)}" download>Downloaden</a>` : ""}${extract && f.status === "clean" && SUPPORTED.has(f.kind) ? fileAction(extract.lang, f, extract.jobs.get(f.id), csrf) : ""}<form method="post" action="${BASE}/${esc(f.id)}/verwijderen"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit" class="link">Verwijderen</button></form></td></tr>`;
 				})
 				.join("")}</tbody></table>`
 		: "<p>Je hebt nog geen bestanden opgeladen.</p>";
@@ -69,7 +72,7 @@ function disposition(name, extension) {
 	return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
-export async function handleUploads(req, url, { identity, uploads }) {
+export async function handleUploads(req, url, { identity, uploads, extractions }) {
 	const path = url.pathname;
 	if (path !== BASE && !path.startsWith(`${BASE}/`)) return null;
 	if (!uploads)
@@ -106,7 +109,9 @@ export async function handleUploads(req, url, { identity, uploads }) {
 				for (const f of list.files) if (f.status === "clean") links.set(f.id, await uploads.link(principal, f.id));
 				const done = url.searchParams.get("opgeladen");
 				const message = done && UPLOADED[done] ? notice(UPLOADED[done], done === "rejected" ? "alert" : "status") : url.searchParams.get("verwijderd") === "1" ? notice("Het bestand is verwijderd.") : "";
-				return { status: 200, title: "Bestanden", body: listPage(list, links, { csrf, message }), active: "/bibliotheek", headers: { "Cache-Control": "no-store" } };
+				// breinhap#31: clean PDF and DOCX files can have their text extracted
+				const extract = extractions ? { lang: extractLocale(req, url), jobs: await extractions.byUpload(principal) } : undefined;
+				return { status: 200, title: "Bestanden", body: listPage(list, links, { csrf, message, extract }), active: "/bibliotheek", headers: { "Cache-Control": "no-store" } };
 			});
 		if (req.method !== "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET, POST" } };
 		const boundary = boundaryOf(req.headers["content-type"]);

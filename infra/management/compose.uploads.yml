@@ -8,6 +8,9 @@
 # until clamd answers, uploads stay in quarantine and are never served.
 services:
   management:
+    # breinhap#31: text extraction parses one PDF/DOCX at a time in a capped worker thread (64 MB heap,
+    # 45 s); the thread's own isolate and pdf.js need about 100 MB on top of the service's 128 MB
+    mem_limit: 320m
     networks:
       objects: {}
       scan: {}

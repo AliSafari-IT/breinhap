@@ -27,7 +27,9 @@ const redirect = (location) => ({ status: 303, headers: { Location: location }, 
 const notice = (text, role = "status") =>
 	`<div class="notice" role="${role}"><p>${text}</p></div>`;
 
-export async function handleLibrary(req, url, { identity, content }) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export async function handleLibrary(req, url, { identity, content, extractions }) {
 	const path = url.pathname;
 	if (path !== "/bibliotheek" && !path.startsWith("/bibliotheek/")) return null;
 	if (!["GET", "HEAD", "POST"].includes(req.method))
@@ -87,13 +89,18 @@ export async function handleLibrary(req, url, { identity, content }) {
 				return { status: 200, title: "Nieuw leerobject", body: editorPage({ values: { grade: "3" }, csrf }) };
 			});
 		const parsed = fromForm(form);
+		// breinhap#31: a draft made from extracted text keeps a link to that extraction
+		const extraction = UUID.test(form.get("uittreksel") ?? "") && extractions ? form.get("uittreksel") : null;
+		delete parsed.values.uittreksel;
+		const hidden = extraction ? { uittreksel: extraction } : {};
 		return guard(async () => {
 			try {
 				const { id } = await content.create(principal, parsed.object, parsed.sources);
+				if (extraction) await extractions.linkDraft(principal, extraction, id).catch(() => {});
 				return redirect(`/bibliotheek/${id}?opgeslagen=1`);
 			} catch (error) {
 				if (!(error instanceof ContentError) || error.code === "forbidden" || error.code === "not_found") throw error;
-				return { status: 422, title: "Nieuw leerobject", body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf }) };
+				return { status: 422, title: "Nieuw leerobject", body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf, hidden }) };
 			}
 		});
 	}

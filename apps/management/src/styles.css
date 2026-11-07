@@ -639,3 +639,24 @@ button.secondary {
 	display: flex;
 	align-items: center;
 }
+
+/* breinhap#31: extracted text and the mapping of its pieces */
+.extraction ol.blocks {
+	list-style: none;
+	padding: 0;
+	display: grid;
+	gap: 0.75rem;
+}
+.extraction li.block {
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+	padding: 0.75rem;
+}
+.extraction .block-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	margin: 0.5rem 0;
+}
+.extraction .block-head {
+	font-size: 0.9rem;
+}

@@ -2,7 +2,8 @@ FROM node:24-alpine
 ENV NODE_ENV=production
 WORKDIR /apps
 COPY management/package.json management/package-lock.json management/
-RUN cd management && npm ci --omit=dev --ignore-scripts
+# no optional packages: pdf.js would load a native canvas for rendering, which extraction never does (breinhap#31)
+RUN cd management && npm ci --omit=dev --omit=optional --ignore-scripts
 COPY --chown=node:node management/src management/src
 COPY --chown=node:node management/platform.app.json management/platform.app.json
 COPY --chown=node:node site/src/theme.css site/src/theme.css
