@@ -871,7 +871,7 @@ test("extraction: DOCX too; images, files still in quarantine and other people's
 	const shown = (await s.call(`/bibliotheek/uittreksels/${id}`, { who: teacher })).body;
 	assert.match(shown, /paragraph 2/);
 	assert.match(shown, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-	assert.doesNotMatch(shown, /<script>alert/, "extracted text is always escaped");
+	assert.doesNotMatch(shown, /<script\b[^>]*>alert/i, "extracted text is always escaped");
 
 	await s.send(teacher, png(), { name: "schema.png", type: "image/png" });
 	const image = (await pool.query("SELECT id FROM uploads WHERE workspace_id = $1 AND kind = 'png'", [s.workspace])).rows[0].id;
@@ -1090,7 +1090,7 @@ test("extraction: the screens follow ?lang=, the ASafariM locale cookie and the 
 	const back = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: { lang: "fr" } });
 	assert.equal(back.headers.location, `/bibliotheek/uittreksels/${id}?error=nothing_chosen&lang=fr`);
 	assert.match((await s.call(back.headers.location, { who: teacher })).body, /Choisissez au moins un passage/);
-	assert.doesNotMatch((await s.call(`/bibliotheek/uittreksels/${id}?error=<script>`, { who: teacher })).body, /<script>/);
+	assert.doesNotMatch((await s.call(`/bibliotheek/uittreksels/${id}?error=<script>`, { who: teacher })).body, /<script>/i);
 	// only the four languages: anything else (also an object key like toString) falls back
 	const odd = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: { lang: "toString", "r.0": "title", "r.4": "option" } });
 	assert.equal(odd.status, 200);
