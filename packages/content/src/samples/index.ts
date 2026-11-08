@@ -1,5 +1,6 @@
 import { ContentPack } from "../schema";
 import { biologiePrikkelReactie } from "./biologie-prikkel-reactie";
+import { wiskundeOntbindenInFactoren } from "./wiskunde-ontbinden-in-factoren";
 import { wiskundeSamengesteldeIntrest } from "./wiskunde-samengestelde-intrest";
 
 /** Sample content pack, validated at load so a broken sample fails loudly. */
@@ -7,5 +8,5 @@ export const samplePack: ContentPack = ContentPack.parse({
   schemaVersion: 1,
   id: "samples",
   version: 1,
-  objects: [wiskundeSamengesteldeIntrest, biologiePrikkelReactie],
+  objects: [wiskundeSamengesteldeIntrest, biologiePrikkelReactie, wiskundeOntbindenInFactoren],
 });
