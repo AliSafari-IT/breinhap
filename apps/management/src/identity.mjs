@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import * as oidc from "openid-client";
-import { localeOf, langCookie } from "./account/i18n.mjs";
+import { localeOf, langCookie, LANGUAGES } from "./account/i18n.mjs";
 import { codePage, emailPage, maskEmail } from "./account/pages.mjs";
 import { managementAccess, roleLabels, validSubject } from "./platform.mjs";
 import { ABSOLUTE_MS, SELF_SERVICE_ROLES } from "./store.mjs";
@@ -388,6 +388,8 @@ export function createIdentity({
 				verifier: oidc.randomPKCECodeVerifier(),
 				fresh,
 				invite,
+				// Alleen een vaste webbestemming; nooit een retour-URL uit de browser overnemen.
+				webLocale: url.searchParams.getAll("web").length === 1 && url.searchParams.get("web") === "1" ? localeOf(req, url) : null,
 				expires: now() + 600_000,
 			};
 			const location = await provider.authorizationUrl(state);
@@ -446,8 +448,11 @@ export function createIdentity({
 		};
 		if (!(await store.saveSession(id, saved)))
 			return message(400, "Deze aanmelding is beëindigd. Probeer opnieuw.");
-		return redirect(flow.invite ? "/uitnodiging/bevestigen" : "/", [
+		const webLocale = LANGUAGES.includes(flow.webLocale) ? flow.webLocale : null;
+		const destination = flow.invite ? "/uitnodiging/bevestigen" : webLocale ? `${SITE_ORIGIN}/${webLocale === "nl" ? "" : `${webLocale}/`}` : "/";
+		return redirect(destination, [
 			cookie(SESSION, id, Math.floor((saved.expires - time) / 1000)),
+			...(webLocale ? [langCookie(webLocale, new URL(ORIGIN).host)] : []),
 			cookie(FLOW, "", 0),
 		]);
 	}
@@ -724,6 +729,7 @@ export async function discoverProvider({ issuer, clientId, fetcher = fetch }) {
 		const claims = tokens.claims();
 		return {
 			sub: claims?.sub,
+			...(claims?.email_verified === true && typeof claims.email === "string" && claims.email.length <= 254 && EMAIL.test(claims.email) ? { email: claims.email } : {}),
 			sid: claims?.sid,
 			authTime: claims?.auth_time,
 			issuedAt: claims?.iat,
@@ -736,7 +742,7 @@ export async function discoverProvider({ issuer, clientId, fetcher = fetch }) {
 		authorizationUrl: async ({ state, nonce, verifier, fresh }) =>
 			oidc.buildAuthorizationUrl(config, {
 				redirect_uri: `${ORIGIN}/auth/callback`,
-				scope: "openid offline_access",
+				scope: "openid email offline_access",
 				prompt: fresh ? "login consent" : "consent",
 				max_age: fresh ? "300" : "43200",
 				state,
