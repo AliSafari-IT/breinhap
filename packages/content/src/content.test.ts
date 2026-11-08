@@ -3,11 +3,14 @@ import {
   ContentPack,
   LearningObject,
   isCorrectOrder,
+  isCorrect,
+  missionPages,
   pickMission,
   samplePack,
   shuffleForDisplay,
 } from "./index";
 import { biologiePrikkelReactie } from "./samples/biologie-prikkel-reactie";
+import { wiskundeOntbindenInFactoren } from "./samples/wiskunde-ontbinden-in-factoren";
 import { wiskundeSamengesteldeIntrest } from "./samples/wiskunde-samengestelde-intrest";
 
 const reviewed = (object: LearningObject): LearningObject => ({
@@ -17,7 +20,7 @@ const reviewed = (object: LearningObject): LearningObject => ({
 
 describe("schema", () => {
   it("accepts the sample pack", () => {
-    expect(samplePack.objects).toHaveLength(2);
+    expect(samplePack.objects).toHaveLength(3);
   });
 
   it("rejects a choice answer that points past the options", () => {
@@ -122,5 +125,49 @@ describe("order questions", () => {
 
   it("is deterministic per seed", () => {
     expect(shuffleForDisplay(items, 42)).toEqual(shuffleForDisplay(items, 42));
+  });
+});
+
+describe("factoring mission", () => {
+  const object = LearningObject.parse(wiskundeOntbindenInFactoren);
+  const mission = object.missions[0]!;
+
+  it("is one four-minute grade-3 draft with no invented curriculum references", () => {
+    expect(object.grade).toBe(3);
+    expect(object.subject).toBe("wiskunde");
+    expect(object.schemaVersion).toBe(1);
+    expect(object.review).toEqual({ status: "draft" });
+    expect(object.curriculum.references).toEqual([]);
+    expect(object.missions).toHaveLength(1);
+    expect(mission.id).toBe("wis-ontbinden-in-factoren");
+    expect(mission.minutes).toBe(4);
+    expect(mission.warmup.text).toBeTruthy();
+    expect(mission.learn).toHaveLength(4);
+    expect(mission.practice).toHaveLength(4);
+    expect(mission.check).toHaveLength(2);
+    expect(mission.commonMistakes).toHaveLength(4);
+  });
+
+  it("is playable in the four fixed steps and stays behind the draft gate", () => {
+    expect(pickMission([object], 4)).toBeUndefined();
+    expect(pickMission([object], 4, { includeDrafts: true })?.mission.id).toBe(mission.id);
+    expect(missionPages(mission).map((page) => page.step)).toEqual([
+      "Opwarmen", "Leren", "Leren", "Leren", "Leren", "Doen", "Doen", "Doen", "Doen", "Check", "Check",
+    ]);
+    const routine = mission.practice[2]!;
+    if (routine.kind !== "order") throw new Error("expected factoring routine");
+    expect(new Set(routine.items).size).toBe(4);
+    expect(isCorrect(routine, { kind: "order", placed: routine.items, checked: true })).toBe(true);
+    expect(isCorrect(routine, { kind: "order", placed: [...routine.items].reverse(), checked: true })).toBe(false);
+  });
+
+  it("keys the corrected expressions and the fully factored result explicitly", () => {
+    const choices = [...mission.practice, ...mission.check].filter((q) => q.kind === "choice");
+    expect(choices.map((q) => q.options[q.answerIndex])).toEqual([
+      "7x²y³(3x³ + y⁴)", "(5x³ + 4)(5x³ − 4)", "(7x − 1)²", "(3a + 2b)(3a − 2b)", "2(x − 2)(x + 2)",
+    ]);
+    expect(mission.practice[0]!.prompt).toContain("21x⁵y³ + 7x²y⁷");
+    expect(mission.check[1]!.prompt).toContain("2x² − 8");
+    expect(mission.check[1]!.explanation).toContain("4x² − 16");
   });
 });
