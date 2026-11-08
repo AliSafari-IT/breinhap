@@ -1,3 +1,4 @@
+import { tr, ui, diagnostic } from "./workspace-i18n.mjs";
 import { esc } from "./directory-pages.mjs";
 import { shuffleForDisplay } from "./vendor/content-pick.mjs";
 import { isFinished, missionPages, STEPS, scoreAnswers, scoreSentence, validAnswer } from "./vendor/content-mission.mjs";
@@ -53,19 +54,19 @@ export function submitted(page, params) {
 	if (question.kind === "choice") {
 		if (!params.has("kies")) return null;
 		const answer = { kind: "choice", chosen: Number(params.get("kies")) };
-		return validAnswer(question, answer) && /^\d$/.test(params.get("kies")) ? answer : { error: "Kies eerst een antwoord." };
+		return validAnswer(question, answer) && /^\d$/.test(params.get("kies")) ? answer : { error: tr("Kies eerst een antwoord.") };
 	}
 	if (!params.has("plaats0")) return null;
 	const placed = question.items.map((_, i) => question.items[Number(params.get(`plaats${i}`) ?? "x")]);
 	const answer = { kind: "order", placed, checked: true };
 	return placed.every((item) => typeof item === "string") && isFinished(question, answer)
 		? answer
-		: { error: "Zet elk stukje op precies één plaats." };
+		: { error: tr("Zet elk stukje op precies één plaats.") };
 }
 
 const steps = (current) =>
-	`<ol class="steps" aria-label="Stap ${STEPS.indexOf(current) + 1} van 4: ${current}">${STEPS.map(
-		(step) => `<li${step === current ? ' aria-current="step"' : ""}>${step}</li>`,
+	ui`<ol class="steps" aria-label="Stap ${STEPS.indexOf(current) + 1} van 4: ${tr(current)}">${STEPS.map(
+		(step) => ui`<li${step === current ? ' aria-current="step"' : ""}>${tr(step)}</li>`,
 	).join("")}</ol>`;
 
 const feedback = (question, answer) => {
@@ -75,9 +76,9 @@ const feedback = (question, answer) => {
 			: question.items.every((item, i) => answer.placed[i] === item);
 	const explanation =
 		question.kind === "order" && !correct
-			? `De juiste volgorde: ${question.items.join(" → ")}. ${question.explanation}`
+			? tr`De juiste volgorde: ${question.items.join(" → ")}. ${question.explanation}`
 			: question.explanation;
-	return `<div class="feedback ${correct ? "right" : "not-yet"}" role="status"><p><strong>${correct ? "Klopt." : "Nog niet."}</strong></p><p>${esc(explanation)}</p></div>`;
+	return ui`<div class="feedback ${correct ? "right" : "not-yet"}" role="status"><p><strong>${correct ? tr("Klopt.") : tr("Nog niet.")}</strong></p><p>${esc(explanation)}</p></div>`;
 };
 
 /**
@@ -92,16 +93,16 @@ export function previewPage(object, params, { base, back, label }) {
 		const text = query.toString();
 		return `${base}${text ? `?${text}` : ""}`;
 	};
-	const banner = `<div class="notice preview" role="note"><p><strong>Voorbeeld van ${esc(label)}.</strong> Zo ziet een leerling deze missie. Er wordt niets gepubliceerd, toegewezen of bewaard, en er ontstaat geen voortgang. Antwoorden blijven alleen in dit adres staan.</p><p><a href="${esc(back)}">Terug naar het leerobject</a></p></div>`;
+	const banner = ui`<div class="notice preview" role="note"><p><strong>Voorbeeld van ${esc(label)}.</strong> Zo ziet een leerling deze missie. Er wordt niets gepubliceerd, toegewezen of bewaard, en er ontstaat geen voortgang. Antwoorden blijven alleen in dit adres staan.</p><p><a href="${esc(back)}">Terug naar het leerobject</a></p></div>`;
 
 	const chosenMission = params.get("missie");
 	if (object.missions.length > 1 && chosenMission === null)
-		return `${banner}<h2>${esc(object.title)}</h2><p>Kies een missie om te bekijken.</p><ul>${object.missions
-			.map((m, i) => `<li><a href="${esc(keep({ missie: i }))}">${esc(m.title)}</a> · ${m.minutes} minuten</li>`)
+		return ui`${banner}<h2>${esc(object.title)}</h2><p>Kies een missie om te bekijken.</p><ul>${object.missions
+			.map((m, i) => ui`<li><a href="${esc(keep({ missie: i }))}">${esc(m.title)}</a> · ${m.minutes} minuten</li>`)
 			.join("")}</ul>`;
 	const missionIndex = /^\d{1,2}$/.test(chosenMission ?? "") ? Number(chosenMission) : 0;
 	const mission = object.missions[missionIndex];
-	if (!mission) return `${banner}<p>Deze missie bestaat niet. <a href="${esc(keep({}))}">Kies een missie</a></p>`;
+	if (!mission) return ui`${banner}<p>Deze missie bestaat niet. <a href="${esc(keep({}))}">Kies een missie</a></p>`;
 
 	const pages = missionPages(mission);
 	const answers = decodeAnswers(params.get("a"), pages);
@@ -114,48 +115,48 @@ export function previewPage(object, params, { base, back, label }) {
 
 	if (!page) {
 		const questions = mission.practice.length + mission.check.length;
-		return `${banner}<h2>Missie klaar.</h2><p>${esc(scoreSentence(scoreAnswers(pages, answers), questions))}</p>${
+		return ui`${banner}<h2>Missie klaar.</h2><p>${esc(diagnostic(scoreSentence(scoreAnswers(pages, answers), questions)))}</p>${
 			mission.commonMistakes.length
-				? `<section class="card"><h3>Veelgemaakte fout</h3>${mission.commonMistakes.map((m) => `<p>“${esc(m.mistake)}” — ${esc(m.why)}</p>`).join("")}</section>`
+				? ui`<section class="card"><h3>Veelgemaakte fout</h3>${mission.commonMistakes.map((m) => ui`<p>“${esc(m.mistake)}” — ${esc(m.why)}</p>`).join("")}</section>`
 				: ""
-		}<p><a href="${esc(at({}))}">Opnieuw bekijken</a>${object.missions.length > 1 ? ` · <a href="${esc(keep({}))}">Andere missie</a>` : ""}</p>`;
+		}<p><a href="${esc(at({}))}">Opnieuw bekijken</a>${object.missions.length > 1 ? ui` · <a href="${esc(keep({}))}">Andere missie</a>` : ""}</p>`;
 	}
 
-	const header = `${banner}${steps(page.step)}<p class="muted">${esc(mission.title)} · ${index + 1} van ${pages.length}</p>${index === pages.length - 1 ? '<p class="muted">Laatste vraag.</p>' : ""}`;
-	const next = `<a class="action" href="${esc(at({ stap: index + 1, a: encodeAnswers(answers, pages) }))}">Verder</a>`;
+	const header = ui`${banner}${steps(page.step)}<p class="muted">${esc(mission.title)} · ${index + 1} van ${pages.length}</p>${index === pages.length - 1 ? ui`<p class="muted">Laatste vraag.</p>` : ""}`;
+	const next = ui`<a class="action" href="${esc(at({ stap: index + 1, a: encodeAnswers(answers, pages) }))}">Verder</a>`;
 	if (page.kind === "card")
-		return `${header}<section class="card"><p>${esc(page.card.text)}</p>${page.card.example ? `<p class="muted">Voorbeeld: ${esc(page.card.example)}</p>` : ""}${next}</section>`;
+		return ui`${header}<section class="card"><p>${esc(page.card.text)}</p>${page.card.example ? ui`<p class="muted">Voorbeeld: ${esc(page.card.example)}</p>` : ""}${next}</section>`;
 
 	const question = page.question;
 	let error = "";
 	if (!answers[index]) {
 		const sent = submitted(page, params);
-		if (sent?.error) error = `<p class="error" role="alert">${esc(sent.error)}</p>`;
+		if (sent?.error) error = ui`<p class="error" role="alert">${esc(sent.error)}</p>`;
 		else if (sent) answers[index] = sent;
 	}
 	const answer = answers[index];
-	const verder = `<a class="action" href="${esc(at({ stap: index + 1, a: encodeAnswers(answers, pages) }))}">Verder</a>`;
-	const hidden = `${object.missions.length > 1 ? `<input type="hidden" name="missie" value="${missionIndex}">` : ""}${params.get("revisie") ? `<input type="hidden" name="revisie" value="${esc(params.get("revisie"))}">` : ""}<input type="hidden" name="stap" value="${index}"><input type="hidden" name="a" value="${esc(encodeAnswers(answers, pages))}">`;
+	const verder = ui`<a class="action" href="${esc(at({ stap: index + 1, a: encodeAnswers(answers, pages) }))}">Verder</a>`;
+	const hidden = ui`${object.missions.length > 1 ? ui`<input type="hidden" name="missie" value="${missionIndex}">` : ""}${params.get("revisie") ? ui`<input type="hidden" name="revisie" value="${esc(params.get("revisie"))}">` : ""}<input type="hidden" name="stap" value="${index}"><input type="hidden" name="a" value="${esc(encodeAnswers(answers, pages))}">`;
 
 	if (question.kind === "choice") {
 		if (answer)
-			return `${header}<section class="card"><h2>${esc(question.prompt)}</h2><ul class="options">${question.options
-				.map((o, i) => `<li${i === answer.chosen ? ' class="chosen"' : ""}>${esc(o)}${i === answer.chosen ? " <em>(jouw keuze)</em>" : ""}</li>`)
+			return ui`${header}<section class="card"><h2>${esc(question.prompt)}</h2><ul class="options">${question.options
+				.map((o, i) => ui`<li${i === answer.chosen ? ' class="chosen"' : ""}>${esc(o)}${i === answer.chosen ? ui` <em>(jouw keuze)</em>` : ""}</li>`)
 				.join("")}</ul>${feedback(question, answer)}${verder}</section>`;
-		return `${header}<section class="card"><form method="get" action="${esc(base)}">${hidden}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${question.options
-			.map((o, i) => `<label class="option"><input type="radio" name="kies" value="${i}" required> ${esc(o)}</label>`)
+		return ui`${header}<section class="card"><form method="get" action="${esc(base)}">${hidden}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${question.options
+			.map((o, i) => ui`<label class="option"><input type="radio" name="kies" value="${i}" required> ${esc(o)}</label>`)
 			.join("")}</fieldset>${error}<button type="submit">Controleer</button></form></section>`;
 	}
 
 	// an order question: the same display order as the app (seed = page position + 1)
 	const shown = shuffleForDisplay(question.items, index + 1);
 	if (answer)
-		return `${header}<section class="card"><h2>${esc(question.prompt)}</h2><ol>${answer.placed.map((item) => `<li>${esc(item)}</li>`).join("")}</ol>${feedback(question, answer)}${verder}</section>`;
-	return `${header}<section class="card"><form method="get" action="${esc(base)}">${hidden}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend><p class="muted">De stukjes: ${shown.map(esc).join(" · ")}. Kies voor elke plaats een stukje; gebruik elk stukje één keer.</p>${question.items
+		return ui`${header}<section class="card"><h2>${esc(question.prompt)}</h2><ol>${answer.placed.map((item) => ui`<li>${esc(item)}</li>`).join("")}</ol>${feedback(question, answer)}${verder}</section>`;
+	return ui`${header}<section class="card"><form method="get" action="${esc(base)}">${hidden}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend><p class="muted">De stukjes: ${shown.map(esc).join(" · ")}. Kies voor elke plaats een stukje; gebruik elk stukje één keer.</p>${question.items
 		.map(
 			(_, position) =>
-				`<label class="field">Plaats ${position + 1} <select name="plaats${position}" required><option value="">Kies…</option>${shown
-					.map((item) => `<option value="${question.items.indexOf(item)}">${esc(item)}</option>`)
+				ui`<label class="field">Plaats ${position + 1} <select name="plaats${position}" required><option value="">Kies…</option>${shown
+					.map((item) => ui`<option value="${question.items.indexOf(item)}">${esc(item)}</option>`)
 					.join("")}</select></label>`,
 		)
 		.join("")}</fieldset>${error}<button type="submit">Controleer</button></form></section>`;

@@ -1,3 +1,4 @@
+import { tr, ui } from "./workspace-i18n.mjs";
 import { validate } from "./content.mjs";
 import { ORIGIN, readForm } from "./identity.mjs";
 import {
@@ -25,7 +26,7 @@ export const EDITOR_FORM_LIMIT = 400_000;
 
 const redirect = (location) => ({ status: 303, headers: { Location: location }, body: "" });
 const notice = (text, role = "status") =>
-	`<div class="notice" role="${role}"><p>${text}</p></div>`;
+	ui`<div class="notice" role="${role}"><p>${text}</p></div>`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -33,25 +34,25 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 	const path = url.pathname;
 	if (path !== "/bibliotheek" && !path.startsWith("/bibliotheek/")) return null;
 	if (!["GET", "HEAD", "POST"].includes(req.method))
-		return { status: 405, title: "Niet toegestaan", body: "Deze actie bestaat hier niet.", headers: { Allow: "GET, POST" } };
+		return { status: 405, title: tr("Niet toegestaan"), body: tr("Deze actie bestaat hier niet."), headers: { Allow: "GET, POST" } };
 	// a main navigation item: without the database it explains itself, like the placeholder it replaces
 	if (!content)
 		return {
 			status: req.method === "POST" ? 503 : 200,
-			title: "Bibliotheek",
-			body: "De bibliotheek is nog niet ingericht op deze server. Er is nog geen inhoudsbibliotheek beschikbaar.",
+			title: tr("Bibliotheek"),
+			body: tr("De bibliotheek is nog niet ingericht op deze server. Er is nog geen inhoudsbibliotheek beschikbaar."),
 			active: "/bibliotheek",
 		};
 	const principal = await identity.principal(req);
-	if (!principal) return { status: 403, title: "Geen toegang", body: "Je hebt geen toegang tot de bibliotheek." };
+	if (!principal) return { status: 403, title: tr("Geen toegang"), body: tr("Je hebt geen toegang tot de bibliotheek.") };
 	const csrf = req.managementSession.csrf;
-	const refused = { status: 403, title: "Geen toegang", body: "Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang." };
+	const refused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang.") };
 
 	let form;
 	if (req.method === "POST") {
 		form = await readForm(req, EDITOR_FORM_LIMIT);
 		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== csrf)
-			return { status: 403, title: "Aanvraag geweigerd", body: "Laad de pagina opnieuw en probeer nog eens. Wat je typte, is niet opgeslagen." };
+			return { status: 403, title: tr("Aanvraag geweigerd"), body: tr("Laad de pagina opnieuw en probeer nog eens. Wat je typte, is niet opgeslagen.") };
 	}
 	const guard = async (work) => {
 		try {
@@ -59,14 +60,14 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 		} catch (error) {
 			if (error?.code === "forbidden") return refused;
 			if (error?.code === "not_found")
-				return { status: 404, title: "Niet gevonden", body: 'Dit leerobject bestaat niet of is niet van jou. <a href="/bibliotheek">Naar de bibliotheek</a>' };
+				return { status: 404, title: tr("Niet gevonden"), body: ui`Dit leerobject bestaat niet of is niet van jou. <a href="/bibliotheek">Naar de bibliotheek</a>` };
 			throw error;
 		}
 	};
 
 	// the library
 	if (path === "/bibliotheek") {
-		if (req.method === "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET" } };
+		if (req.method === "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
 		const q = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
 		const subject = SUBJECTS.some(([v]) => v === url.searchParams.get("vak")) ? url.searchParams.get("vak") : "";
 		const grade = /^[1-6]$/.test(url.searchParams.get("jaar") ?? "") ? url.searchParams.get("jaar") : "";
@@ -76,8 +77,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				...(subject ? { subject } : {}),
 				...(grade ? { grade: Number(grade) } : {}),
 			});
-			const archived = url.searchParams.get("gearchiveerd") === "1" ? notice("Het leerobject is gearchiveerd.") : "";
-			return { status: 200, title: "Bibliotheek", body: libraryPage(rows, { q, subject, grade, notice: archived }), active: "/bibliotheek" };
+			const archived = url.searchParams.get("gearchiveerd") === "1" ? notice(tr("Het leerobject is gearchiveerd.")) : "";
+			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived }), active: "/bibliotheek" };
 		});
 	}
 
@@ -86,7 +87,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 		if (req.method !== "POST")
 			return guard(async () => {
 				if (!(await content.directory.can(principal, "content.author"))) return refused;
-				return { status: 200, title: "Nieuw leerobject", body: editorPage({ values: { grade: "3" }, csrf }) };
+				return { status: 200, title: tr("Nieuw leerobject"), body: editorPage({ values: { grade: "3" }, csrf }) };
 			});
 		const parsed = fromForm(form);
 		// breinhap#31: a draft made from extracted text keeps a link to that extraction
@@ -100,21 +101,21 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				return redirect(`/bibliotheek/${id}?opgeslagen=1`);
 			} catch (error) {
 				if (!(error instanceof ContentError) || error.code === "forbidden" || error.code === "not_found") throw error;
-				return { status: 422, title: "Nieuw leerobject", body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf, hidden }) };
+				return { status: 422, title: tr("Nieuw leerobject"), body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf, hidden }) };
 			}
 		});
 	}
 
 	const match = /^\/bibliotheek\/([a-z0-9-]{1,80})(?:\/(vastleggen|dupliceren|archiveren|voorbeeld))?$/.exec(path);
-	if (!match || !ID.test(match[1])) return { status: 404, title: "Niet gevonden", body: '<a href="/bibliotheek">Naar de bibliotheek</a>' };
+	if (!match || !ID.test(match[1])) return { status: 404, title: tr("Niet gevonden"), body: ui`<a href="/bibliotheek">Naar de bibliotheek</a>` };
 	const [, id, action] = match;
 	// breinhap#28: the preview only reads; its state lives in the URL
 	if (action === "voorbeeld") {
-		if (req.method === "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET" } };
+		if (req.method === "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
 		return guard(() => preview(content, principal, id, url));
 	}
 	if (action && req.method !== "POST")
-		return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "POST" } };
+		return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "POST" } };
 
 	if (!action && req.method !== "POST")
 		return guard(async () => {
@@ -130,7 +131,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 					id,
 					version: draft.version,
 					revisions: draft.revisions,
-					notice: saved ? notice(`Opgeslagen (versie ${draft.version}).`) : revised ? notice(`Revisie ${Number(revised)} vastgelegd.`) : "",
+					notice: saved ? notice(tr`Opgeslagen (versie ${draft.version}).`) : revised ? notice(tr`Revisie ${Number(revised)} vastgelegd.`) : "",
 				}),
 			};
 		});
@@ -157,7 +158,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 							version: current.version,
 							revisions: current.revisions,
 							notice: notice(
-								`Iemand anders (of een ander tabblad) heeft dit leerobject intussen opgeslagen (nu versie ${current.version}). <strong>Je wijzigingen zijn niet opgeslagen</strong>; ze staan hieronder nog. <a href="/bibliotheek/${id}" target="_blank" rel="noopener">Open de nieuwste versie</a> in een nieuw tabblad om te vergelijken. Klik daarna op Opslaan om jouw versie over de nieuwste te bewaren.`,
+								ui`Iemand anders (of een ander tabblad) heeft dit leerobject intussen opgeslagen (nu versie ${current.version}). <strong>Je wijzigingen zijn niet opgeslagen</strong>; ze staan hieronder nog. <a href="/bibliotheek/${id}" target="_blank" rel="noopener">Open de nieuwste versie</a> in een nieuw tabblad om te vergelijken. Klik daarna op Opslaan om jouw versie over de nieuwste te bewaren.`,
 								"alert",
 							),
 						}),
@@ -180,8 +181,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				if (error?.code !== "stale" && error?.code !== "invalid") throw error;
 				return {
 					status: 409,
-					title: "Niet vastgelegd",
-					body: `${error.code === "stale" ? "Het leerobject is intussen gewijzigd. Open het opnieuw en leg dan een revisie vast." : "Het concept is niet geldig; sla het eerst correct op."} <a href="/bibliotheek/${id}">Terug</a>`,
+					title: tr("Niet vastgelegd"),
+					body: ui`${error.code === "stale" ? tr("Het leerobject is intussen gewijzigd. Open het opnieuw en leg dan een revisie vast.") : tr("Het concept is niet geldig; sla het eerst correct op.")} <a href="/bibliotheek/${id}">Terug</a>`,
 				};
 			}
 		});
@@ -195,8 +196,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				if (!(error instanceof ContentError) || error.code === "not_found" || error.code === "forbidden") throw error;
 				return {
 					status: 409,
-					title: "Niet gedupliceerd",
-					body: `${error.code === "exists" ? "Die code bestaat al." : error.code === "mission_exists" ? "De missiecodes van de kopie bestaan al; kies een andere code." : "Gebruik voor de code alleen kleine letters, cijfers en streepjes."} <a href="/bibliotheek/${id}">Terug</a>`,
+					title: tr("Niet gedupliceerd"),
+					body: ui`${error.code === "exists" ? tr("Die code bestaat al.") : error.code === "mission_exists" ? tr("De missiecodes van de kopie bestaan al; kies een andere code.") : tr("Gebruik voor de code alleen kleine letters, cijfers en streepjes.")} <a href="/bibliotheek/${id}">Terug</a>`,
 				};
 			}
 		});
@@ -217,21 +218,21 @@ async function preview(content, principal, id, url) {
 	let stored;
 	let label;
 	if (asked !== null) {
-		if (!/^[1-9]\d{0,5}$/.test(asked)) return { status: 404, title: "Niet gevonden", body: `Deze revisie bestaat niet. <a href="${back}">Terug</a>` };
+		if (!/^[1-9]\d{0,5}$/.test(asked)) return { status: 404, title: tr("Niet gevonden"), body: ui`Deze revisie bestaat niet. <a href="${back}">Terug</a>` };
 		stored = (await content.revision(principal, id, Number(asked))).content;
 		label = `revisie ${Number(asked)}`;
 	} else {
 		const draft = await content.get(principal, id);
 		stored = draft.content;
-		label = `het concept (versie ${draft.version})`;
+		label = tr`het concept (versie ${draft.version})`;
 	}
 	try {
 		assertSupported(stored);
 	} catch {
 		return {
 			status: 422,
-			title: "Voorbeeld niet mogelijk",
-			body: `Deze inhoud gebruikt een schemaversie die deze preview niet kent (deze preview kent versie ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}). Ze toont niets wat ze niet begrijpt. <a href="${back}">Terug naar het leerobject</a>`,
+			title: tr("Voorbeeld niet mogelijk"),
+			body: ui`Deze inhoud gebruikt een schemaversie die deze preview niet kent (deze preview kent versie ${SUPPORTED_SCHEMA_VERSIONS.join(", ")}). Ze toont niets wat ze niet begrijpt. <a href="${back}">Terug naar het leerobject</a>`,
 		};
 	}
 	let object;
@@ -241,14 +242,14 @@ async function preview(content, principal, id, url) {
 		if (!(error instanceof ContentError)) throw error;
 		return {
 			status: 422,
-			title: "Voorbeeld niet mogelijk",
-			body: `Dit concept is nog niet geldig, dus een leerling kan het zo niet krijgen. Sla het eerst correct op in de editor. <a href="${back}">Terug naar het leerobject</a>`,
+			title: tr("Voorbeeld niet mogelijk"),
+			body: ui`Dit concept is nog niet geldig, dus een leerling kan het zo niet krijgen. Sla het eerst correct op in de editor. <a href="${back}">Terug naar het leerobject</a>`,
 		};
 	}
 	const payload = studentPayload(object);
 	return {
 		status: 200,
-		title: `Voorbeeld: ${payload.title}`,
+		title: tr`Voorbeeld: ${payload.title}`,
 		body: previewPage(payload, url.searchParams, { base: `${back}/voorbeeld`, back, label }),
 		headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
 	};

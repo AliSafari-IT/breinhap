@@ -125,7 +125,7 @@ test("trusted resolver can render accessible shell and deep links only", async (
 	assert.match(res.body, /nog geen inhoudsbibliotheek/);
 	const missing = await get("/unknown");
 	assert.equal(missing.status, 404);
-	assert.doesNotMatch(missing.body, /aria-current/);
+	assert.doesNotMatch(missing.body, /aria-current="page"/, "an unknown route has no active workspace section; the locale selector still marks its language");
 	assert.equal((await get("/", { method: "HEAD" })).body, "");
 });
 

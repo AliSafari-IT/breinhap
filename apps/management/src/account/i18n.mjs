@@ -13,6 +13,8 @@ export function localeOf(req, url) {
 	if (LANGUAGES.includes(asked)) return asked;
 	const cookie = /(?:^|;\s*)breinhap-lang=([a-z]{2})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1];
 	if (LANGUAGES.includes(cookie)) return cookie;
+	const shared = /(?:^|;\s*)asafarim-locale=([a-z]{2})(?:[-_][A-Za-z]{2})?(?:;|$)/i.exec(req.headers.cookie ?? "")?.[1]?.toLowerCase();
+	if (LANGUAGES.includes(shared)) return shared;
 	for (const part of String(req.headers["accept-language"] ?? "").split(",")) {
 		const tag = part.trim().slice(0, 2).toLowerCase();
 		if (LANGUAGES.includes(tag)) return tag;
@@ -387,3 +389,21 @@ export const T = {
 		roles: ROLES.de,
 	},
 };
+
+const SELECTOR_COPY = {
+	nl: { country: "België", ariaLabel: "Taal kiezen", searchPlaceholder: "Zoek een land…", emptyResults: "Geen landen gevonden", chooseCountry: "Land", chooseLanguage: "Taal", backToCountries: "Terug", close: "Sluiten", languages: { nl: "Nederlands", fr: "Frans", en: "Engels", de: "Duits" } },
+	fr: { country: "Belgique", ariaLabel: "Choisir la langue", searchPlaceholder: "Rechercher un pays…", emptyResults: "Aucun pays trouvé", chooseCountry: "Pays", chooseLanguage: "Langue", backToCountries: "Retour", close: "Fermer", languages: { nl: "Néerlandais", fr: "Français", en: "Anglais", de: "Allemand" } },
+	en: { country: "Belgium", ariaLabel: "Choose language", searchPlaceholder: "Search countries…", emptyResults: "No countries found", chooseCountry: "Country", chooseLanguage: "Language", backToCountries: "Back", close: "Close", languages: { nl: "Dutch", fr: "French", en: "English", de: "German" } },
+	de: { country: "Belgien", ariaLabel: "Sprache wählen", searchPlaceholder: "Land suchen…", emptyResults: "Keine Länder gefunden", chooseCountry: "Land", chooseLanguage: "Sprache", backToCountries: "Zurück", close: "Schließen", languages: { nl: "Niederländisch", fr: "Französisch", en: "Englisch", de: "Deutsch" } },
+};
+
+/** Workspace selector preserves filters and preview state; no callback/token query is copied. */
+export function languageSelector(lang, path = "/", search = "") {
+	const keep = new Set(["q", "vak", "jaar", "revisie", "missie", "stap", "a", "notice", "error", "opgeslagen", "vastgelegd", "gearchiveerd", "verwijderd"]);
+	const params = new URLSearchParams([...new URLSearchParams(search)].filter(([key]) => keep.has(key)));
+	const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+	return `<div class="locale-selector" data-locale-selector data-lang="${lang}" data-selector-i18n="${esc(JSON.stringify(SELECTOR_COPY[lang]))}"><nav class="lang-switch" aria-label="Taal / Langue / Language / Sprache">${LANGUAGES.map((choice) => {
+		params.set("lang", choice);
+		return choice === lang ? `<span aria-current="true" lang="${choice}">${choice.toUpperCase()}</span>` : `<a href="${esc(path)}?${esc(params.toString())}" lang="${choice}" hreflang="${choice}" title="${LANGUAGE_NAMES[choice]}">${choice.toUpperCase()}</a>`;
+	}).join("")}</nav></div>`;
+}

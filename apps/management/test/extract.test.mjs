@@ -232,17 +232,17 @@ test("mapping: the chosen pieces fill the editor; no answer is chosen, no minute
 const shape = (value) =>
 	typeof value === "function" ? "fn" : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, shape(value[k])])) : typeof value;
 
-test("languages: every text of the extraction screens exists in en, nl, fr and de; English is the default", () => {
+test("languages: every text of the extraction screens exists in en, nl, fr and de; the workspace preference and Dutch default apply", () => {
 	assert.deepEqual(EXTRACT_LANGUAGES, ["en", "nl", "fr", "de"]);
 	for (const lang of ["nl", "fr", "de"]) assert.deepEqual(shape(XT[lang]), shape(XT.en), `${lang} has every key of en`);
 	for (const role of ROLES) for (const lang of EXTRACT_LANGUAGES) assert.ok(XT[lang].roles[role], `${lang}: role ${role}`);
 	const req = (cookie = "", accept = "") => ({ headers: { cookie, "accept-language": accept } });
 	const url = (q = "") => new URL(`https://management.breinhap.com/bibliotheek/uittreksels${q}`);
-	assert.equal(extractLocale(req(), url()), "en");
-	assert.equal(extractLocale(req("", "es-ES,es"), url()), "en");
+	assert.equal(extractLocale(req(), url()), "nl");
+	assert.equal(extractLocale(req("", "es-ES,es"), url()), "nl");
 	assert.equal(extractLocale(req("", "fr-BE,fr;q=0.9"), url()), "fr");
 	assert.equal(extractLocale(req("breinhap-lang=nl", "fr"), url()), "nl");
-	assert.equal(extractLocale(req("breinhap-lang=nl; asafarim-locale=de-BE", "fr"), url()), "de");
+	assert.equal(extractLocale(req("breinhap-lang=nl; asafarim-locale=de-BE", "fr"), url()), "nl");
 	assert.equal(extractLocale(req("asafarim-locale=de"), url("?lang=fr")), "fr");
-	assert.equal(extractLocale(req("asafarim-locale=xx"), url("?lang=xx")), "en");
+	assert.equal(extractLocale(req("asafarim-locale=xx"), url("?lang=xx")), "nl");
 });

@@ -1,3 +1,4 @@
+import { tr, ui, uiLocale } from "./workspace-i18n.mjs";
 import { DirectoryError, GRANTABLE, SCHOOL_YEARS } from "./directory.mjs";
 import { SELF_SERVICE_ROLES } from "./store.mjs";
 const ROLE_NAME = { "breinhap.parent": "ouder", "breinhap.tutor": "begeleider", "breinhap.teacher": "leerkracht", "breinhap.admin": "beheerder" };
@@ -15,71 +16,71 @@ export const esc = (value) =>
 			({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
 	);
 
-const YEAR = (year) => `${year}${year === 1 ? "ste" : "de"} middelbaar`;
+const YEAR = (year) => uiLocale() === "nl" ? `${year}${year === 1 ? "ste" : "de"} middelbaar` : tr("Middelbaar, jaar {0}", year);
 const CAPABILITY = {
 	"content.review": "Inhoud nakijken",
 	"content.publish": "Inhoud publiceren",
 };
 
 /** What the administrator reads when a change is refused. */
-export const DIRECTORY_ERRORS = Object.freeze({
-	forbidden: "Je hebt geen toegang tot deze actie.",
-	invalid: "Controleer wat je invulde: een naam van 1 tot 40 tekens (groepen 60), zonder < of >.",
-	not_found: "Deze leerling, groep of koppeling bestaat niet (meer) in deze werkplek.",
-	self: "Je kunt jezelf geen koppeling of recht geven.",
+export const DIRECTORY_ERRORS = () => Object.freeze({
+	forbidden: tr("Je hebt geen toegang tot deze actie."),
+	invalid: tr("Controleer wat je invulde: een naam van 1 tot 40 tekens (groepen 60), zonder < of >."),
+	not_found: tr("Deze leerling, groep of koppeling bestaat niet (meer) in deze werkplek."),
+	self: tr("Je kunt jezelf geen koppeling of recht geven."),
 	not_member:
-		"Dit account is geen actieve ouder, begeleider of leerkracht in deze werkplek. Keur eerst de rol goed.",
+		tr("Dit account is geen actieve ouder, begeleider of leerkracht in deze werkplek. Keur eerst de rol goed."),
 	role_mismatch:
-		"Deze rol past niet bij deze koppeling: een ouder koppel je aan een leerling, een leerkracht aan een groep, een begeleider aan beide.",
-	exists: "Deze koppeling of dit recht bestaat al.",
+		tr("Deze rol past niet bij deze koppeling: een ouder koppel je aan een leerling, een leerkracht aan een groep, een begeleider aan beide."),
+	exists: tr("Deze koppeling of dit recht bestaat al."),
 });
 
-const csrfField = (csrf) => `<input type="hidden" name="csrf" value="${esc(csrf)}">`;
+const csrfField = (csrf) => ui`<input type="hidden" name="csrf" value="${esc(csrf)}">`;
 const button = (path, fields, label, csrf) =>
-	`<form method="post" action="${path}" class="inline">${Object.entries(fields)
-		.map(([name, value]) => `<input type="hidden" name="${name}" value="${esc(value)}">`)
+	ui`<form method="post" action="${path}" class="inline">${Object.entries(fields)
+		.map(([name, value]) => ui`<input type="hidden" name="${name}" value="${esc(value)}">`)
 		.join("")}${csrfField(csrf)}<button>${label}</button></form>`;
 
 /** The administrator's page. `content` goes inside the shell's paragraph, hence the leading </p>. */
 export function adminDirectoryPage(view, csrf, members = []) {
 	// breinhap#signup: people by name and e-mail, never an account code to type
-	const nameOf = new Map(members.map((m) => [m.subject, [[m.profile?.firstName, m.profile?.lastName].filter(Boolean).join(" "), m.profile?.email].filter(Boolean).join(" · ") || "(onbekend lid)"]));
-	const who = (sub) => esc(nameOf.get(sub) ?? "(geen lid meer)");
+	const nameOf = new Map(members.map((m) => [m.subject, [[m.profile?.firstName, m.profile?.lastName].filter(Boolean).join(" "), m.profile?.email].filter(Boolean).join(" · ") || tr("(onbekend lid)")]));
+	const who = (sub) => esc(nameOf.get(sub) ?? tr("(geen lid meer)"));
 	const adults = members.filter((m) => m.role !== "breinhap.admin");
 	const peopleSelect = (label) =>
 		adults.length
-			? `<label>${label} <select name="subject" required>${adults.map((m) => `<option value="${esc(m.subject)}">${esc(nameOf.get(m.subject))} (${esc(ROLE_NAME[m.role] ?? m.role)})</option>`).join("")}</select></label>`
+			? ui`<label>${label} <select name="subject" required>${adults.map((m) => ui`<option value="${esc(m.subject)}">${esc(nameOf.get(m.subject))} (${esc(tr(ROLE_NAME[m.role] ?? m.role))})</option>`).join("")}</select></label>`
 			: "";
 	const learnerName = new Map(view.learners.map((l) => [l.id, l.displayName]));
 	const groupName = new Map(view.groups.map((g) => [g.id, g.name]));
 	const membersOf = (groupId) =>
 		view.memberships.filter((m) => m.groupId === groupId && learnerName.has(m.learnerId));
 	const years = SCHOOL_YEARS.map(
-		(y) => `<option value="${y}"${y === 3 ? " selected" : ""}>${YEAR(y)}</option>`,
+		(y) => ui`<option value="${y}"${y === 3 ? " selected" : ""}>${YEAR(y)}</option>`,
 	).join("");
 	const learnerOptions = view.learners
-		.map((l) => `<option value="${esc(l.id)}">${esc(l.displayName)}</option>`)
+		.map((l) => ui`<option value="${esc(l.id)}">${esc(l.displayName)}</option>`)
 		.join("");
 	const targets = [
 		...view.learners.map(
-			(l) => `<option value="learner:${esc(l.id)}">Leerling: ${esc(l.displayName)}</option>`,
+			(l) => ui`<option value="learner:${esc(l.id)}">Leerling: ${esc(l.displayName)}</option>`,
 		),
-		...view.groups.map((g) => `<option value="group:${esc(g.id)}">Groep: ${esc(g.name)}</option>`),
+		...view.groups.map((g) => ui`<option value="group:${esc(g.id)}">Groep: ${esc(g.name)}</option>`),
 	].join("");
 
 	const learners = view.learners.length
-		? `<ul class="requests">${view.learners
+		? ui`<ul class="requests">${view.learners
 				.map(
 					(l) =>
-						`<li><p><strong>${esc(l.displayName)}</strong> · ${YEAR(l.schoolYear)}</p>${button("/beheer/leerlingen/archiveren", { learner: l.id }, "Archiveren", csrf)}</li>`,
+						ui`<li><p><strong>${esc(l.displayName)}</strong> · ${YEAR(l.schoolYear)}</p>${button("/beheer/leerlingen/archiveren", { learner: l.id }, tr("Archiveren"), csrf)}</li>`,
 				)
 				.join("")}</ul>`
-		: "<p>Nog geen leerlingen.</p>";
+		: ui`<p>Nog geen leerlingen.</p>`;
 	const groups = view.groups.length
-		? `<ul class="requests">${view.groups
+		? ui`<ul class="requests">${view.groups
 				.map((g) => {
 					const members = membersOf(g.id);
-					return `<li><p><strong>${esc(g.name)}</strong> · ${members.length} leerling(en)${
+					return ui`<li><p><strong>${esc(g.name)}</strong> · ${members.length} leerling(en)${
 						members.length
 							? `: ${members.map((m) => esc(learnerName.get(m.learnerId))).join(", ")}`
 							: ""
@@ -88,59 +89,59 @@ export function adminDirectoryPage(view, csrf, members = []) {
 							button(
 								"/beheer/groepen/verwijderen",
 								{ group: g.id, learner: m.learnerId },
-								`${esc(learnerName.get(m.learnerId))} uit groep halen`,
+								tr`${esc(learnerName.get(m.learnerId))} uit groep halen`,
 								csrf,
 							),
 						)
 						.join("")}${
 						learnerOptions
-							? `<form method="post" action="/beheer/groepen/toevoegen" class="inline"><input type="hidden" name="group" value="${esc(g.id)}"><label>Leerling toevoegen <select name="learner">${learnerOptions}</select></label>${csrfField(csrf)}<button>Toevoegen</button></form>`
+							? ui`<form method="post" action="/beheer/groepen/toevoegen" class="inline"><input type="hidden" name="group" value="${esc(g.id)}"><label>Leerling toevoegen <select name="learner">${learnerOptions}</select></label>${csrfField(csrf)}<button>Toevoegen</button></form>`
 							: ""
-					}${button("/beheer/groepen/archiveren", { group: g.id }, "Groep archiveren", csrf)}</li>`;
+					}${button("/beheer/groepen/archiveren", { group: g.id }, tr("Groep archiveren"), csrf)}</li>`;
 				})
 				.join("")}</ul>`
-		: "<p>Nog geen groepen.</p>";
+		: ui`<p>Nog geen groepen.</p>`;
 	const links = view.links.length
-		? `<ul class="requests">${view.links
+		? ui`<ul class="requests">${view.links
 				.map(
 					(k) =>
-						`<li><p><strong>${who(k.adultSub)}</strong> → ${
+						ui`<li><p><strong>${who(k.adultSub)}</strong> → ${
 							k.learnerId
-								? `leerling <strong>${esc(learnerName.get(k.learnerId) ?? "(gearchiveerd)")}</strong>`
-								: `groep <strong>${esc(groupName.get(k.groupId) ?? "(gearchiveerd)")}</strong>`
-						}</p>${button("/beheer/koppelingen/intrekken", { link: k.id }, "Koppeling intrekken", csrf)}</li>`,
+								? ui`leerling <strong>${esc(learnerName.get(k.learnerId) ?? tr("(gearchiveerd)"))}</strong>`
+								: ui`groep <strong>${esc(groupName.get(k.groupId) ?? tr("(gearchiveerd)"))}</strong>`
+						}</p>${button("/beheer/koppelingen/intrekken", { link: k.id }, tr("Koppeling intrekken"), csrf)}</li>`,
 				)
 				.join("")}</ul>`
-		: "<p>Nog geen koppelingen.</p>";
+		: ui`<p>Nog geen koppelingen.</p>`;
 	const grants = view.grants.length
-		? `<ul class="requests">${view.grants
+		? ui`<ul class="requests">${view.grants
 				.map(
 					(r) =>
-						`<li><p><strong>${who(r.adultSub)}</strong>: ${esc(CAPABILITY[r.capability] ?? r.capability)}</p>${button("/beheer/rechten/intrekken", { grant: r.id }, "Recht intrekken", csrf)}</li>`,
+						ui`<li><p><strong>${who(r.adultSub)}</strong>: ${esc(tr(CAPABILITY[r.capability] ?? r.capability))}</p>${button("/beheer/rechten/intrekken", { grant: r.id }, tr("Recht intrekken"), csrf)}</li>`,
 				)
 				.join("")}</ul>`
-		: "<p>Nog geen extra rechten.</p>";
+		: ui`<p>Nog geen extra rechten.</p>`;
 
-	return `Leerlingen hebben (nog) geen eigen account. Een leerlingprofiel bevat alleen een voornaam of bijnaam en het jaar. Vul nooit een diagnose of andere gevoelige gegevens in.</p>
+	return ui`Leerlingen hebben (nog) geen eigen account. Een leerlingprofiel bevat alleen een voornaam of bijnaam en het jaar. Vul nooit een diagnose of andere gevoelige gegevens in.</p>
 <h2>Leerlingen</h2>${learners}
 <form method="post" action="/beheer/leerlingen/nieuw"><label>Voornaam of bijnaam <input name="displayName" required maxlength="40"></label><label>Jaar <select name="schoolYear">${years}</select></label>${csrfField(csrf)}<button>Leerling toevoegen</button></form>
 <h2>Groepen</h2>${groups}
 <form method="post" action="/beheer/groepen/nieuw"><label>Naam van de groep <input name="name" required maxlength="60"></label>${csrfField(csrf)}<button>Groep maken</button></form>
 <h2>Koppelingen</h2><p>Een ouder of begeleider ziet alleen de leerlingen die je aan hen koppelt; een leerkracht of begeleider ziet de leerlingen van de groepen die je aan hen koppelt. Je kunt jezelf niet koppelen.</p>${links}
-${!targets ? "<p>Maak eerst een leerling of groep.</p>" : !adults.length ? '<p>Er zijn nog geen goedgekeurde ouders, begeleiders of leerkrachten. Keur eerst een aanvraag goed bij <a href="/beheer">Toegang beheren</a>.</p>' : `<form method="post" action="/beheer/koppelingen/nieuw">${peopleSelect("Wie")}<label>Koppelen aan <select name="target">${targets}</select></label>${csrfField(csrf)}<button>Koppeling maken</button></form>`}
+${!targets ? ui`<p>Maak eerst een leerling of groep.</p>` : !adults.length ? ui`<p>Er zijn nog geen goedgekeurde ouders, begeleiders of leerkrachten. Keur eerst een aanvraag goed bij <a href="/beheer">Toegang beheren</a>.</p>` : ui`<form method="post" action="/beheer/koppelingen/nieuw">${peopleSelect(tr("Wie"))}<label>Koppelen aan <select name="target">${targets}</select></label>${csrfField(csrf)}<button>Koppeling maken</button></form>`}
 <h2>Extra rechten</h2><p>Nakijken en publiceren horen bij geen enkele rol vanzelf. Geef ze alleen aan wie dat werk doet.</p>${grants}
-${adults.length ? "" : "<p>Er zijn nog geen leden om een recht aan te geven.</p>"}<form method="post" action="/beheer/rechten/toekennen"${adults.length ? "" : " hidden"}>${peopleSelect("Wie")}<label>Recht <select name="capability">${GRANTABLE.map((c) => `<option value="${c}">${CAPABILITY[c]}</option>`).join("")}</select></label>${csrfField(csrf)}<button>Recht toekennen</button></form><p><a href="/beheer">Terug naar Toegang beheren</a>`;
+${adults.length ? "" : ui`<p>Er zijn nog geen leden om een recht aan te geven.</p>`}<form method="post" action="/beheer/rechten/toekennen"${adults.length ? "" : " hidden"}>${peopleSelect(tr("Wie"))}<label>Recht <select name="capability">${GRANTABLE.map((c) => ui`<option value="${c}">${tr(CAPABILITY[c])}</option>`).join("")}</select></label>${csrfField(csrf)}<button>Recht toekennen</button></form><p><a href="/beheer">Terug naar Toegang beheren</a>`;
 }
 
 /** The adult's own page: only what the directory lets them see. */
 export function learnersPage(learners, groups) {
 	const list = learners.length
-		? `<ul>${learners.map((l) => `<li>${esc(l.displayName)} · ${YEAR(l.schoolYear)}</li>`).join("")}</ul>`
-		: "<p>Er zijn nog geen leerlingen aan jou gekoppeld. Een beheerder van Breinhap koppelt je aan je leerlingen of groepen.</p>";
+		? ui`<ul>${learners.map((l) => ui`<li>${esc(l.displayName)} · ${YEAR(l.schoolYear)}</li>`).join("")}</ul>`
+		: ui`<p>Er zijn nog geen leerlingen aan jou gekoppeld. Een beheerder van Breinhap koppelt je aan je leerlingen of groepen.</p>`;
 	const groupList = groups.length
-		? `<h2>Mijn groepen</h2><ul>${groups.map((g) => `<li>${esc(g.name)} · ${g.size} leerling(en)</li>`).join("")}</ul>`
+		? ui`<h2>Mijn groepen</h2><ul>${groups.map((g) => ui`<li>${esc(g.name)} · ${g.size} leerling(en)</li>`).join("")}</ul>`
 		: "";
-	return `Hier zie je alleen de leerlingen die aan jou gekoppeld zijn.</p><h2>Mijn leerlingen</h2>${list}${groupList}<p>`;
+	return ui`Hier zie je alleen de leerlingen die aan jou gekoppeld zijn.</p><h2>Mijn leerlingen</h2>${list}${groupList}<p>`;
 }
 
 const one = (form, name) => {
