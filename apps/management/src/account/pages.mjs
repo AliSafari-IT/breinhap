@@ -1,5 +1,5 @@
 import { esc } from "../directory-pages.mjs";
-import { header } from "../header.mjs";
+import { header, websiteHome } from "../header.mjs";
 import { LANGUAGE_NAMES, LANGUAGES, T } from "./i18n.mjs";
 
 /**
@@ -108,7 +108,7 @@ export function pendingPage(lang, { csrf, email = "", request, version, checked 
 		.filter(([, v]) => v)
 		.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`)
 		.join("")}</dl>`;
-	const card = `<p class="auth-lead">${t.pendingLead(esc(role))}</p>${steps(lang, 2)}${summary}<p>${esc(t.turnaround)}</p>${checked ? `<p class="notice" role="status">${esc(t.checked)} ${esc(dateTime(lang, now, true))}.</p>` : ""}<h2 class="auth-h2">${t.pendingNext}</h2><ul class="auth-facts">${t.pendingFacts.slice(0, 2).map((f) => `<li>${f}</li>`).join("")}</ul><p>${esc(t.pendingNotification)}</p><p>${esc(t.contact)}</p><a class="action action-block" href="/registreren?gecontroleerd=1">${esc(t.check)}</a><p><a href="/registreren?aanpassen=1">${esc(t.edit)}</a></p><form method="post" action="/registreren/intrekken" class="auth-form">${hidden("csrf", csrf)}<button class="secondary">${esc(t.cancel)}</button></form>`;
+	const card = `<p class="auth-lead">${t.pendingLead(esc(role))}</p>${steps(lang, 2)}${summary}<p>${esc(t.turnaround)}</p>${checked ? `<p class="notice" role="status">${esc(t.checked)} ${esc(dateTime(lang, now, true))}.</p>` : ""}<h2 class="auth-h2">${t.pendingNext}</h2><ul class="auth-facts">${t.pendingFacts.slice(0, 2).map((f) => `<li>${f}</li>`).join("")}</ul><p>${esc(t.pendingNotification)}</p><p>${esc(t.contact)}</p><a class="action action-block" href="${esc(websiteHome(lang))}">${esc(t.visitSite)}</a><p class="auth-student">${esc(t.webAvailability)}</p><p><a href="/registreren?gecontroleerd=1">${esc(t.check)}</a></p><p><a href="/registreren?aanpassen=1">${esc(t.edit)}</a></p><form method="post" action="/registreren/intrekken" class="auth-form">${hidden("csrf", csrf)}<button class="secondary">${esc(t.cancel)}</button></form>`;
 	return shell(lang, t.pendingTitle, card, { path: checked ? "/registreren?gecontroleerd=1" : "/registreren", version, account: accountStrip(lang, csrf, email || p.email) });
 }
 
