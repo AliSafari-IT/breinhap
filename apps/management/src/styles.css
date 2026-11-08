@@ -614,15 +614,26 @@ dl.summary {
 }
 dl.summary div {
 	display: grid;
-	grid-template-columns: 9rem 1fr;
+	grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
 	gap: 0.5rem;
 }
 dl.summary dt {
 	color: var(--muted);
 }
 dl.summary dd {
+	min-width: 0;
+	overflow-wrap: anywhere;
 	margin: 0;
 	font-weight: 600;
+}
+@media (max-width: 36rem) {
+	dl.summary {
+		gap: .75rem;
+	}
+	dl.summary div {
+		grid-template-columns: minmax(0, 1fr);
+		gap: .1rem;
+	}
 }
 table.people td.actions form {
 	display: inline-block;
