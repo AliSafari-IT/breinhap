@@ -343,7 +343,8 @@ test("static assets revalidate from memory while auth HTML stays no-store", asyn
 
 
 test("backchannel abuse is rejected before JWT verification", async () => {
-	const store = await makeStore();
+	// Keep all 121 requests in one bucket, even at a wall-clock minute boundary.
+	const store = await makeStore(() => 1_800_000_000_000);
 	let verified = 0;
 	const identity = createIdentity({ store, grants, provider: { validateLogout: async () => { verified++; throw new Error("invalid"); } } });
 	const call = (ip) => identity.handle(Object.assign(Readable.from(["logout_token=invalid"]), {
