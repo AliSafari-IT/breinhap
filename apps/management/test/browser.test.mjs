@@ -121,9 +121,31 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 			),
 		);
 		assert.equal((await page.goto(ORIGIN)).status(), 200);
+		const nav = page.getByRole("navigation", { name: "Beheernavigatie" });
+		assert.equal(await page.locator("header").getByRole("navigation", { name: "Beheernavigatie" }).count(), 1);
+		assert.equal(await nav.getByRole("link", { name: "Overzicht", exact: true }).getAttribute("aria-current"), "page");
+		assert.equal(await nav.getByRole("link", { name: "Toegang beheren", exact: true }).count(), 1);
+		assert.equal(await page.locator("footer").getByRole("link", { name: "Privacy", exact: true }).count(), 1);
+		assert.equal(await page.locator("main form[action='/afmelden']").count(), 0);
+		for (const dark of [false, true]) {
+			await page.evaluate((dark) => {
+				document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+			}, dark);
+			for (const width of [1280, 390, 320]) {
+				await page.setViewportSize({ width, height: 900 });
+				await page.locator(".management-account summary").click();
+				assert.equal(await page.getByRole("button", { name: "Afmelden", exact: true }).isVisible(), true);
+				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no overflow at ${width}px`);
+				await page.locator(".management-account summary").click();
+				if (process.env.MANAGEMENT_SHELL_SCREENSHOT_DIR && (width === 1280 || width === 390))
+					await page.screenshot({ path: `${process.env.MANAGEMENT_SHELL_SCREENSHOT_DIR}/management-${width}-${dark ? "dark" : "light"}.png`, fullPage: true });
+			}
+		}
+
 		// Wait for the redirect request, not its page load: Playwright does not route a request that
 		// follows a fulfilled redirect, so loading it would reach the live management.breinhap.com.
 		const loggedOut = page.waitForRequest(`${ORIGIN}/login?logged-out=1`);
+		await page.locator(".management-account summary").click();
 		await page.getByRole("button", { name: "Afmelden", exact: true }).click();
 		await loggedOut;
 		assert.deepEqual(submitted, [{ path: "/afmelden", origin: ORIGIN }]);
@@ -258,6 +280,8 @@ test("browser: adult registration, approval, logout and central SSO web launch",
 		await admin.getByText("Er zijn geen open aanvragen.", { exact: true }).waitFor();
 		assert.equal((await store.membership("adult")).active, true);
 		assert.equal((await adult.goto(`${ORIGIN}/bibliotheek`)).status(), 200);
+		assert.equal(await adult.getByRole("navigation", { name: "Beheernavigatie" }).getByRole("link", { name: "Toegang beheren", exact: true }).count(), 0);
+		await adult.locator(".management-account summary").click();
 		await adult.getByRole("button", { name: "Afmelden", exact: true }).click();
 		await adult.waitForURL(`${ORIGIN}/login?logged-out=1`);
 		assert.ok(!(await adultContext.cookies(ORIGIN)).some((c) => c.name === "__Host-breinhap-session"));

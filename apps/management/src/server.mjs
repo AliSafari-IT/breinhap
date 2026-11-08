@@ -18,7 +18,7 @@ import {
 	learnersPage,
 } from "./directory-pages.mjs";
 import { langCookie, localeOf, T } from "./account/i18n.mjs";
-import { header } from "./header.mjs";
+import { header, managementFooter } from "./header.mjs";
 import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
@@ -82,15 +82,16 @@ const assets = new Map(await Promise.all([
 	return [path, { body, type: `${type}; charset=utf-8`, etag: `"${createHash("sha256").update(body).digest("base64url")}"` }];
 })));
 
-function page(title, content, active, session) {
+function documentPage(title, content, active, session, pathname = active) {
 	const account = session
-		? `<aside aria-label="Account"><p>Je rollen: ${session.roles.length ? session.roles.join(", ") : "nog geen"}</p><form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></aside>`
+		? `<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? `<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.join(", ") : "nog geen")}</p>${session.admin ? '<a href="/beheer/leerlingen">Leerlingen en groepen</a>' : ""}<form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
 		: "";
-	const nav =
-		active === undefined
-			? ""
-			: `<nav aria-label="Beheernavigatie">${[...routes].map(([path, [label]]) => `<a href="${path}"${active === path ? ' aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer", href: "/" })}${nav}<main id="inhoud" tabindex="-1"><h1>${title}</h1><p>${content}</p>${account}<p><a href="https://breinhap.com/">Naar Breinhap voor leerlingen</a></p></main><footer>Breinhap beheer · ${manifest.version}</footer></body></html>`;
+	const links = [...routes].map(([path, [label]]) => [path, label]);
+	if (session?.admin) links.push(["/beheer", "Toegang beheren"]);
+	const nav = active !== undefined || session?.roles?.length
+		? `<nav class="management-nav" aria-label="Beheernavigatie">${links.map(([path, label]) => `<a href="${esc(path)}"${pathname === path || (path !== "/" && pathname?.startsWith(`${path}/`)) ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>`
+		: "";
+	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body class="management-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer", href: "/", navigation: nav, tools: `<a class="web-link" href="https://breinhap.com/">Breinhap web</a>${account}` })}<main id="inhoud" tabindex="-1" class="management-main"><h1>${esc(title)}</h1><div class="page-content">${content}</div></main>${managementFooter(esc(manifest.version))}</body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -108,13 +109,6 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
-	const directoryUnavailable = (session) =>
-		page(
-			"Nog niet beschikbaar",
-			"Leerlingen en groepen zijn nog niet ingericht op deze server. Probeer later opnieuw.",
-			undefined,
-			session,
-		);
 	return async (req, res) => {
 		const send = (
 			status,
@@ -144,6 +138,15 @@ export function createHandler({
 			return send(421, "Misdirected request", "text/plain; charset=utf-8");
 		}
 		const url = new URL(req.url, origin);
+		const page = (title, content, active, session) => documentPage(title, content, active, session, url.pathname);
+		const directoryUnavailable = (session) =>
+			page(
+				"Nog niet beschikbaar",
+				"Leerlingen en groepen zijn nog niet ingericht op deze server. Probeer later opnieuw.",
+				undefined,
+				session,
+			);
+
 		if (url.origin !== origin)
 			return send(421, "Misdirected request", "text/plain; charset=utf-8");
 		if (identity) {
@@ -662,7 +665,7 @@ export function createManagementServer(options) {
 						"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
 				});
 			res.end(
-				page(
+				documentPage(
 					"Tijdelijk niet beschikbaar",
 					"Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw.",
 				),

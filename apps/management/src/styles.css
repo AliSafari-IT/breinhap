@@ -614,15 +614,26 @@ dl.summary {
 }
 dl.summary div {
 	display: grid;
-	grid-template-columns: 9rem 1fr;
+	grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
 	gap: 0.5rem;
 }
 dl.summary dt {
 	color: var(--muted);
 }
 dl.summary dd {
+	min-width: 0;
+	overflow-wrap: anywhere;
 	margin: 0;
 	font-weight: 600;
+}
+@media (max-width: 36rem) {
+	dl.summary {
+		gap: .75rem;
+	}
+	dl.summary div {
+		grid-template-columns: minmax(0, 1fr);
+		gap: .1rem;
+	}
 }
 table.people td.actions form {
 	display: inline-block;
@@ -675,4 +686,127 @@ button.secondary {
 	margin: 0;
 	padding: 0;
 	border: 0;
+}
+
+/* Eén herkenbare Breinhap-shell voor alle werkplekpagina's. */
+.management-body {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+.management-body .topbar-inner {
+	gap: 1rem 1.5rem;
+}
+.management-nav {
+	padding: 0;
+	border: 0;
+	gap: .25rem;
+}
+.management-nav a,
+.management-body .web-link,
+.management-account summary {
+	color: var(--top-ink, #f0f4f8);
+	text-decoration: none;
+	font-size: .95rem;
+	font-weight: 600;
+	padding: .5rem .65rem;
+	border-radius: .4rem;
+}
+.management-nav a:hover,
+.management-nav a[aria-current="page"],
+.management-account summary:hover {
+	background: rgba(255, 255, 255, .12);
+}
+.management-nav a[aria-current="page"] {
+	box-shadow: inset 0 -2px var(--accent);
+}
+.management-body .tools {
+	flex-wrap: wrap;
+}
+.management-account {
+	position: relative;
+}
+.management-account summary {
+	cursor: pointer;
+}
+.account-panel {
+	position: absolute;
+	right: 0;
+	z-index: 20;
+	box-sizing: border-box;
+	width: min(20rem, calc(100vw - 40px));
+	padding: 1.25rem;
+	margin-top: .65rem;
+	background: var(--card);
+	color: var(--ink);
+	border: 1px solid var(--line);
+	border-radius: .75rem;
+	box-shadow: var(--shadow);
+	overflow-wrap: anywhere;
+}
+.account-panel p {
+	margin: 0 0 1rem;
+}
+.account-panel form {
+	margin: 1rem 0;
+}
+.account-panel button {
+	width: 100%;
+}
+.account-panel > a {
+	display: block;
+}
+.account-email {
+	font-weight: 700;
+}
+.management-main {
+	box-sizing: border-box;
+	width: min(100% - 40px, 1080px);
+	max-width: none;
+	margin: 0 auto;
+	padding: 2rem 0 3rem;
+	flex: 1;
+}
+footer.management-footer {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	margin: 0;
+	padding: 1.5rem 0;
+	border-top: 1px solid var(--line);
+	font-size: .9rem;
+}
+.footer-inner {
+	width: min(100% - 40px, 1080px);
+	margin-inline: auto;
+}
+.management-footer nav {
+	padding: 0;
+	border: 0;
+	gap: .5rem 1.5rem;
+}
+@media (max-width: 62rem) {
+	.management-body .topbar-inner {
+		gap: .5rem;
+	}
+	.management-nav {
+		order: 3;
+		width: 100%;
+	}
+	.management-body .tools {
+		margin-left: auto;
+		gap: .25rem;
+	}
+	.management-body .web-link {
+		display: none;
+	}
+}
+@media (max-width: 30rem) {
+	.management-body .brand {
+		gap: .5rem;
+		font-size: 1rem;
+	}
+	.management-nav a {
+		padding-inline: .5rem;
+	}
 }

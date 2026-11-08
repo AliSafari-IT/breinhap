@@ -38,6 +38,9 @@ const ROLES = {
 
 export const T = {
 	nl: {
+		visitSite: "Naar Breinhap",
+		webAvailability: "Studiesessies in je browser komen later.",
+		appName: "Breinhap beheer",
 		signedIn: "Aangemeld als",
 		verifiedEmail: "Bevestigd e-mailadres",
 		requestedAt: "Aangevraagd op",
@@ -123,6 +126,9 @@ export const T = {
 		roles: ROLES.nl,
 	},
 	fr: {
+		visitSite: "Aller sur Breinhap",
+		webAvailability: "Les séances d’étude dans votre navigateur arriveront plus tard.",
+		appName: "Gestion Breinhap",
 		signedIn: "Connecté en tant que",
 		verifiedEmail: "Adresse e-mail confirmée",
 		requestedAt: "Demande effectuée le",
@@ -207,6 +213,9 @@ export const T = {
 		roles: ROLES.fr,
 	},
 	en: {
+		visitSite: "Go to Breinhap",
+		webAvailability: "Study sessions in your browser are coming later.",
+		appName: "Breinhap Management",
 		signedIn: "Signed in as",
 		verifiedEmail: "Verified email address",
 		requestedAt: "Requested on",
@@ -291,6 +300,9 @@ export const T = {
 		roles: ROLES.en,
 	},
 	de: {
+		visitSite: "Zu Breinhap",
+		webAvailability: "Lerneinheiten im Browser kommen später.",
+		appName: "Breinhap-Verwaltung",
 		signedIn: "Angemeldet als",
 		verifiedEmail: "Bestätigte E-Mail-Adresse",
 		requestedAt: "Beantragt am",

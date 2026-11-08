@@ -14,6 +14,11 @@ export const themeToggle = (lang = "nl") => {
 /** breinhap.com's home page in a language (where the logo links to). */
 export const websiteHome = (lang = "nl") => `https://breinhap.com/${lang === "nl" ? "" : `${lang}/`}`;
 
-export function header({ lang = "nl", name = "Breinhap", href = websiteHome(lang), tools = "" }) {
-	return `<header class="os-topbar"><div class="topbar-inner"><a class="brand" href="${href}"><img src="/logo.svg" width="40" height="40" alt=""><span>${name}</span></a><div class="tools">${tools}${themeToggle(lang)}</div></div></header>`;
+export function header({ lang = "nl", name = "Breinhap", href = websiteHome(lang), tools = "", navigation = "" }) {
+	return `<header class="os-topbar"><div class="topbar-inner"><a class="brand" href="${href}"><img src="/logo.svg" width="40" height="40" alt=""><span>${name}</span></a>${navigation}<div class="tools">${tools}${themeToggle(lang)}</div></div></header>`;
+}
+
+/** Dezelfde publieke en juridische links als op breinhap.com. */
+export function managementFooter(version) {
+	return `<footer class="management-footer"><div class="footer-inner"><p><strong>Breinhap</strong> · Kleine stappen. Op jouw tempo. · Breinhap beheer · ${version}</p><nav aria-label="Juridisch"><a href="https://breinhap.com/">Breinhap web</a><a href="https://breinhap.asafarim.site/">Over Breinhap</a><a href="https://breinhap.asafarim.site/privacy/">Privacy</a><a href="https://breinhap.asafarim.site/voorwaarden/">Voorwaarden</a><a href="https://breinhap.asafarim.site/cookies/">Cookies</a><a href="https://breinhap.asafarim.site/account-verwijderen/">Je gegevens verwijderen</a></nav></div></footer>`;
 }

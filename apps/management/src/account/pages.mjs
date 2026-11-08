@@ -1,5 +1,5 @@
 import { esc } from "../directory-pages.mjs";
-import { header } from "../header.mjs";
+import { header, websiteHome } from "../header.mjs";
 import { LANGUAGE_NAMES, LANGUAGES, T } from "./i18n.mjs";
 
 /**
@@ -29,7 +29,7 @@ export function shell(lang, title, card, { path = "/login", version = "", signou
 	const switcher = `<nav class="lang-switch" aria-label="Taal / Langue / Language / Sprache">${LANGUAGES.map((l) =>
 		l === lang ? `<span aria-current="true" lang="${l}">${l.toUpperCase()}</span>` : `<a href="${esc(path)}${path.includes("?") ? "&amp;" : "?"}lang=${l}" lang="${l}" hreflang="${l}" title="${LANGUAGE_NAMES[l]}">${l.toUpperCase()}</a>`,
 	).join("")}</nav>`;
-	return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} — Breinhap</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">${lang === "fr" ? "Aller au contenu" : lang === "en" ? "Skip to content" : lang === "de" ? "Zum Inhalt" : "Naar inhoud"}</a>${header({ lang, ...(account ? { href: "/" } : {}), tools: `<div class="locale-selector" data-locale-selector data-lang="${lang}">${switcher}</div>` })}<main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title">${account}<p class="eyebrow">${T[lang].eyebrow}</p><h1 id="auth-title">${esc(title)}</h1>${card}${signout}</section></main><footer>Breinhap beheer · ${esc(version)}</footer></body></html>`;
+	return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} — Breinhap</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">${lang === "fr" ? "Aller au contenu" : lang === "en" ? "Skip to content" : lang === "de" ? "Zum Inhalt" : "Naar inhoud"}</a>${header({ lang, ...(account ? { href: "/" } : {}), tools: `<div class="locale-selector" data-locale-selector data-lang="${lang}">${switcher}</div>` })}<main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title">${account}<p class="eyebrow">${T[lang].eyebrow}</p><h1 id="auth-title">${esc(title)}</h1>${card}${signout}</section></main><footer>${esc(T[lang].appName)} · ${esc(version)}</footer></body></html>`;
 }
 
 /** Sign in or register: one e-mail field. */
@@ -108,7 +108,7 @@ export function pendingPage(lang, { csrf, email = "", request, version, checked 
 		.filter(([, v]) => v)
 		.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`)
 		.join("")}</dl>`;
-	const card = `<p class="auth-lead">${t.pendingLead(esc(role))}</p>${steps(lang, 2)}${summary}<p>${esc(t.turnaround)}</p>${checked ? `<p class="notice" role="status">${esc(t.checked)} ${esc(dateTime(lang, now, true))}.</p>` : ""}<h2 class="auth-h2">${t.pendingNext}</h2><ul class="auth-facts">${t.pendingFacts.slice(0, 2).map((f) => `<li>${f}</li>`).join("")}</ul><p>${esc(t.pendingNotification)}</p><p>${esc(t.contact)}</p><a class="action action-block" href="/registreren?gecontroleerd=1">${esc(t.check)}</a><p><a href="/registreren?aanpassen=1">${esc(t.edit)}</a></p><form method="post" action="/registreren/intrekken" class="auth-form">${hidden("csrf", csrf)}<button class="secondary">${esc(t.cancel)}</button></form>`;
+	const card = `<p class="auth-lead">${t.pendingLead(esc(role))}</p>${steps(lang, 2)}${summary}<p>${esc(t.turnaround)}</p>${checked ? `<p class="notice" role="status">${esc(t.checked)} ${esc(dateTime(lang, now, true))}.</p>` : ""}<h2 class="auth-h2">${t.pendingNext}</h2><ul class="auth-facts">${t.pendingFacts.slice(0, 2).map((f) => `<li>${f}</li>`).join("")}</ul><p>${esc(t.pendingNotification)}</p><p>${esc(t.contact)}</p><a class="action action-block" href="${esc(websiteHome(lang))}">${esc(t.visitSite)}</a><p class="auth-student">${esc(t.webAvailability)}</p><p><a href="/registreren?gecontroleerd=1">${esc(t.check)}</a></p><p><a href="/registreren?aanpassen=1">${esc(t.edit)}</a></p><form method="post" action="/registreren/intrekken" class="auth-form">${hidden("csrf", csrf)}<button class="secondary">${esc(t.cancel)}</button></form>`;
 	return shell(lang, t.pendingTitle, card, { path: checked ? "/registreren?gecontroleerd=1" : "/registreren", version, account: accountStrip(lang, csrf, email || p.email) });
 }
 
