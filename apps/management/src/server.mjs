@@ -1,3 +1,4 @@
+import { tr, ui, uiLocale, formatLocale, withLocale } from "./workspace-i18n.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -17,8 +18,8 @@ import {
 	DIRECTORY_ERRORS,
 	learnersPage,
 } from "./directory-pages.mjs";
-import { langCookie, localeOf, T } from "./account/i18n.mjs";
-import { header, managementFooter } from "./header.mjs";
+import { langCookie, localeOf, T, languageSelector } from "./account/i18n.mjs";
+import { header, managementFooter, websiteHome } from "./header.mjs";
 import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
@@ -35,19 +36,19 @@ import { createPlatform, managementAccess, manifest } from "./platform.mjs";
 import { connectStore } from "./store.mjs";
 
 const origin = "https://management.breinhap.com";
-const routes = new Map([
+const routes = () => new Map([
 	[
 		"/",
 		[
-			"Overzicht",
-			'Je beheerwerkplek is klaar. Maak en bewerk leerobjecten in de <a href="/bibliotheek">bibliotheek</a>.',
+			tr("Overzicht"),
+			ui`Je beheerwerkplek is klaar. Maak en bewerk leerobjecten in de <a href="/bibliotheek">bibliotheek</a>.`,
 		],
 	],
 	[
 		"/bibliotheek",
-		["Bibliotheek", "Er is nog geen inhoudsbibliotheek beschikbaar."],
+		[tr("Bibliotheek"), tr("Er is nog geen inhoudsbibliotheek beschikbaar.")],
 	],
-	["/leerlingen", ["Leerlingen", ""]],
+	["/leerlingen", [tr("Leerlingen"), ""]],
 ]);
 const DIRECTORY_PATHS = /^\/beheer\/(leerlingen|groepen|koppelingen|rechten)(\/|$)/;
 const esc = (value) =>
@@ -82,16 +83,16 @@ const assets = new Map(await Promise.all([
 	return [path, { body, type: `${type}; charset=utf-8`, etag: `"${createHash("sha256").update(body).digest("base64url")}"` }];
 })));
 
-function documentPage(title, content, active, session, pathname = active) {
+function documentPage(title, content, active, session, pathname = active, search = "") {
 	const account = session
-		? `<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? `<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.join(", ") : "nog geen")}</p>${session.admin ? '<a href="/beheer/leerlingen">Leerlingen en groepen</a>' : ""}<form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
+		? ui`<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? ui`<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.map((role) => tr(role)).join(", ") : tr("nog geen"))}</p>${session.admin ? ui`<a href="/beheer/leerlingen">Leerlingen en groepen</a>` : ""}<form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
 		: "";
-	const links = [...routes].map(([path, [label]]) => [path, label]);
-	if (session?.admin) links.push(["/beheer", "Toegang beheren"]);
+	const links = [...routes()].map(([path, [label]]) => [path, label]);
+	if (session?.admin) links.push(["/beheer", tr("Toegang beheren")]);
 	const nav = active !== undefined || session?.roles?.length
-		? `<nav class="management-nav" aria-label="Beheernavigatie">${links.map(([path, label]) => `<a href="${esc(path)}"${pathname === path || (path !== "/" && pathname?.startsWith(`${path}/`)) ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>`
+		? ui`<nav class="management-nav" aria-label="Beheernavigatie">${links.map(([path, label]) => ui`<a href="${esc(path)}"${pathname === path || (path !== "/" && pathname?.startsWith(`${path}/`)) ? ' aria-current="page"' : ""}>${esc(tr(label))}</a>`).join("")}</nav>`
 		: "";
-	return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body class="management-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ name: "Breinhap beheer", href: "/", navigation: nav, tools: `<a class="web-link" href="https://breinhap.com/">Breinhap web</a>${account}` })}<main id="inhoud" tabindex="-1" class="management-main"><h1>${esc(title)}</h1><div class="page-content">${content}</div></main>${managementFooter(esc(manifest.version))}</body></html>`;
+	return ui`<!doctype html><html lang="${uiLocale()}" data-saving="${esc(tr("Bezig met opslaan…"))}" data-access-unavailable="${esc(tr("Je toegang kan nu niet worden gecontroleerd. Vernieuw de pagina om opnieuw te proberen."))}" data-connection-lost="${esc(tr("Verbinding verbroken. Vernieuw de pagina om je toegang opnieuw te controleren."))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/locale-selector.js" defer></script><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body class="management-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ lang: uiLocale(), name: tr("Breinhap beheer"), href: "/", navigation: nav, tools: ui`<a class="web-link" href="${websiteHome(uiLocale())}">Breinhap web</a>${languageSelector(uiLocale(), pathname ?? "/", search)}${account}` })}<main id="inhoud" tabindex="-1" class="management-main"><h1>${esc(title)}</h1><div class="page-content">${content}</div></main>${managementFooter(esc(manifest.version))}</body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -109,15 +110,22 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
-	return async (req, res) => {
+	const handle = async (req, res) => {
 		const send = (
 			status,
 			body,
 			type = "text/html; charset=utf-8",
 			extra = {},
 		) => {
+			let languageChoice;
+			try { languageChoice = new URL(req.url, origin).searchParams.get("lang"); } catch { /* Reject invalid request targets below. */ }
+			if (["nl", "fr", "en", "de"].includes(languageChoice) && (type.startsWith("text/html") || status === 303)) {
+				const cookies = [extra["Set-Cookie"] ?? []].flat();
+				extra = { ...extra, "Set-Cookie": [...cookies.filter((value) => !value.startsWith("breinhap-lang=")), langCookie(extra["Content-Language"] ?? uiLocale(), req.headers.host)] };
+			}
 			res.writeHead(status, {
 				"Content-Type": type,
+				...(type.startsWith("text/html") ? { "Content-Language": uiLocale() } : {}),
 				"Cache-Control": "no-store",
 				"Content-Security-Policy":
 					"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self' https://id.asafarim.site; frame-ancestors 'none'",
@@ -135,20 +143,20 @@ export function createHandler({
 			!req.url?.startsWith("/") ||
 			req.url.startsWith("//")
 		) {
-			return send(421, "Misdirected request", "text/plain; charset=utf-8");
+			return send(421, tr("Misdirected request"), "text/plain; charset=utf-8");
 		}
 		const url = new URL(req.url, origin);
-		const page = (title, content, active, session) => documentPage(title, content, active, session, url.pathname);
+		const page = (title, content, active, session) => documentPage(title, content, active, session, url.pathname, url.search);
 		const directoryUnavailable = (session) =>
 			page(
-				"Nog niet beschikbaar",
-				"Leerlingen en groepen zijn nog niet ingericht op deze server. Probeer later opnieuw.",
+				tr("Nog niet beschikbaar"),
+				tr("Leerlingen en groepen zijn nog niet ingericht op deze server. Probeer later opnieuw."),
 				undefined,
 				session,
 			);
 
 		if (url.origin !== origin)
-			return send(421, "Misdirected request", "text/plain; charset=utf-8");
+			return send(421, tr("Misdirected request"), "text/plain; charset=utf-8");
 		if (identity) {
 			try {
 				const response = await identity.handle(req, url);
@@ -160,12 +168,12 @@ export function createHandler({
 						response.headers,
 					);
 			} catch (error) {
-				if (error.status === 413) return send(413, "Aanvraag te groot.");
+				if (error.status === 413) return send(413, tr("Aanvraag te groot."));
 				return send(
 					503,
 					page(
-						"Tijdelijk niet beschikbaar",
-						"Aanmelden is tijdelijk niet beschikbaar. Probeer later opnieuw.",
+						tr("Tijdelijk niet beschikbaar"),
+						tr("Aanmelden is tijdelijk niet beschikbaar. Probeer later opnieuw."),
 					),
 				);
 			}
@@ -177,7 +185,7 @@ export function createHandler({
 				result.status,
 				result.status !== 303
 					? page(
-							"Uitnodiging accepteren",
+							tr("Uitnodiging accepteren"),
 							result.body.replace(/<h1>.*?<\/h1>/, ""),
 							undefined,
 							req.managementSession,
@@ -189,9 +197,9 @@ export function createHandler({
 		}
 		if (identity && ["/registreren", "/registreren/intrekken"].includes(url.pathname)) {
 			if (url.pathname === "/registreren/intrekken" && req.method !== "POST")
-				return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "POST" });
+				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", { Allow: "POST" });
 			if (!["GET", "HEAD", "POST"].includes(req.method))
-				return send(405, "Method not allowed", "text/plain; charset=utf-8", {
+				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", {
 					Allow: "GET, POST",
 				});
 			// breinhap#signup: the profile form completes a registration (who they are, which role); the
@@ -206,22 +214,22 @@ export function createHandler({
 				return send(
 					403,
 					page(
-						"Geen toegang",
-						'Dit account is een leerlingaccount. Leerlingen gebruiken <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.',
+						tr("Geen toegang"),
+						ui`Dit account is een leerlingaccount. Leerlingen gebruiken <a href="https://breinhap.com/">Breinhap voor leerlingen</a>.`,
 						undefined,
 						session,
 					),
 				);
 			if (result.refused)
-				return send(403, page("Aanvraag geweigerd", "Laad de pagina opnieuw en probeer nog eens."));
+				return send(403, page(tr("Aanvraag geweigerd"), tr("Laad de pagina opnieuw en probeer nog eens.")));
 			if (result.invalid)
 				return send(400, profilePage(lang, { csrf: session.csrf, email: session.email, editing: result.values?.editing, values: result.values ?? {}, errorCode: result.invalid, version: manifest.version }));
 			if (result.busy)
 				return send(
 					429,
 					page(
-						"Probeer later opnieuw",
-						"Er zijn nu te veel aanvragen. Probeer later opnieuw.",
+						tr("Probeer later opnieuw"),
+						tr("Er zijn nu te veel aanvragen. Probeer later opnieuw."),
 						undefined,
 						session,
 					),
@@ -240,17 +248,17 @@ export function createHandler({
 			if (check.response)
 				return send(
 					check.response.status,
-					page("Bevestig je toegang", check.response.body),
+					page(tr("Bevestig je toegang"), check.response.body),
 				);
 			const { value } = check;
-			const notice = req.managementSession.fresh ? "" : `<p class="notice" role="status">Bevestig opnieuw je identiteit om wijzigingen te maken. <a href="${esc(identity.stepUpLink(url.pathname + url.search))}">Opnieuw aanmelden</a></p>`;
+			const notice = req.managementSession.fresh ? "" : ui`<p class="notice" role="status">Bevestig opnieuw je identiteit om wijzigingen te maken. <a href="${esc(identity.stepUpLink(url.pathname + url.search))}">Opnieuw aanmelden</a></p>`;
 			const adminPrincipal = { sub: value.saved.sub, role: "breinhap.admin" };
 			if (req.method === "GET" && url.pathname === "/beheer/leerlingen") {
 				if (!directory) return send(503, directoryUnavailable(req.managementSession));
 				return send(
 					200,
 					page(
-						"Leerlingen en groepen",
+						tr("Leerlingen en groepen"),
 						notice + adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members()),
 						null,
 						req.managementSession,
@@ -261,44 +269,44 @@ export function createHandler({
 				const csrf = value.saved.csrf;
 				const decision = await identity.store.readFlow(`decision:${value.id}`);
 				const decisionFeedback = decision?.email ? decisionNotice(localeOf(req, url), decision) : "";
-				const hiddenCsrf = `<input type="hidden" name="csrf" value="${csrf}">`;
+				const hiddenCsrf = ui`<input type="hidden" name="csrf" value="${csrf}">`;
 				const requests = await identity.store.roleRequests();
 				const members = await identity.store.members();
-				const when = (at) => new Date(at).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" });
+				const when = (at) => new Date(at).toLocaleDateString(formatLocale(), { timeZone: "Europe/Brussels" });
 				const person = (p = {}) =>
-					`<strong>${esc([p.firstName, p.lastName].filter(Boolean).join(" ") || "(naam niet ingevuld)")}</strong>${p.email ? `<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}`;
+					ui`<strong>${esc([p.firstName, p.lastName].filter(Boolean).join(" ") || tr("(naam niet ingevuld)"))}</strong>${p.email ? ui`<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}`;
 				const pending = requests.length
-					? `<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Vraagt als</th><th scope="col">School of organisatie</th><th scope="col">Toelichting</th><th scope="col">Sinds</th><th scope="col"><span class="visually-hidden">Beslissing</span></th></tr></thead><tbody>${requests
+					? ui`<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Vraagt als</th><th scope="col">School of organisatie</th><th scope="col">Toelichting</th><th scope="col">Sinds</th><th scope="col"><span class="visually-hidden">Beslissing</span></th></tr></thead><tbody>${requests
 							.map(
 								(r) =>
-									`<tr><td>${person(r.profile)}</td><td>${esc(roleName[r.role] ?? r.role)}</td><td>${esc(r.profile?.organisation ?? "")}</td><td>${esc(r.profile?.note ?? "")}</td><td>${when(r.at)}</td><td class="actions"><form method="post" action="/beheer/goedkeuren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button>Goedkeuren</button></form><form method="post" action="/beheer/weigeren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button class="secondary">Weigeren</button></form></td></tr>`,
+									ui`<tr><td>${person(r.profile)}</td><td>${esc(tr(roleName[r.role] ?? r.role))}</td><td>${esc(r.profile?.organisation ?? "")}</td><td>${esc(r.profile?.note ?? "")}</td><td>${when(r.at)}</td><td class="actions"><form method="post" action="/beheer/goedkeuren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button>Goedkeuren</button></form><form method="post" action="/beheer/weigeren"><input type="hidden" name="request" value="${esc(r.id)}">${hiddenCsrf}<button class="secondary">Weigeren</button></form></td></tr>`,
 							)
 							.join("")}</tbody></table>`
-					: "<p>Er zijn geen open aanvragen.</p>";
+					: ui`<p>Er zijn geen open aanvragen.</p>`;
 				const people = members.length
-					? `<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Rol</th><th scope="col">School of organisatie</th><th scope="col"><span class="visually-hidden">Acties</span></th></tr></thead><tbody>${members
+					? ui`<table class="library people"><thead><tr><th scope="col">Wie</th><th scope="col">Rol</th><th scope="col">School of organisatie</th><th scope="col"><span class="visually-hidden">Acties</span></th></tr></thead><tbody>${members
 							.map(
 								(m) =>
-									`<tr><td>${person(m.profile)}${m.subject === value.saved.sub ? " <small>(jij)</small>" : ""}</td><td>${esc(roleName[m.role] ?? m.role)}</td><td>${esc(m.profile?.organisation ?? "")}</td><td class="actions">${
+									ui`<tr><td>${person(m.profile)}${m.subject === value.saved.sub ? ui` <small>(jij)</small>` : ""}</td><td>${esc(tr(roleName[m.role] ?? m.role))}</td><td>${esc(m.profile?.organisation ?? "")}</td><td class="actions">${
 										m.subject === value.saved.sub || m.role === "breinhap.admin"
 											? ""
-											: `<form method="post" action="/beheer/intrekken"><input type="hidden" name="subject" value="${esc(m.subject)}">${hiddenCsrf}<button class="secondary">Toegang intrekken</button></form>`
+											: ui`<form method="post" action="/beheer/intrekken"><input type="hidden" name="subject" value="${esc(m.subject)}">${hiddenCsrf}<button class="secondary">Toegang intrekken</button></form>`
 									}</td></tr>`,
 							)
 							.join("")}</tbody></table>`
-					: "<p>Nog geen leden.</p>";
+					: ui`<p>Nog geen leden.</p>`;
 				return send(
 					200,
 					page(
-						"Toegang beheren",
-						`${notice}${decisionFeedback}Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
+						tr("Toegang beheren"),
+						ui`${notice}${decisionFeedback}Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
 						null,
 						req.managementSession,
 					),
 				);
 			}
 			if (req.method !== "POST")
-				return send(405, "Method not allowed", "text/plain; charset=utf-8", {
+				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", {
 					Allow: "GET, POST",
 				});
 			const form = await readForm(req);
@@ -307,7 +315,7 @@ export function createHandler({
 				form.getAll("csrf").length !== 1 ||
 				form.get("csrf") !== value.saved.csrf
 			)
-				return send(403, "Aanvraag geweigerd.");
+				return send(403, tr("Aanvraag geweigerd."));
 			if (DIRECTORY_PATHS.test(url.pathname)) {
 				if (!directory) return send(503, directoryUnavailable(req.managementSession));
 				const result = await adminDirectoryAction(url.pathname, form, {
@@ -315,13 +323,13 @@ export function createHandler({
 					principal: adminPrincipal,
 					store: identity.store,
 				});
-				if (!result) return send(404, "Niet gevonden");
+				if (!result) return send(404, tr("Niet gevonden"));
 				if (result.ok) return send(303, "", undefined, { Location: "/beheer/leerlingen" });
 				return send(
 					result.error === "invalid" ? 400 : 409,
 					page(
-						"Niet gewijzigd",
-						`${DIRECTORY_ERRORS[result.error] ?? DIRECTORY_ERRORS.forbidden} <a href="/beheer/leerlingen">Terug</a>`,
+						tr("Niet gewijzigd"),
+						ui`${esc(DIRECTORY_ERRORS()[result.error] ?? DIRECTORY_ERRORS().forbidden)} <a href="/beheer/leerlingen">Terug</a>`,
 						null,
 						req.managementSession,
 					),
@@ -333,7 +341,7 @@ export function createHandler({
 					form.getAll("request").length !== 1 ||
 					!/^[A-Za-z0-9_-]{43}$/.test(id ?? "")
 				)
-					return send(400, "Ongeldige aanvraag.");
+					return send(400, tr("Ongeldige aanvraag."));
 				const approve = url.pathname === "/beheer/goedkeuren";
 				const requestKey = identity.store.requestKeys(id)[1];
 				const raw = await identity.store.client.get(requestKey);
@@ -362,8 +370,8 @@ export function createHandler({
 					done
 						? ""
 						: page(
-								"Aanvraag niet verwerkt",
-								'Deze aanvraag bestaat niet meer of je beheertoegang is gewijzigd. <a href="/beheer">Terug</a>',
+								tr("Aanvraag niet verwerkt"),
+								ui`Deze aanvraag bestaat niet meer of je beheertoegang is gewijzigd. <a href="/beheer">Terug</a>`,
 								null,
 								req.managementSession,
 							),
@@ -379,7 +387,7 @@ export function createHandler({
 			)
 				return send(
 					400,
-					"Ongeldige accountcode; je eigen toegang kan hier niet worden gewijzigd.",
+					tr("Ongeldige accountcode; je eigen toegang kan hier niet worden gewijzigd."),
 				);
 			if (url.pathname === "/beheer/intrekken") {
 				await identity.audit("membership.revoke", value.saved.sub, subject);
@@ -389,15 +397,15 @@ export function createHandler({
 				return send(
 					200,
 					page(
-						"Toegang ingetrokken",
-						"Deze accountcode heeft geen toegang meer tot deze werkplek.",
+						tr("Toegang ingetrokken"),
+						tr("Deze accountcode heeft geen toegang meer tot deze werkplek."),
 						null,
 						req.managementSession,
 					),
 				);
 			}
 			if (url.pathname !== "/beheer/uitnodigen")
-				return send(404, "Niet gevonden");
+				return send(404, tr("Niet gevonden"));
 			const role = form.get("role");
 			if (
 				form.getAll("role").length !== 1 ||
@@ -405,7 +413,7 @@ export function createHandler({
 					role,
 				)
 			)
-				return send(400, "Ongeldige rol.");
+				return send(400, tr("Ongeldige rol."));
 			const target = managementAccess(await identity.grants(subject), subject);
 			if (
 				target.access !== "management" ||
@@ -415,8 +423,8 @@ export function createHandler({
 				return send(
 					409,
 					page(
-						"Uitnodiging niet gemaakt",
-						"Dit account moet actief zijn, de gekozen ASafariM-rol hebben en nog geen lid van deze werkplek zijn.",
+						tr("Uitnodiging niet gemaakt"),
+						tr("Dit account moet actief zijn, de gekozen ASafariM-rol hebben en nog geen lid van deze werkplek zijn."),
 					),
 				);
 			const token = randomBytes(32).toString("base64url");
@@ -428,14 +436,12 @@ export function createHandler({
 				inviterVersion: value.membership.version,
 			});
 			if (!created)
-				return send(409, "Je beheertoegang is gewijzigd. Probeer opnieuw.");
+				return send(409, tr("Je beheertoegang is gewijzigd. Probeer opnieuw."));
 			return send(
 				200,
 				page(
-					"Uitnodiging gemaakt",
-					'Deze link is één dag geldig en werkt alleen voor het bedoelde account. Deel de link zelf met de ontvanger.</p><label>Uitnodigingslink <input readonly value="https://management.breinhap.com/uitnodiging#' +
-						token +
-						'"></label><p>',
+					tr("Uitnodiging gemaakt"),
+					ui`Deze link is één dag geldig en werkt alleen voor het bedoelde account. Deel de link zelf met de ontvanger.</p><label>Uitnodigingslink <input readonly value="https://management.breinhap.com/uitnodiging#${token}"></label><p>`,
 					null,
 					req.managementSession,
 				),
@@ -453,8 +459,8 @@ export function createHandler({
 				return send(
 					503,
 					page(
-						"Tijdelijk niet beschikbaar",
-						"Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw. Wat je typte, is niet opgeslagen.",
+						tr("Tijdelijk niet beschikbaar"),
+						tr("Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw. Wat je typte, is niet opgeslagen."),
 					),
 				);
 			}
@@ -467,8 +473,8 @@ export function createHandler({
 				return send(
 					403,
 					page(
-						"Geen toegang",
-						"Dit is de beheeromgeving voor bevoegde begeleiders.",
+						tr("Geen toegang"),
+						tr("Dit is de beheeromgeving voor bevoegde begeleiders."),
 						undefined,
 						req.managementSession,
 					),
@@ -484,13 +490,13 @@ export function createHandler({
 				return send(303, "", undefined, result.headers);
 			return send(
 				result.status,
-				page(result.title, result.body, result.active ?? null, req.managementSession),
+				withLocale(result.locale ?? uiLocale(), () => page(result.title, result.body, result.active ?? null, req.managementSession)),
 				undefined,
 				result.headers ?? {},
 			);
 		}
 		if (!["GET", "HEAD"].includes(req.method))
-			return send(405, "Method not allowed", "text/plain; charset=utf-8", {
+			return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", {
 				Allow: "GET, HEAD",
 			});
 		if (url.pathname === "/readyz")
@@ -535,8 +541,8 @@ export function createHandler({
 			return send(
 				200,
 				page(
-					"Uitnodiging openen",
-					"Je uitnodiging wordt geopend. Gebruik de volledige link die je begeleider heeft gedeeld.",
+					tr("Uitnodiging openen"),
+					tr("Je uitnodiging wordt geopend. Gebruik de volledige link die je begeleider heeft gedeeld."),
 				),
 			);
 		if (["/login", "/register", "/aanmelden"].includes(url.pathname)) {
@@ -548,9 +554,9 @@ export function createHandler({
 			if (identity?.headless) {
 				const lang = localeOf(req, url);
 				const notice = stepUp
-					? `<p class="notice" role="status">${T[lang].stepUpNotice}</p>`
+					? ui`<p class="notice" role="status">${T[lang].stepUpNotice}</p>`
 					: url.searchParams.has("verlopen")
-					? `<p class="notice" role="status">${T[lang].errors.flow}</p>`
+					? ui`<p class="notice" role="status">${T[lang].errors.flow}</p>`
 					: "";
 				return send(
 					200,
@@ -572,8 +578,8 @@ export function createHandler({
 			return send(
 				503,
 				page(
-					"Aanmelden binnenkort beschikbaar",
-					"De beveiligde aanmelding wordt nog ingericht. Je kunt hier nog niet aanmelden of inhoud beheren.",
+					tr("Aanmelden binnenkort beschikbaar"),
+					tr("De beveiligde aanmelding wordt nog ingericht. Je kunt hier nog niet aanmelden of inhoud beheren."),
 				),
 				undefined,
 				{ "Retry-After": "3600" },
@@ -586,8 +592,8 @@ export function createHandler({
 			return send(
 				503,
 				page(
-					"Tijdelijk niet beschikbaar",
-					"Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw.",
+					tr("Tijdelijk niet beschikbaar"),
+					tr("Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw."),
 				),
 			);
 		}
@@ -599,8 +605,8 @@ export function createHandler({
 			return send(
 				403,
 				page(
-					"Geen toegang",
-					"Dit is de beheeromgeving voor bevoegde begeleiders. Vraag een beheerder om toegang of ga naar Breinhap voor leerlingen.",
+					tr("Geen toegang"),
+					tr("Dit is de beheeromgeving voor bevoegde begeleiders. Vraag een beheerder om toegang of ga naar Breinhap voor leerlingen."),
 					undefined,
 					req.managementSession,
 				),
@@ -611,10 +617,10 @@ export function createHandler({
 			return send(
 				200,
 				page(
-					"Overzicht",
+					tr("Overzicht"),
 					waiting
-						? `<strong>${waiting} ${waiting === 1 ? "aanvraag wacht" : "aanvragen wachten"} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a>`
-						: 'Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a>',
+						? ui`<strong>${waiting} ${waiting === 1 ? tr("aanvraag wacht") : tr("aanvragen wachten")} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a>`
+						: ui`Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a>`,
 					url.pathname,
 					req.managementSession,
 				),
@@ -624,23 +630,23 @@ export function createHandler({
 			if (!directory) return send(503, directoryUnavailable(req.managementSession));
 			const principal = await identity?.principal(req);
 			if (!principal)
-				return send(403, page("Geen toegang", "Je hebt geen toegang tot deze pagina."));
+				return send(403, page(tr("Geen toegang"), tr("Je hebt geen toegang tot deze pagina.")));
 			const [learners, groups] = await Promise.all([
 				directory.learners(principal),
 				directory.groups(principal),
 			]);
 			return send(
 				200,
-				page("Leerlingen", learnersPage(learners, groups), url.pathname, req.managementSession),
+				page(tr("Leerlingen"), learnersPage(learners, groups), url.pathname, req.managementSession),
 			);
 		}
-		const route = routes.get(url.pathname);
+		const route = routes().get(url.pathname);
 		if (!route)
 			return send(
 				404,
 				page(
-					"Pagina niet gevonden",
-					'Ga terug naar het <a href="/">overzicht</a>.',
+					tr("Pagina niet gevonden"),
+					ui`Ga terug naar het <a href="/">overzicht</a>.`,
 					null,
 				),
 			);
@@ -649,16 +655,22 @@ export function createHandler({
 			page(route[0], route[1], url.pathname, req.managementSession),
 		);
 	};
+	return (req, res) => {
+		let url;
+		try { url = new URL(req.url, origin); } catch { /* The handler rejects malformed requests. */ }
+		return withLocale(localeOf(req, url), () => handle(req, res));
+	};
 }
 
 export function createManagementServer(options) {
 	const handler = createHandler(options);
 	const server = createServer((req, res) => {
-		handler(req, res).catch((error) => {
+		handler(req, res).catch((error) => withLocale(localeOf(req, new URL(req.url, origin)), () => {
 			if (!res.headersSent)
 				res.writeHead(error.status === 413 ? 413 : 503, {
 					"Cache-Control": "no-store",
 					"Content-Type": "text/html; charset=utf-8",
+					"Content-Language": uiLocale(),
 					"X-Content-Type-Options": "nosniff",
 					"X-Frame-Options": "DENY",
 					"Content-Security-Policy":
@@ -666,11 +678,11 @@ export function createManagementServer(options) {
 				});
 			res.end(
 				documentPage(
-					"Tijdelijk niet beschikbaar",
-					"Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw.",
+					tr("Tijdelijk niet beschikbaar"),
+					tr("Je toegang kan nu niet worden gecontroleerd. Probeer later opnieuw."),
 				),
 			);
-		});
+		}));
 	});
 	// long enough for one upload on a slow connection (breinhap#29); headers still have to arrive quickly
 	server.requestTimeout = 120_000;

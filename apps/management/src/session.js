@@ -18,7 +18,7 @@
 		}
 		return;
 	}
-	if (!document.querySelector('nav[aria-label="Beheernavigatie"]')) return;
+	if (!document.querySelector('nav.management-nav')) return;
 	let checking = false;
 	async function check() {
 		if (document.hidden || checking) return;
@@ -37,13 +37,13 @@
 				main.replaceChildren();
 				const text = document.createElement("p");
 				text.textContent =
-					"Je toegang kan nu niet worden gecontroleerd. Vernieuw de pagina om opnieuw te proberen.";
+					document.documentElement.dataset.accessUnavailable;
 				main.append(text);
 			}
 		} catch {
 			const main = document.querySelector("main");
 			main.textContent =
-				"Verbinding verbroken. Vernieuw de pagina om je toegang opnieuw te controleren.";
+				document.documentElement.dataset.connectionLost;
 		} finally {
 			checking = false;
 		}

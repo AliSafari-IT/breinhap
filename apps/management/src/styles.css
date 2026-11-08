@@ -810,3 +810,8 @@ footer.management-footer {
 		padding-inline: .5rem;
 	}
 }
+
+/* The selector's optional country language-count badge has fixed English copy in the shared widget. */
+.management-body .cls-option:has(.cls-option__flag) .cls-badge {
+	display: none;
+}

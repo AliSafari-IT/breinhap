@@ -1,3 +1,4 @@
+import { tr, ui, uiLocale, formatLocale } from "./workspace-i18n.mjs";
 import { ContentError } from "./content.mjs";
 import { esc } from "./directory-pages.mjs";
 import { SCHEMA_VERSION } from "./vendor/content-schema.mjs";
@@ -35,16 +36,16 @@ export const SLOTS = Object.freeze({
 	missions: 12,
 });
 
-const YEAR = (y) => `${y}${y === 1 ? "ste" : "de"} jaar`;
+const YEAR = (y) => uiLocale() === "nl" ? `${y}${y === 1 ? "ste" : "de"} jaar` : tr("Jaar {0}", y);
 
 /** What the library shows for an object: its draft, and where its latest revision stands. */
 export function stateOf(row) {
-	if (!row.latestRevision) return { label: "Concept", tone: "draft" };
+	if (!row.latestRevision) return { label: tr("Concept"), tone: "draft" };
 	if (row.latestDecision === "approved")
-		return { label: `Revisie ${row.latestRevision} goedgekeurd`, tone: "ok" };
+		return { label: tr`Revisie ${row.latestRevision} goedgekeurd`, tone: "ok" };
 	if (row.latestDecision === "changes_requested")
-		return { label: `Revisie ${row.latestRevision}: aanpassen`, tone: "warn" };
-	return { label: `Revisie ${row.latestRevision} vastgelegd`, tone: "draft" };
+		return { label: tr`Revisie ${row.latestRevision}: aanpassen`, tone: "warn" };
+	return { label: tr`Revisie ${row.latestRevision} vastgelegd`, tone: "draft" };
 }
 
 // ── form → learning object ──────────────────────────────────────────────────────────────────────
@@ -233,12 +234,12 @@ export function toValues(object, sources = []) {
 /** A field name as a person reads it: "Missie 1 · Oefenvraag 2 · Optie 3". */
 export function labelOf(field) {
 	const names = {
-		id: "Code", title: "Titel", subject: "Vak", grade: "Jaar", form: "Leerobject", missions: "Missies",
-		curriculum: "Leerplan", leerdoel: "Leerdoel", references: "Verwijzingen", warmup: "Opwarmer",
-		learn: "Uitlegkaart", practice: "Oefenvraag", check: "Checkvraag", options: "Optie", items: "Stap",
-		prompt: "Vraag", explanation: "Uitleg", answerIndex: "Juist antwoord", minutes: "Minuten",
-		text: "Tekst", example: "Voorbeeld", commonMistakes: "Veelgemaakte fout", mistake: "Fout", why: "Waarom",
-		sources: "Bron", url: "Link", kind: "Soort",
+		id: tr("Code"), title: tr("Titel"), subject: tr("Vak"), grade: tr("Jaar"), form: tr("Leerobject"), missions: tr("Missies"),
+		curriculum: tr("Leerplan"), leerdoel: tr("Leerdoel"), references: tr("Verwijzingen"), warmup: tr("Opwarmer"),
+		learn: tr("Uitlegkaart"), practice: tr("Oefenvraag"), check: tr("Checkvraag"), options: tr("Optie"), items: tr("Stap"),
+		prompt: tr("Vraag"), explanation: tr("Uitleg"), answerIndex: tr("Juist antwoord"), minutes: tr("Minuten"),
+		text: tr("Tekst"), example: tr("Voorbeeld"), commonMistakes: tr("Veelgemaakte fout"), mistake: tr("Fout"), why: tr("Waarom"),
+		sources: tr("Bron"), url: tr("Link"), kind: tr("Soort"),
 	};
 	const parts = field.split(".");
 	const out = [];
@@ -246,7 +247,7 @@ export function labelOf(field) {
 		const part = parts[i];
 		const next = parts[i + 1];
 		if (part === "missions" && /^\d+$/.test(next ?? "")) {
-			out.push(`Missie ${Number(next) + 1}`);
+			out.push(tr`Missie ${Number(next) + 1}`);
 			i++;
 		} else if (/^\d+$/.test(next ?? "") && names[part]) {
 			out.push(`${names[part]} ${Number(next) + 1}`);
@@ -258,20 +259,22 @@ export function labelOf(field) {
 
 /** The schema's message for an issue, in Dutch and saying what to do. */
 export function messageOf(issue) {
-	if (issue.path.endsWith("answerIndex")) return "Kies welke ingevulde optie het juiste antwoord is.";
+	if (issue.path.endsWith("answerIndex")) return tr("Kies welke ingevulde optie het juiste antwoord is.");
 	switch (issue.code) {
 		case "too_small":
-			return issue.origin === "array" ? `Vul er minstens ${issue.minimum} in.` : issue.origin === "number" ? `Minstens ${issue.minimum}.` : "Vul dit in.";
+			return issue.origin === "array" ? tr`Vul er minstens ${issue.minimum} in.` : issue.origin === "number" ? tr`Minstens ${issue.minimum}.` : tr("Vul dit in.");
 		case "too_big":
-			return issue.origin === "array" || issue.origin === "number" ? `Hoogstens ${issue.maximum}.` : "Dit is te lang.";
+			return issue.origin === "array" || issue.origin === "number" ? tr`Hoogstens ${issue.maximum}.` : tr("Dit is te lang.");
 		case "invalid_format":
-			return "Gebruik alleen kleine letters, cijfers en streepjes (bv. prikkel-reactie).";
+			return tr("Gebruik alleen kleine letters, cijfers en streepjes (bv. prikkel-reactie).");
 		case "invalid_value":
-			return "Kies een van de mogelijke waarden.";
+			return tr("Kies een van de mogelijke waarden.");
 		case "invalid_type":
-			return "Vul dit in.";
+			return tr("Vul dit in.");
 		default:
-			return issue.message;
+			return issue.message === "order items must be unique" ? tr("Gebruik elk stukje maar één keer.")
+				: issue.path === "missions" ? tr("Gebruik voor elke missie een unieke code.")
+					: tr("Controleer wat je invulde.");
 	}
 }
 
@@ -287,47 +290,47 @@ function input(name, label, values, errors, { area = false, required = false, ty
 	const attrs = `id="${id}" name="${esc(name)}"${required ? " required" : ""}${describedBy ? ` aria-describedby="${describedBy}"` : ""}${error ? ' aria-invalid="true"' : ""}`;
 	const value = values[name] ?? "";
 	const control = area
-		? `<textarea ${attrs} maxlength="${max}" rows="3">${esc(value)}</textarea>`
-		: `<input ${attrs} type="${type}" value="${esc(value)}"${type === "text" ? ` maxlength="${max}"` : ""}>`;
-	return `<div class="field${error ? " invalid" : ""}"><label for="${id}">${label}</label>${hint ? `<small id="${id}-hint">${hint}</small>` : ""}${control}${error ? `<p class="error" id="${id}-error">${esc(error)}</p>` : ""}</div>`;
+		? ui`<textarea ${attrs} maxlength="${max}" rows="3">${esc(value)}</textarea>`
+		: ui`<input ${attrs} type="${type}" value="${esc(value)}"${type === "text" ? ` maxlength="${max}"` : ""}>`;
+	return ui`<div class="field${error ? " invalid" : ""}"><label for="${id}">${label}</label>${hint ? ui`<small id="${id}-hint">${hint}</small>` : ""}${control}${error ? ui`<p class="error" id="${id}-error">${esc(error)}</p>` : ""}</div>`;
 }
 
 function select(name, label, options, values, errors) {
 	const id = fieldId(name);
 	const error = errors[name];
-	return `<div class="field${error ? " invalid" : ""}"><label for="${id}">${label}</label><select id="${id}" name="${esc(name)}"${error ? ` aria-invalid="true" aria-describedby="${id}-error"` : ""}>${options
-		.map(([value, text]) => `<option value="${esc(value)}"${String(values[name] ?? "") === String(value) ? " selected" : ""}>${esc(text)}</option>`)
-		.join("")}</select>${error ? `<p class="error" id="${id}-error">${esc(error)}</p>` : ""}</div>`;
+	return ui`<div class="field${error ? " invalid" : ""}"><label for="${id}">${label}</label><select id="${id}" name="${esc(name)}"${error ? ` aria-invalid="true" aria-describedby="${id}-error"` : ""}>${options
+		.map(([value, text]) => ui`<option value="${esc(value)}"${String(values[name] ?? "") === String(value) ? " selected" : ""}>${esc(tr(text))}</option>`)
+		.join("")}</select>${error ? ui`<p class="error" id="${id}-error">${esc(error)}</p>` : ""}</div>`;
 }
 
 function questionFields(prefix, label, values, errors) {
 	const radios = Array.from({ length: SLOTS.options }, (_, o) => {
 		const id = fieldId(`${prefix}.answerIndex.${o}`);
-		return `<label for="${id}" class="answer"><input type="radio" id="${id}" name="${prefix}.answerIndex" value="${o}"${values[`${prefix}.answerIndex`] === String(o) ? " checked" : ""}> Optie ${o + 1} is juist</label>`;
+		return ui`<label for="${id}" class="answer"><input type="radio" id="${id}" name="${prefix}.answerIndex" value="${o}"${values[`${prefix}.answerIndex`] === String(o) ? " checked" : ""}> Optie ${o + 1} is juist</label>`;
 	}).join("");
 	const answerError = errors[`${prefix}.answerIndex`];
-	return `<fieldset class="question"><legend>${label}</legend>
-${select(`${prefix}.kind`, "Soort vraag", [["choice", "Meerkeuze"], ["order", "In de juiste volgorde zetten"]], values, errors)}
-${input(`${prefix}.prompt`, "Vraag", values, errors, { area: true, max: 1000 })}
-<fieldset><legend>Bij meerkeuze: 2 tot 4 opties en het juiste antwoord</legend>${Array.from({ length: SLOTS.options }, (_, o) => input(`${prefix}.options.${o}`, `Optie ${o + 1}`, values, errors, { max: 300 })).join("")}<div class="answers" role="group" aria-label="Juist antwoord">${radios}</div>${answerError ? `<p class="error">${esc(answerError)}</p>` : ""}${errors[`${prefix}.options`] ? `<p class="error">${esc(errors[`${prefix}.options`])}</p>` : ""}</fieldset>
-<fieldset><legend>Bij volgorde: 2 tot 6 stappen, in de juiste volgorde</legend>${Array.from({ length: SLOTS.items }, (_, i) => input(`${prefix}.items.${i}`, `Stap ${i + 1}`, values, errors, { max: 300 })).join("")}${errors[`${prefix}.items`] ? `<p class="error">${esc(errors[`${prefix}.items`])}</p>` : ""}</fieldset>
-${input(`${prefix}.explanation`, "Uitleg na het antwoord (waarom het juist is, nooit alleen 'fout')", values, errors, { area: true, max: 1000 })}
+	return ui`<fieldset class="question"><legend>${label}</legend>
+${select(`${prefix}.kind`, tr("Soort vraag"), [["choice", tr("Meerkeuze")], ["order", tr("In de juiste volgorde zetten")]], values, errors)}
+${input(`${prefix}.prompt`, tr("Vraag"), values, errors, { area: true, max: 1000 })}
+<fieldset><legend>Bij meerkeuze: 2 tot 4 opties en het juiste antwoord</legend>${Array.from({ length: SLOTS.options }, (_, o) => input(`${prefix}.options.${o}`, tr`Optie ${o + 1}`, values, errors, { max: 300 })).join("")}<div class="answers" role="group" aria-label="Juist antwoord">${radios}</div>${answerError ? ui`<p class="error">${esc(answerError)}</p>` : ""}${errors[`${prefix}.options`] ? ui`<p class="error">${esc(errors[`${prefix}.options`])}</p>` : ""}</fieldset>
+<fieldset><legend>Bij volgorde: 2 tot 6 stappen, in de juiste volgorde</legend>${Array.from({ length: SLOTS.items }, (_, i) => input(`${prefix}.items.${i}`, tr`Stap ${i + 1}`, values, errors, { max: 300 })).join("")}${errors[`${prefix}.items`] ? ui`<p class="error">${esc(errors[`${prefix}.items`])}</p>` : ""}</fieldset>
+${input(`${prefix}.explanation`, tr("Uitleg na het antwoord (waarom het juist is, nooit alleen 'fout')"), values, errors, { area: true, max: 1000 })}
 </fieldset>`;
 }
 
 function missionFields(m, values, errors, isNew) {
 	const at = (name) => `missions.${m}.${name}`;
-	const listError = (name) => (errors[at(name)] ? `<p class="error">${esc(errors[at(name)])}</p>` : "");
-	return `<fieldset class="mission"><legend>${isNew ? "Nieuwe missie (laat leeg als je er geen wilt toevoegen)" : `Missie ${m + 1}`}</legend>
-${input(at("title"), "Titel van de missie", values, errors, { max: 200 })}
-${input(at("id"), "Missiecode", values, errors, { max: 80, hint: "Kleine letters, cijfers en streepjes. Leeg: wordt gemaakt uit de code van het leerobject." })}
-${input(at("minutes"), "Minuten (2 tot 6)", values, errors, { type: "number" })}
-<h3>Opwarmen</h3>${input(at("warmup.text"), "Opwarmer", values, errors, { area: true })}${input(at("warmup.example"), "Voorbeeld (optioneel)", values, errors, { area: true })}
-<h3>Leren: 1 tot 4 uitlegkaarten</h3>${listError("learn")}${Array.from({ length: SLOTS.learn }, (_, c) => `${input(at(`learn.${c}.text`), `Kaart ${c + 1}`, values, errors, { area: true })}${input(at(`learn.${c}.example`), `Voorbeeld bij kaart ${c + 1} (optioneel)`, values, errors, { area: true })}`).join("")}
-<h3>Doen: 1 tot 4 oefenvragen</h3>${listError("practice")}${Array.from({ length: SLOTS.practice }, (_, q) => questionFields(at(`practice.${q}`), `Oefenvraag ${q + 1}`, values, errors)).join("")}
-<h3>Check: 1 tot 3 vragen</h3>${listError("check")}${Array.from({ length: SLOTS.check }, (_, q) => questionFields(at(`check.${q}`), `Checkvraag ${q + 1}`, values, errors)).join("")}
-<h3>Veelgemaakte fouten (optioneel)</h3>${Array.from({ length: SLOTS.commonMistakes }, (_, c) => `${input(at(`commonMistakes.${c}.mistake`), `Fout ${c + 1}`, values, errors, { max: 500 })}${input(at(`commonMistakes.${c}.why`), `Waarom ${c + 1}`, values, errors, { max: 500 })}`).join("")}
-${isNew ? "" : `<label class="remove"><input type="checkbox" name="${at("remove")}" value="1"> Deze missie verwijderen bij het opslaan</label>`}
+	const listError = (name) => (errors[at(name)] ? ui`<p class="error">${esc(errors[at(name)])}</p>` : "");
+	return ui`<fieldset class="mission"><legend>${isNew ? tr("Nieuwe missie (laat leeg als je er geen wilt toevoegen)") : tr`Missie ${m + 1}`}</legend>
+${input(at("title"), tr("Titel van de missie"), values, errors, { max: 200 })}
+${input(at("id"), tr("Missiecode"), values, errors, { max: 80, hint: tr("Kleine letters, cijfers en streepjes. Leeg: wordt gemaakt uit de code van het leerobject.") })}
+${input(at("minutes"), tr("Minuten (2 tot 6)"), values, errors, { type: "number" })}
+<h3>Opwarmen</h3>${input(at("warmup.text"), tr("Opwarmer"), values, errors, { area: true })}${input(at("warmup.example"), "Voorbeeld (optioneel)", values, errors, { area: true })}
+<h3>Leren: 1 tot 4 uitlegkaarten</h3>${listError("learn")}${Array.from({ length: SLOTS.learn }, (_, c) => `${input(at(`learn.${c}.text`), tr`Kaart ${c + 1}`, values, errors, { area: true })}${input(at(`learn.${c}.example`), tr`Voorbeeld bij kaart ${c + 1} (optioneel)`, values, errors, { area: true })}`).join("")}
+<h3>Doen: 1 tot 4 oefenvragen</h3>${listError("practice")}${Array.from({ length: SLOTS.practice }, (_, q) => questionFields(at(`practice.${q}`), tr`Oefenvraag ${q + 1}`, values, errors)).join("")}
+<h3>Check: 1 tot 3 vragen</h3>${listError("check")}${Array.from({ length: SLOTS.check }, (_, q) => questionFields(at(`check.${q}`), tr`Checkvraag ${q + 1}`, values, errors)).join("")}
+<h3>Veelgemaakte fouten (optioneel)</h3>${Array.from({ length: SLOTS.commonMistakes }, (_, c) => `${input(at(`commonMistakes.${c}.mistake`), tr`Fout ${c + 1}`, values, errors, { max: 500 })}${input(at(`commonMistakes.${c}.why`), tr`Waarom ${c + 1}`, values, errors, { max: 500 })}`).join("")}
+${isNew ? "" : ui`<label class="remove"><input type="checkbox" name="${at("remove")}" value="1"> Deze missie verwijderen bij het opslaan</label>`}
 </fieldset>`;
 }
 
@@ -347,37 +350,37 @@ export function editorPage({ values, errors = {}, notice = "", csrf, id, version
 	const slots = Math.min(SLOTS.missions, missionCount + 1);
 	const errorCount = Object.keys(errors).length;
 	const history = id
-		? `<p><a href="/bibliotheek/${esc(id)}/voorbeeld">Voorbeeld bekijken zoals een leerling</a> <small>(het laatst opgeslagen concept)</small></p><h2>Geschiedenis</h2>${
+		? ui`<p><a href="/bibliotheek/${esc(id)}/voorbeeld">Voorbeeld bekijken zoals een leerling</a> <small>(het laatst opgeslagen concept)</small></p><h2>Geschiedenis</h2>${
 				revisions.length
-					? `<ol class="history">${revisions
-							.map((r) => `<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })} · ${r.decision === "approved" ? "goedgekeurd" : r.decision === "changes_requested" ? "aanpassen gevraagd" : "nog niet nagekeken"} · <a href="/bibliotheek/${esc(id)}/voorbeeld?revisie=${r.revision}">Voorbeeld</a></li>`)
+					? ui`<ol class="history">${revisions
+							.map((r) => ui`<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString(formatLocale(), { timeZone: "Europe/Brussels" })} · ${r.decision === "approved" ? tr("goedgekeurd") : r.decision === "changes_requested" ? tr("aanpassen gevraagd") : tr("nog niet nagekeken")} · <a href="/bibliotheek/${esc(id)}/voorbeeld?revisie=${r.revision}">Voorbeeld</a></li>`)
 							.join("")}</ol>`
-					: "<p>Nog geen vastgelegde revisies. Leg een revisie vast wanneer de inhoud klaar is om na te kijken.</p>"
+					: ui`<p>Nog geen vastgelegde revisies. Leg een revisie vast wanneer de inhoud klaar is om na te kijken.</p>`
 			}<form method="post" action="/bibliotheek/${esc(id)}/vastleggen"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="expectedVersion" value="${esc(version)}"><button>Revisie vastleggen</button></form>
 <form method="post" action="/bibliotheek/${esc(id)}/dupliceren"><label>Code van de kopie <input name="newId" required maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*"></label><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form>
 <form method="post" action="/bibliotheek/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form><p><small>Archiveren verbergt het leerobject in je bibliotheek. Vastgelegde revisies en wat leerlingen al kregen, blijven bewaard.</small>`
 		: "";
 	// an error summary at the top, each item a link to its field (or the section that holds it)
 	const summary = errorCount
-		? `<div class="alert" role="alert" tabindex="-1" id="fouten"><p><strong>${errorCount} ${errorCount === 1 ? "punt moet" : "punten moeten"} nog aangepast worden.</strong> Wat je typte, is bewaard.</p><ul>${Object.entries(errors)
-				.map(([field, message]) => `<li><a href="#${fieldId(field)}">${esc(labelOf(field))}</a>: ${esc(message)}</li>`)
+		? ui`<div class="alert" role="alert" tabindex="-1" id="fouten"><p><strong>${errorCount} ${errorCount === 1 ? tr("punt moet") : tr("punten moeten")} nog aangepast worden.</strong> Wat je typte, is bewaard.</p><ul>${Object.entries(errors)
+				.map(([field, message]) => ui`<li><a href="#${fieldId(field)}">${esc(labelOf(field))}</a>: ${esc(message)}</li>`)
 				.join("")}</ul></div>`
 		: "";
-	return `${notice}${summary}</p>
+	return ui`${notice}${summary}</p>
 <form method="post" action="${id ? `/bibliotheek/${esc(id)}` : "/bibliotheek/nieuw"}" class="editor" data-editor>
-<input type="hidden" name="csrf" value="${esc(csrf)}">${id ? `<input type="hidden" name="expectedVersion" value="${esc(version)}">` : ""}${Object.entries(hidden)
-		.map(([name, value]) => `<input type="hidden" name="${esc(name)}" value="${esc(value)}">`)
+<input type="hidden" name="csrf" value="${esc(csrf)}">${id ? ui`<input type="hidden" name="expectedVersion" value="${esc(version)}">` : ""}${Object.entries(hidden)
+		.map(([name, value]) => ui`<input type="hidden" name="${esc(name)}" value="${esc(value)}">`)
 		.join("")}
 <fieldset><legend>Leerobject</legend>
-${id ? `<p>Code: <code>${esc(id)}</code></p>` : input("id", "Code", values, errors, { required: true, max: 80, hint: "Kleine letters, cijfers en streepjes, bv. biologie-prikkel-reactie. Kan later niet meer veranderen." })}
-${input("title", "Titel", values, errors, { required: true, max: 200 })}
-${select("subject", "Vak", SUBJECTS, values, errors)}
-${select("grade", "Jaar", [1, 2, 3, 4, 5, 6].map((y) => [String(y), YEAR(y)]), values, errors)}
-${input("curriculum.leerdoel", "Leerdoel (in de woorden van de school)", values, errors, { area: true, required: true })}
-${input("curriculum.references", "Leerplan- of eindtermverwijzingen (één per regel, optioneel)", values, errors, { area: true })}
+${id ? ui`<p>Code: <code>${esc(id)}</code></p>` : input("id", tr("Code"), values, errors, { required: true, max: 80, hint: tr("Kleine letters, cijfers en streepjes, bv. biologie-prikkel-reactie. Kan later niet meer veranderen.") })}
+${input("title", tr("Titel"), values, errors, { required: true, max: 200 })}
+${select("subject", tr("Vak"), SUBJECTS, values, errors)}
+${select("grade", tr("Jaar"), [1, 2, 3, 4, 5, 6].map((y) => [String(y), YEAR(y)]), values, errors)}
+${input("curriculum.leerdoel", tr("Leerdoel (in de woorden van de school)"), values, errors, { area: true, required: true })}
+${input("curriculum.references", tr("Leerplan- of eindtermverwijzingen (één per regel, optioneel)"), values, errors, { area: true })}
 </fieldset>
 ${Array.from({ length: slots }, (_, m) => missionFields(m, values, errors, m === slots - 1 && m >= missionCount)).join("")}
-<fieldset><legend>Bronnen (alleen voor beheer, nooit voor leerlingen)</legend>${Array.from({ length: 4 }, (_, s) => `${select(`sources.${s}.kind`, `Soort bron ${s + 1}`, [["own", "Eigen werk"], ["book", "Boek"], ["website", "Website"], ["school_material", "Schoolmateriaal"]], values, errors)}${input(`sources.${s}.title`, `Bron ${s + 1}`, values, errors, { max: 200 })}${input(`sources.${s}.url`, `Link ${s + 1} (https, optioneel)`, values, errors, { type: "url", max: 500 })}`).join("")}</fieldset>
+<fieldset><legend>Bronnen (alleen voor beheer, nooit voor leerlingen)</legend>${Array.from({ length: 4 }, (_, s) => `${select(`sources.${s}.kind`, tr`Soort bron ${s + 1}`, [["own", tr("Eigen werk")], ["book", tr("Boek")], ["website", tr("Website")], ["school_material", tr("Schoolmateriaal")]], values, errors)}${input(`sources.${s}.title`, tr`Bron ${s + 1}`, values, errors, { max: 200 })}${input(`sources.${s}.url`, tr`Link ${s + 1} (https, optioneel)`, values, errors, { type: "url", max: 500 })}`).join("")}</fieldset>
 <p><button type="submit">Opslaan</button></p>
 </form>
 ${history}<p>`;
@@ -386,24 +389,24 @@ ${history}<p>`;
 /** The library: filters, then one row per object with its subject, year and state. */
 export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "" } = {}) {
 	const list = rows.length
-		? `<table class="library"><caption>Jouw leerobjecten</caption><thead><tr><th scope="col">Titel</th><th scope="col">Vak</th><th scope="col">Jaar</th><th scope="col">Status</th><th scope="col">Gewijzigd</th></tr></thead><tbody>${rows
+		? ui`<table class="library"><caption>Jouw leerobjecten</caption><thead><tr><th scope="col">Titel</th><th scope="col">Vak</th><th scope="col">Jaar</th><th scope="col">Status</th><th scope="col">Gewijzigd</th></tr></thead><tbody>${rows
 				.map((row) => {
 					const state = stateOf(row);
-					return `<tr><td><a href="/bibliotheek/${esc(row.id)}">${esc(row.title)}</a></td><td>${esc(SUBJECT_NAME[row.subject] ?? row.subject)}</td><td>${YEAR(row.grade)}</td><td><span class="state ${state.tone}">${esc(state.label)}</span></td><td>${new Date(row.updatedAt).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" })}</td></tr>`;
+					return ui`<tr><td><a href="/bibliotheek/${esc(row.id)}">${esc(row.title)}</a></td><td>${esc(tr(SUBJECT_NAME[row.subject] ?? row.subject))}</td><td>${YEAR(row.grade)}</td><td><span class="state ${state.tone}">${esc(state.label)}</span></td><td>${new Date(row.updatedAt).toLocaleDateString(formatLocale(), { timeZone: "Europe/Brussels" })}</td></tr>`;
 				})
 				.join("")}</tbody></table>`
-		: "<p>Geen leerobjecten gevonden.</p>";
-	return `${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p><form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => `<option value="${v}"${subject === v ? " selected" : ""}>${t}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => `<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
+		: ui`<p>Geen leerobjecten gevonden.</p>`;
+	return ui`${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p><form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
 <p><a class="action" href="/bibliotheek/nieuw">Nieuw leerobject</a></p>${list}<p>`;
 }
 
 /** Turns a ContentError into the editor's field errors. */
 export function errorsOf(error, paths) {
 	const messages = {
-		exists: ["id", "Deze code bestaat al in deze werkplek. Kies een andere."],
-		mission_exists: ["form", "Een missiecode bestaat al, hier of in een ander leerobject. Kies een andere missiecode."],
-		unsupported_version: ["form", "Deze inhoud is voor een andere schemaversie."],
-		id_changed: ["form", "De code van een leerobject kan niet veranderen."],
+		exists: ["id", tr("Deze code bestaat al in deze werkplek. Kies een andere.")],
+		mission_exists: ["form", tr("Een missiecode bestaat al, hier of in een ander leerobject. Kies een andere missiecode.")],
+		unsupported_version: ["form", tr("Deze inhoud is voor een andere schemaversie.")],
+		id_changed: ["form", tr("De code van een leerobject kan niet veranderen.")],
 	};
 	if (messages[error.code]) return Object.fromEntries([messages[error.code]]);
 	const out = {};
@@ -411,7 +414,7 @@ export function errorsOf(error, paths) {
 		const field = fieldOf(issue.path, paths);
 		out[field] ??= messageOf(issue);
 	}
-	return Object.keys(out).length ? out : { form: "Controleer wat je invulde." };
+	return Object.keys(out).length ? out : { form: tr("Controleer wat je invulde.") };
 }
 
 export { ContentError };

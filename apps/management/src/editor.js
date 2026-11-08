@@ -21,6 +21,6 @@
 		form.dataset.sending = "1";
 		dirty = false;
 		const button = form.querySelector('button[type="submit"]');
-		if (button) button.textContent = "Bezig met opslaan…";
+		if (button) button.textContent = document.documentElement.dataset.saving;
 	});
 })();

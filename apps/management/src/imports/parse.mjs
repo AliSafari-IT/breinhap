@@ -1,3 +1,4 @@
+import { withLocale } from "../workspace-i18n.mjs";
 import { ContentError, validate } from "../content.mjs";
 import { messageOf } from "../library.mjs";
 import { SCHEMA_VERSION } from "../vendor/content-schema.mjs";
@@ -85,7 +86,7 @@ function check(input, locate, errors) {
 			err(errors, locate("schemaVersion"), `Schemaversie ${String(input?.schemaVersion)} wordt niet ondersteund (alleen ${SCHEMA_VERSION}).`);
 			return null;
 		}
-		for (const issue of error.issues.slice(0, 40)) err(errors, locate(issue.path), messageOf(issue));
+		for (const issue of error.issues.slice(0, 40)) err(errors, locate(issue.path), withLocale("nl", () => messageOf(issue)));
 		return null;
 	}
 }

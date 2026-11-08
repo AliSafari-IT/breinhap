@@ -1,3 +1,4 @@
+import { tr, ui, diagnostic } from "../workspace-i18n.mjs";
 import { esc } from "../directory-pages.mjs";
 import { ORIGIN } from "../identity.mjs";
 import { boundaryOf, FormRefused, parseMultipart, readBody } from "../uploads/multipart.mjs";
@@ -12,8 +13,8 @@ import { ImportError, PLAN_MINUTES } from "./store.mjs";
 
 const BASE = "/bibliotheek/importeren";
 const redirect = (location) => ({ status: 303, headers: { Location: location }, body: "" });
-const notice = (text, role = "status") => `<div class="notice" role="${role}"><p>${text}</p></div>`;
-const refusedForm = { status: 403, title: "Aanvraag geweigerd", body: "Laad de pagina opnieuw en probeer nog eens." };
+const notice = (text, role = "status") => ui`<div class="notice" role="${role}"><p>${text}</p></div>`;
+const refusedForm = () => ({ status: 403, title: tr("Aanvraag geweigerd"), body: tr("Laad de pagina opnieuw en probeer nog eens.") });
 
 const REFUSED = {
 	empty: "Het bestand is leeg.",
@@ -56,10 +57,10 @@ export const TEMPLATE = [
 ].map((line) => line.split(";").map((v) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(";")).join("\r\n") + "\r\n";
 
 const where = (e) =>
-	e.row !== undefined ? `Rij ${e.row}${e.column ? `, kolom ${esc(e.column)}` : ""}` : e.path ? `<code>${esc(e.path)}</code>` : "Bestand";
+	e.row !== undefined ? tr`Rij ${e.row}${e.column ? tr`, kolom ${esc(e.column)}` : ""}` : e.path ? ui`<code>${esc(e.path)}</code>` : tr("Bestand");
 
 function formPage(csrf, message = "") {
-	return `${message}<p>Importeer leerobjecten uit een bestand. Je ziet eerst precies wat er zou gebeuren; er wordt pas iets opgeslagen als je bevestigt. Alles wordt een <strong>concept</strong>: een bestand kan niets als nagekeken of gepubliceerd markeren.</p>
+	return ui`${message}<p>Importeer leerobjecten uit een bestand. Je ziet eerst precies wat er zou gebeuren; er wordt pas iets opgeslagen als je bevestigt. Alles wordt een <strong>concept</strong>: een bestand kan niets als nagekeken of gepubliceerd markeren.</p>
 <section class="card upload-card" aria-labelledby="import-title"><h2 id="import-title">Bestand kiezen</h2>
 <form method="post" action="${BASE}" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="${esc(csrf)}">
@@ -74,30 +75,30 @@ function formPage(csrf, message = "") {
 function previewPage(plan, csrf) {
 	const writes = plan.items.filter((i) => i.action !== "skip").length;
 	const errors = plan.errors.length
-		? `<section class="alert" role="alert" aria-labelledby="import-errors"><h2 id="import-errors">${plan.errors.length} ${plan.errors.length === 1 ? "fout" : "fouten"}: deze leerobjecten worden niet geïmporteerd</h2><ul>${plan.errors
+		? ui`<section class="alert" role="alert" aria-labelledby="import-errors"><h2 id="import-errors">${plan.errors.length} ${plan.errors.length === 1 ? tr("fout") : tr("fouten")}: deze leerobjecten worden niet geïmporteerd</h2><ul>${plan.errors
 				.slice(0, 100)
-				.map((e) => `<li>${where(e)}${e.object ? ` (${esc(e.object)})` : ""}: ${esc(e.message)}</li>`)
-				.join("")}</ul>${plan.errors.length > 100 ? `<p>En nog ${plan.errors.length - 100} meer.</p>` : ""}</section>`
+				.map((e) => ui`<li>${where(e)}${e.object ? ` (${esc(e.object)})` : ""}: ${esc(diagnostic(e.message))}</li>`)
+				.join("")}</ul>${plan.errors.length > 100 ? ui`<p>En nog ${plan.errors.length - 100} meer.</p>` : ""}</section>`
 		: "";
-	const notes = plan.notes.length ? `<section class="notice"><ul>${plan.notes.slice(0, 50).map((n) => `<li>${esc(n)}</li>`).join("")}</ul></section>` : "";
+	const notes = plan.notes.length ? ui`<section class="notice"><ul>${plan.notes.slice(0, 50).map((n) => ui`<li>${esc(diagnostic(n))}</li>`).join("")}</ul></section>` : "";
 	const rows = plan.items.length
-		? `<table class="library"><thead><tr><th scope="col">Code</th><th scope="col">Titel</th><th scope="col">Missies</th><th scope="col">Wat gebeurt er</th></tr></thead><tbody>${plan.items
+		? ui`<table class="library"><thead><tr><th scope="col">Code</th><th scope="col">Titel</th><th scope="col">Missies</th><th scope="col">Wat gebeurt er</th></tr></thead><tbody>${plan.items
 				.map((i) => {
 					const [label, tone] = ACTION[i.action];
-					return `<tr><td><code>${esc(i.objectId)}</code></td><td>${esc(i.title ?? "")}</td><td>${i.missions}</td><td><span class="state ${tone}">${label}</span>${i.reason ? ` <small>(${REASON[i.reason] ?? esc(i.reason)})</small>` : ""}</td></tr>`;
+					return ui`<tr><td><code>${esc(i.objectId)}</code></td><td>${esc(i.title ?? "")}</td><td>${i.missions}</td><td><span class="state ${tone}">${tr(label)}</span>${i.reason ? ui` <small>(${tr(REASON[i.reason] ?? i.reason)})</small>` : ""}</td></tr>`;
 				})
 				.join("")}</tbody></table>`
-		: "<p>Er is niets om te importeren.</p>";
+		: ui`<p>Er is niets om te importeren.</p>`;
 	const confirm = writes
-		? `<form method="post" action="${BASE}/${esc(plan.id)}/bevestigen"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit">${writes} ${writes === 1 ? "leerobject" : "leerobjecten"} importeren als concept</button></form><p class="muted"><small>Er is nog niets opgeslagen. Dit voorstel blijft ${PLAN_MINUTES} minuten geldig.</small></p>`
-		: `<p><a href="${BASE}">Een ander bestand kiezen</a></p>`;
-	return `<p>Dit zou er gebeuren. <strong>Er is nog niets opgeslagen.</strong></p>${errors}${notes}${rows}${confirm}`;
+		? ui`<form method="post" action="${BASE}/${esc(plan.id)}/bevestigen"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit">${writes} ${writes === 1 ? tr("leerobject") : tr("leerobjecten")} importeren als concept</button></form><p class="muted"><small>Er is nog niets opgeslagen. Dit voorstel blijft ${PLAN_MINUTES} minuten geldig.</small></p>`
+		: ui`<p><a href="${BASE}">Een ander bestand kiezen</a></p>`;
+	return ui`<p>Dit zou er gebeuren. <strong>Er is nog niets opgeslagen.</strong></p>${errors}${notes}${rows}${confirm}`;
 }
 
 function resultPage(row) {
 	const done = row.items.filter((i) => i.result === "done").length;
-	return `${notice(row.status === "done" ? `Import afgerond: ${done} ${done === 1 ? "leerobject" : "leerobjecten"} opgeslagen als concept.` : "Deze import is nog niet bevestigd.")}<table class="library"><thead><tr><th scope="col">Code</th><th scope="col">Titel</th><th scope="col">Resultaat</th></tr></thead><tbody>${row.items
-		.map((i) => `<tr><td>${i.result === "done" ? `<a href="/bibliotheek/${esc(i.objectId)}">${esc(i.objectId)}</a>` : `<code>${esc(i.objectId)}</code>`}</td><td>${esc(i.title ?? "")}</td><td>${RESULT[i.result] ?? esc(i.result)}${i.reason ? ` <small>(${REASON[i.reason] ?? ""})</small>` : ""}</td></tr>`)
+	return ui`${notice(row.status === "done" ? tr`Import afgerond: ${done} ${done === 1 ? tr("leerobject") : tr("leerobjecten")} opgeslagen als concept.` : tr("Deze import is nog niet bevestigd."))}<table class="library"><thead><tr><th scope="col">Code</th><th scope="col">Titel</th><th scope="col">Resultaat</th></tr></thead><tbody>${row.items
+		.map((i) => ui`<tr><td>${i.result === "done" ? ui`<a href="/bibliotheek/${esc(i.objectId)}">${esc(i.objectId)}</a>` : ui`<code>${esc(i.objectId)}</code>`}</td><td>${esc(i.title ?? "")}</td><td>${tr(RESULT[i.result] ?? i.result)}${i.reason ? ui` <small>(${tr(REASON[i.reason] ?? "")})</small>` : ""}</td></tr>`)
 		.join("")}</tbody></table><p><a href="/bibliotheek">Naar de bibliotheek</a> · <a href="${BASE}">Nog een bestand importeren</a></p>`;
 }
 
@@ -105,22 +106,22 @@ export async function handleImports(req, url, { identity, imports }) {
 	const path = url.pathname;
 	if (path !== BASE && !path.startsWith(`${BASE}/`)) return null;
 	if (path === `${BASE}/sjabloon.csv`) {
-		if (req.method !== "GET" && req.method !== "HEAD") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET" } };
+		if (req.method !== "GET" && req.method !== "HEAD") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
 		return { raw: true, status: 200, body: `﻿${TEMPLATE}`, type: "text/csv; charset=utf-8", headers: { "Content-Disposition": 'attachment; filename="breinhap-sjabloon.csv"' } };
 	}
 	if (!imports)
-		return { status: req.method === "POST" ? 503 : 200, title: "Importeren", body: "Importeren is nog niet ingericht op deze server.", active: "/bibliotheek" };
+		return { status: req.method === "POST" ? 503 : 200, title: tr("Importeren"), body: tr("Importeren is nog niet ingericht op deze server."), active: "/bibliotheek" };
 	const principal = await identity.principal(req);
-	if (!principal) return { status: 403, title: "Geen toegang", body: "Je hebt geen toegang tot importeren." };
+	if (!principal) return { status: 403, title: tr("Geen toegang"), body: tr("Je hebt geen toegang tot importeren.") };
 	const csrf = req.managementSession.csrf;
 	const guard = async (work) => {
 		try {
 			return await work();
 		} catch (error) {
-			if (error?.code === "forbidden") return { status: 403, title: "Geen toegang", body: "Alleen ouders, begeleiders en leerkrachten importeren leerobjecten." };
-			if (error?.code === "not_found") return { status: 404, title: "Niet gevonden", body: `Deze import bestaat niet of is niet van jou. <a href="${BASE}">Importeren</a>` };
-			if (error instanceof ImportError && error.code === "expired") return { status: 410, title: "Voorstel verlopen", body: `Dit voorstel is ouder dan ${PLAN_MINUTES} minuten en wordt niet meer uitgevoerd. <a href="${BASE}">Laad het bestand opnieuw op</a>.` };
-			if (error instanceof ImportError && error.code === "busy") return { status: 409, title: "Bezig", body: `Deze import wordt al uitgevoerd. <a href="${url.pathname.replace(/\/bevestigen$/, "")}">Bekijk het resultaat</a>.` };
+			if (error?.code === "forbidden") return { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten importeren leerobjecten.") };
+			if (error?.code === "not_found") return { status: 404, title: tr("Niet gevonden"), body: ui`Deze import bestaat niet of is niet van jou. <a href="${BASE}">Importeren</a>` };
+			if (error instanceof ImportError && error.code === "expired") return { status: 410, title: tr("Voorstel verlopen"), body: ui`Dit voorstel is ouder dan ${PLAN_MINUTES} minuten en wordt niet meer uitgevoerd. <a href="${BASE}">Laad het bestand opnieuw op</a>.` };
+			if (error instanceof ImportError && error.code === "busy") return { status: 409, title: tr("Bezig"), body: ui`Deze import wordt al uitgevoerd. <a href="${url.pathname.replace(/\/bevestigen$/, "")}">Bekijk het resultaat</a>.` };
 			throw error;
 		}
 	};
@@ -129,41 +130,41 @@ export async function handleImports(req, url, { identity, imports }) {
 		if (req.method === "GET" || req.method === "HEAD")
 			return guard(async () => {
 				await imports.author(principal, "import.read");
-				return { status: 200, title: "Importeren", body: formPage(csrf), active: "/bibliotheek" };
+				return { status: 200, title: tr("Importeren"), body: formPage(csrf), active: "/bibliotheek" };
 			});
-		if (req.method !== "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET, POST" } };
+		if (req.method !== "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET, POST" } };
 		const boundary = boundaryOf(req.headers["content-type"]);
-		if (req.headers.origin !== ORIGIN || !boundary) return refusedForm;
+		if (req.headers.origin !== ORIGIN || !boundary) return refusedForm();
 		let form;
 		try {
 			form = parseMultipart(await readBody(req, MAX_IMPORT_BYTES + 16 * 1024), boundary);
 		} catch (error) {
 			if (!(error instanceof FormRefused)) throw error;
-			return { status: error.status, title: "Importeren", body: formPage(csrf, notice(error.code === "too_large" ? REFUSED.too_large : "Het formulier kon niet worden gelezen.", "alert")), active: "/bibliotheek" };
+			return { status: error.status, title: tr("Importeren"), body: formPage(csrf, notice(error.code === "too_large" ? diagnostic(REFUSED.too_large) : tr("Het formulier kon niet worden gelezen."), "alert")), active: "/bibliotheek" };
 		}
-		if (form.fields.getAll("csrf").length !== 1 || form.fields.get("csrf") !== csrf) return refusedForm;
-		if (!form.file) return { status: 400, title: "Importeren", body: formPage(csrf, notice("Kies een bestand.", "alert")), active: "/bibliotheek" };
+		if (form.fields.getAll("csrf").length !== 1 || form.fields.get("csrf") !== csrf) return refusedForm();
+		if (!form.file) return { status: 400, title: tr("Importeren"), body: formPage(csrf, notice(tr("Kies een bestand."), "alert")), active: "/bibliotheek" };
 		return guard(async () => {
 			try {
 				const plan = await imports.plan(principal, { name: form.file.name, bytes: form.file.bytes });
-				return { status: 200, title: "Importeren: voorstel", body: previewPage(plan, csrf), active: "/bibliotheek", headers: { "Cache-Control": "no-store" } };
+				return { status: 200, title: tr("Importeren: voorstel"), body: previewPage(plan, csrf), active: "/bibliotheek", headers: { "Cache-Control": "no-store" } };
 			} catch (error) {
 				if (!(error instanceof ImportRefused)) throw error;
-				return { status: 422, title: "Importeren", body: formPage(csrf, notice(REFUSED[error.code] ?? "Dit bestand kan niet worden geïmporteerd.", "alert")), active: "/bibliotheek" };
+				return { status: 422, title: tr("Importeren"), body: formPage(csrf, notice(diagnostic(REFUSED[error.code] ?? "") || tr("Dit bestand kan niet worden geïmporteerd."), "alert")), active: "/bibliotheek" };
 			}
 		});
 	}
 
 	const match = /^\/bibliotheek\/importeren\/([0-9a-f-]{36})(\/bevestigen)?$/.exec(path);
-	if (!match) return { status: 404, title: "Niet gevonden", body: `<a href="${BASE}">Importeren</a>` };
+	if (!match) return { status: 404, title: tr("Niet gevonden"), body: ui`<a href="${BASE}">Importeren</a>` };
 	const [, id, confirming] = match;
 	if (!confirming) {
-		if (req.method !== "GET" && req.method !== "HEAD") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "GET" } };
-		return guard(async () => ({ status: 200, title: "Importeren: resultaat", body: resultPage(await imports.get(principal, id)), active: "/bibliotheek" }));
+		if (req.method !== "GET" && req.method !== "HEAD") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
+		return guard(async () => ({ status: 200, title: tr("Importeren: resultaat"), body: resultPage(await imports.get(principal, id)), active: "/bibliotheek" }));
 	}
-	if (req.method !== "POST") return { status: 405, title: "Niet toegestaan", body: "", headers: { Allow: "POST" } };
+	if (req.method !== "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "POST" } };
 	const fields = new URLSearchParams((await readBody(req, 4096).catch(() => Buffer.alloc(0))).toString("utf8"));
-	if (req.headers.origin !== ORIGIN || fields.getAll("csrf").length !== 1 || fields.get("csrf") !== csrf) return refusedForm;
+	if (req.headers.origin !== ORIGIN || fields.getAll("csrf").length !== 1 || fields.get("csrf") !== csrf) return refusedForm();
 	return guard(async () => {
 		await imports.confirm(principal, id);
 		return redirect(`${BASE}/${id}`);

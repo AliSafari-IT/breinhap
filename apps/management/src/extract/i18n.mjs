@@ -1,27 +1,13 @@
 /**
- * breinhap#31: the extraction screens in English (default), Dutch, French and German. The language
- * comes from `?lang=`, then the ASafariM locale cookie (`asafarim-locale`), then Breinhap's own
- * (`breinhap-lang`), then the browser's Accept-Language, else English. Every page, notice (`?notice=`)
+ * breinhap#31: the extraction screens in English, Dutch (default), French and German. The language
+ * comes from `?lang=`, then Breinhap's cookie (`breinhap-lang`), then the ASafariM locale
+ * cookie (`asafarim-locale`), then the browser's Accept-Language, else Dutch. Every page, notice (`?notice=`)
  * and error (`?error=`) of these screens has a text in all four.
  */
 
 export const EXTRACT_LANGUAGES = ["en", "nl", "fr", "de"];
-const DEFAULT = "en";
-
-export function extractLocale(req, url) {
-	const asked = url?.searchParams.get("lang");
-	if (EXTRACT_LANGUAGES.includes(asked)) return asked;
-	const cookies = String(req.headers.cookie ?? "");
-	for (const name of ["asafarim-locale", "breinhap-lang"]) {
-		const value = new RegExp(`(?:^|;\\s*)${name}=([A-Za-z]{2})(?:[-_][A-Za-z]{2})?(?:;|$)`).exec(cookies)?.[1]?.toLowerCase();
-		if (EXTRACT_LANGUAGES.includes(value)) return value;
-	}
-	for (const part of String(req.headers["accept-language"] ?? "").split(",")) {
-		const tag = part.trim().slice(0, 2).toLowerCase();
-		if (EXTRACT_LANGUAGES.includes(tag)) return tag;
-	}
-	return DEFAULT;
-}
+// One workspace preference, including extraction and its editor handoff.
+export { localeOf as extractLocale } from "../account/i18n.mjs";
 
 const en = {
 	title: "Text from files",

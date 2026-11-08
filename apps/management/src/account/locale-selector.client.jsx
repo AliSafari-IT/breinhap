@@ -29,15 +29,20 @@ const COUNTRIES = [
 const mount = document.querySelector("[data-locale-selector]");
 if (mount) {
 	const language = mount.getAttribute("data-lang") || "nl";
+	// Workspace pages supply trusted, escaped copy. Existing auth/web mounts keep their defaults.
+	let messages;
+	try { messages = JSON.parse(mount.getAttribute("data-selector-i18n") || "null"); } catch { /* Keep the ordinary selector. */ }
+	const countries = messages ? COUNTRIES.map((country) => ({ ...country, name: messages.country, languages: country.languages.map((lang) => ({ ...lang, label: messages.languages[lang.code] })) })) : COUNTRIES;
 	const links = new Map();
 	for (const a of mount.querySelectorAll("a[hreflang]")) links.set(a.getAttribute("lang") || a.hreflang, a.href);
 	createRoot(mount).render(
 		createElement(CountryLanguageSelector, {
-			countries: COUNTRIES,
+			countries,
 			value: { country: "BE", language },
 			triggerVariant: "compact",
 			align: "end",
-			ariaLabel: "Taal · Langue · Sprache · Language",
+			ariaLabel: messages?.ariaLabel || "Taal · Langue · Sprache · Language",
+			strings: messages || undefined,
 			onChange: (next, meta) => {
 				if (meta?.reason === "init" || next.language === language) return;
 				const host = window.location.hostname;

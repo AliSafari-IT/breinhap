@@ -142,6 +142,48 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 			}
 		}
 
+
+		// breinhap#86: the real selector, preference cookie, translated DOM hooks and responsive shell.
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.locator("[data-locale-selector] button").first().click();
+		await page.getByRole("option").first().click();
+		await page.getByText("Français", { exact: true }).click();
+		await page.waitForURL((url) => url.searchParams.get("lang") === "fr");
+		assert.equal(await page.locator("html").getAttribute("lang"), "fr");
+		await page.goto(ORIGIN);
+		assert.equal(await page.locator("html").getAttribute("lang"), "fr", "the chosen locale survives navigation");
+		const copy = {
+			nl: ["Overzicht", "Toegang beheren", "Afmelden"],
+			fr: ["Aperçu", "Gestion des accès", "Se déconnecter"],
+			en: ["Overview", "Access management", "Sign out"],
+			de: ["Übersicht", "Zugangsverwaltung", "Abmelden"],
+		};
+		for (const [lang, labels] of Object.entries(copy)) {
+			await page.goto(`${ORIGIN}/?lang=${lang}`);
+			assert.equal(await page.locator("html").getAttribute("lang"), lang);
+			assert.equal(await page.locator(".management-nav").getByRole("link", { name: labels[0], exact: true }).getAttribute("aria-current"), "page");
+			assert.equal(await page.locator(".management-nav").getByRole("link", { name: labels[1], exact: true }).count(), 1);
+			for (const dark of [false, true]) {
+				await page.evaluate((dark) => document.documentElement.setAttribute("data-theme", dark ? "dark" : "light"), dark);
+				for (const width of [1280, 390, 320]) {
+					await page.setViewportSize({ width, height: 900 });
+					await page.locator(".management-account summary").click();
+					assert.ok(await page.getByRole("button", { name: labels[2], exact: true }).isVisible());
+					assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${lang}: no overflow at ${width}px`);
+					await page.locator(".management-account summary").click();
+					if (process.env.MANAGEMENT_LOCALE_SCREENSHOT_DIR && width !== 320)
+						await page.screenshot({ path: `${process.env.MANAGEMENT_LOCALE_SCREENSHOT_DIR}/${lang}-${width}-${dark ? "dark" : "light"}.png`, fullPage: true });
+				}
+			}
+		}
+		await page.goto(`${ORIGIN}/?lang=fr`);
+		const unavailable = (route) => route.fulfill({ status: 503, body: "" });
+		await context.route(`${ORIGIN}/auth/session`, unavailable);
+		await page.evaluate(() => dispatchEvent(new Event("focus")));
+		await page.getByText("Votre accès ne peut pas être vérifié actuellement. Rechargez la page pour réessayer.", { exact: true }).waitFor();
+		await context.unroute(`${ORIGIN}/auth/session`, unavailable);
+		await page.goto(`${ORIGIN}/?lang=nl`);
+
 		// Wait for the redirect request, not its page load: Playwright does not route a request that
 		// follows a fulfilled redirect, so loading it would reach the live management.breinhap.com.
 		const loggedOut = page.waitForRequest(`${ORIGIN}/login?logged-out=1`);

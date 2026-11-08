@@ -122,7 +122,7 @@ after(async () => {
 const internal = (cookie) =>
 	Object.assign(Readable.from([""]), { method: "GET", headers: { cookie, origin: ORIGIN } });
 
-async function stack({ withDirectory = true, uploadsOf, extractionsOf } = {}) {
+async function stack({ withDirectory = true, uploadsOf, extractionsOf, locale = "" } = {}) {
 	let next = "teacher";
 	const time = Date.now();
 	const store = await makeStore(() => time);
@@ -186,6 +186,7 @@ async function stack({ withDirectory = true, uploadsOf, extractionsOf } = {}) {
 					headers: {
 						Host: "management.breinhap.com",
 						Cookie: [who?.cookie, cookie].filter(Boolean).join("; "),
+						...(locale ? { "Accept-Language": locale } : {}),
 						...headers,
 						...(body ? { "Content-Type": raw?.contentType ?? "application/x-www-form-urlencoded", Origin: origin } : {}),
 					},
@@ -744,8 +745,10 @@ test("imports: two confirms at once still create one object; forms and roles are
 // ── breinhap#31: text extraction from PDF and DOCX ─────────────────────────────────────────────────
 
 /** An upload stack with extraction. `run` replaces the parser (the real one when absent). */
-async function extractStack({ run, leaseSeconds = 1 } = {}) {
+// Extraction behavior fixtures explicitly choose English; the workspace now defaults to Dutch.
+async function extractStack({ run, leaseSeconds = 1, locale = "en" } = {}) {
 	const s = await uploadStack(undefined, {
+		locale,
 		extractionsOf: (uploads) => new ExtractionStore({ uploads, leaseSeconds, ...(run ? { run } : {}) }),
 	});
 	const upload = async (who, bytes, name = "les.pdf", type = name.endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") => {
@@ -847,7 +850,7 @@ test("extraction: a clean PDF is read in the background; the author maps it, and
 	const incomplete = await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: { ...fields, "missions.0.practice.0.answerIndex": "" } });
 	assert.equal(incomplete.status, 422);
 	assert.match(incomplete.body, /name="uittreksel" value="/, "the link survives a failed save");
-	assert.match(incomplete.body, /Oefenvraag 1/, "without the author choosing an answer there is no draft");
+	assert.match(incomplete.body, /Practice question 1/, "the English extraction flow keeps its locale in editor validation; no answer means no draft");
 	const saved = await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: fields });
 	assert.equal(saved.status, 303);
 	const [object] = await objectsIn(s.workspace);
@@ -1075,10 +1078,10 @@ test("extraction: deleting the file or the text cleans up; drafts saved from it 
 });
 
 test("extraction: the screens follow ?lang=, the ASafariM locale cookie and the browser, in en, nl, fr and de", async () => {
-	const s = await extractStack();
+	const s = await extractStack({ locale: "" });
 	const teacher = await s.login("teacher");
 	const list = (opts) => s.call("/bibliotheek/uittreksels", { who: teacher, ...opts });
-	assert.match((await list()).body, /<div lang="en" class="extraction">[\s\S]*You have not extracted text from a file yet/);
+	assert.match((await list()).body, /<div lang="nl" class="extraction">[\s\S]*Je hebt nog geen tekst/);
 	assert.match((await list({ headers: { "Accept-Language": "nl-BE,nl;q=0.9" } })).body, /lang="nl" class="extraction">[\s\S]*Je hebt nog geen tekst/);
 	assert.match((await list({ cookie: "asafarim-locale=fr-BE" })).body, /lang="fr" class="extraction">[\s\S]*Vous n'avez encore extrait/);
 	assert.match((await s.call("/bibliotheek/uittreksels?lang=de", { who: teacher, cookie: "asafarim-locale=fr" })).body, /lang="de" class="extraction">[\s\S]*Sie haben noch keinen Text/);
@@ -1094,5 +1097,72 @@ test("extraction: the screens follow ?lang=, the ASafariM locale cookie and the 
 	// only the four languages: anything else (also an object key like toString) falls back
 	const odd = await s.call(`/bibliotheek/uittreksels/${id}/overnemen`, { who: teacher, method: "POST", form: { lang: "toString", "r.0": "title", "r.4": "option" } });
 	assert.equal(odd.status, 200);
-	assert.match(odd.body, /Piece 5: an answer option needs a question above it/);
+	assert.match(odd.body, /Stuk 5: een antwoordoptie heeft een vraag erboven nodig/);
+});
+
+// breinhap#86: exercise the real identity/Redis/Postgres routes in each workspace locale.
+test("workspace locales cover library/edit/preview/import/files/learners/admin and preserve data and permissions", async () => {
+	const copy = {
+		nl: { library: "Bibliotheek", students: "Leerlingen", admin: "Toegang beheren", save: "Opslaan", atMost: "Hoogstens 6.", new: "Nieuw leerobject" },
+		fr: { library: "Bibliothèque", students: "Élèves", admin: "Gestion des accès", save: "Enregistrer", atMost: "Au maximum 6.", new: "Nouvel objet pédagogique" },
+		en: { library: "Library", students: "Students", admin: "Access management", save: "Save", atMost: "At most 6.", new: "New learning object" },
+		de: { library: "Bibliothek", students: "Schüler", admin: "Zugangsverwaltung", save: "Speichern", atMost: "Höchstens 6.", new: "Neues Lernobjekt" },
+	};
+	for (const [lang, words] of Object.entries(copy)) {
+		const s = await stack({ locale: lang });
+		const teacher = await s.login("teacher");
+		for (const [path, heading] of [["/bibliotheek", words.library], ["/leerlingen", words.students], ["/bibliotheek/nieuw", words.new]]) {
+			const page = await s.call(path, { who: teacher });
+			assert.equal(page.status, 200, `${lang} ${path}`);
+			assert.ok(page.body.includes(`<html lang="${lang}"`));
+			assert.ok(page.body.includes(`<h1>${heading}</h1>`));
+			assert.doesNotMatch(page.body, /<script>|<style|\sstyle="/i);
+			assert.equal(page.headers["cache-control"], "no-store");
+			assert.equal(page.headers["content-language"], lang);
+		}
+		const fields = { ...validFields(), title: "Opslaan", "missions.0.warmup.text": "Overzicht" };
+		assert.equal((await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: fields })).status, 303);
+		const draft = await s.call("/bibliotheek/prikkel-reactie", { who: teacher });
+		assert.match(draft.body, /value="Opslaan"/);
+		assert.ok(draft.body.includes(`<button type="submit">${words.save}</button>`));
+		const preview = await s.call("/bibliotheek/prikkel-reactie/voorbeeld", { who: teacher });
+		assert.equal(preview.status, 200);
+		assert.match(preview.body, /<p>Overzicht<\/p>/, "authored Dutch content is unchanged");
+		const bad = await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: { ...fields, id: "invalid-year", grade: "9" } });
+		assert.equal(bad.status, 422);
+		assert.ok(bad.body.includes(words.atMost));
+		const invalidImport = await importFile(s, teacher, "bad.csv", TEMPLATE.replace("biologie;3;", "biologie;9;"));
+		assert.equal(invalidImport.status, 200);
+		assert.ok(invalidImport.body.includes(words.atMost), `${lang}: stored import bounds`);
+		const filePage = await s.call("/bibliotheek/bestanden", { who: teacher });
+		assert.equal(filePage.status, 200);
+		assert.ok(filePage.body.includes(`<html lang="${lang}"`));
+		assert.equal((await s.call("/beheer", { who: teacher })).status, 403);
+		const boss = await s.login("admin");
+		for (const path of ["/beheer", "/beheer/leerlingen"]) {
+			const page = await s.call(path, { who: boss });
+			assert.equal(page.status, 200);
+			assert.ok(page.body.includes(words.admin));
+			assert.ok(page.body.includes(`<html lang="${lang}"`));
+		}
+		const forged = await s.call("/beheer/goedkeuren", { who: boss, method: "POST", form: { csrf: "forged" } });
+		assert.equal(forged.status, 403, `${lang}: CSRF remains required`);
+	}
+});
+
+test("workspace language query persists across GET filters, failed POSTs and redirects", async () => {
+	const s = await stack();
+	const who = await s.login("teacher");
+	const selected = await s.call("/bibliotheek?lang=fr&q=Opslaan&jaar=3", { who });
+	assert.ok(selected.headers["set-cookie"].some((cookie) => cookie.startsWith("breinhap-lang=fr;")));
+	assert.match(selected.body, /name="lang" value="fr"/);
+	assert.match(selected.body, /q=Opslaan&amp;jaar=3&amp;lang=en/);
+	const cookie = "breinhap-lang=fr";
+	const refused = await s.call("/bibliotheek/nieuw", { who, cookie, method: "POST", form: { ...validFields(), csrf: "forged" } });
+	assert.equal(refused.status, 403);
+	assert.match(refused.body, /Demande refusée/);
+	assert.equal((await s.call("/bibliotheek/nieuw", { who, cookie, method: "POST", form: validFields() })).status, 303);
+	const after = await s.call("/bibliotheek/prikkel-reactie", { who, cookie });
+	assert.match(after.body, /<html lang="fr"/);
+	assert.match(after.body, />Enregistrer<\/button>/);
 });
