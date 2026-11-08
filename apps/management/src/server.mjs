@@ -1,11 +1,11 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import {
 	createIdentity,
 	discoverProvider,
-	isFresh,
+	safeNext,
 	ORIGIN,
 	readForm,
 } from "./identity.mjs";
@@ -69,9 +69,22 @@ const theme = await readFile(
 	new URL("../../site/src/theme.css", import.meta.url),
 );
 
+const assets = new Map(await Promise.all([
+	["/styles.css", "./styles.css", "text/css"],
+	["/theme.css", "../../site/src/theme.css", "text/css"],
+	["/theme.js", "../../site/public/theme.js", "text/javascript"],
+	["/editor.js", "./editor.js", "text/javascript"],
+	["/session.js", "./session.js", "text/javascript"],
+	["/locale-selector.js", "../../site/public/locale-selector.js", "text/javascript"],
+	["/locale-selector.css", "../../site/public/locale-selector.css", "text/css"],
+].map(async ([path, file, type]) => {
+	const body = path === "/styles.css" ? style : path === "/theme.css" ? theme : await readFile(new URL(file, import.meta.url));
+	return [path, { body, type: `${type}; charset=utf-8`, etag: `"${createHash("sha256").update(body).digest("base64url")}"` }];
+})));
+
 function page(title, content, active, session) {
 	const account = session
-		? `<aside aria-label="Account"><p>Je rollen: ${session.roles.length ? session.roles.join(", ") : "nog geen"}</p><form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit">Afmelden</button></form></aside>`
+		? `<aside aria-label="Account"><p>Je rollen: ${session.roles.length ? session.roles.join(", ") : "nog geen"}</p><form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${session.csrf}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></aside>`
 		: "";
 	const nav =
 		active === undefined
@@ -143,7 +156,8 @@ export function createHandler({
 						response.type,
 						response.headers,
 					);
-			} catch {
+			} catch (error) {
+				if (error.status === 413) return send(413, "Aanvraag te groot.");
 				return send(
 					503,
 					page(
@@ -215,13 +229,14 @@ export function createHandler({
 			return send(200, profilePage(lang, { csrf: session.csrf, version: manifest.version }), undefined, langHeader);
 		}
 		if (identity && url.pathname.startsWith("/beheer")) {
-			const check = await identity.privileged(req);
+			const check = await (["GET", "HEAD"].includes(req.method) ? identity.administrator(req) : identity.privileged(req, DIRECTORY_PATHS.test(url.pathname) ? "/beheer/leerlingen" : "/beheer"));
 			if (check.response)
 				return send(
 					check.response.status,
 					page("Bevestig je toegang", check.response.body),
 				);
 			const { value } = check;
+			const notice = req.managementSession.fresh ? "" : `<p class="notice" role="status">Bevestig opnieuw je identiteit om wijzigingen te maken. <a href="${esc(identity.stepUpLink(url.pathname + url.search))}">Opnieuw aanmelden</a></p>`;
 			const adminPrincipal = { sub: value.saved.sub, role: "breinhap.admin" };
 			if (req.method === "GET" && url.pathname === "/beheer/leerlingen") {
 				if (!directory) return send(503, directoryUnavailable(req.managementSession));
@@ -229,7 +244,7 @@ export function createHandler({
 					200,
 					page(
 						"Leerlingen en groepen",
-						adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members()),
+						notice + adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members()),
 						null,
 						req.managementSession,
 					),
@@ -267,7 +282,7 @@ export function createHandler({
 					200,
 					page(
 						"Toegang beheren",
-						`Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
+						`${notice}Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
 						null,
 						req.managementSession,
 					),
@@ -281,8 +296,7 @@ export function createHandler({
 			if (
 				req.headers.origin !== ORIGIN ||
 				form.getAll("csrf").length !== 1 ||
-				form.get("csrf") !== value.saved.csrf ||
-				!isFresh(value.saved)
+				form.get("csrf") !== value.saved.csrf
 			)
 				return send(403, "Aanvraag geweigerd.");
 			if (DIRECTORY_PATHS.test(url.pathname)) {
@@ -386,7 +400,6 @@ export function createHandler({
 						"Dit account moet actief zijn, de gekozen ASafariM-rol hebben en nog geen lid van deze werkplek zijn.",
 					),
 				);
-			if (!isFresh(value.saved)) return send(428, "Meld je opnieuw aan.");
 			const token = randomBytes(32).toString("base64url");
 			await identity.audit("invitation.create", value.saved.sub, subject);
 			const created = await identity.store.invite(token, {
@@ -486,39 +499,18 @@ export function createHandler({
 				JSON.stringify(manifest),
 				"application/json; charset=utf-8",
 			);
-		if (url.pathname === "/styles.css")
-			return send(200, style, "text/css; charset=utf-8");
-		if (url.pathname === "/theme.css")
-			return send(200, theme, "text/css; charset=utf-8");
-		if (url.pathname === "/theme.js")
-			return send(
-				200,
-				await readFile(new URL("../../site/public/theme.js", import.meta.url)),
-				"text/javascript; charset=utf-8",
-			);
-		// the country & language selector, bundled once for breinhap.com and here (scripts/build-locale-selector.mjs)
-		if (url.pathname === "/locale-selector.js")
-			return send(200, await readFile(new URL("../../site/public/locale-selector.js", import.meta.url)), "text/javascript; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
-		if (url.pathname === "/locale-selector.css")
-			return send(200, await readFile(new URL("../../site/public/locale-selector.css", import.meta.url)), "text/css; charset=utf-8", { "Cache-Control": "public, max-age=3600" });
+		const asset = assets.get(url.pathname);
+		if (asset) {
+			const headers = { "Cache-Control": "public, max-age=0, must-revalidate", ETag: asset.etag };
+			const unchanged = req.headers["if-none-match"] === asset.etag;
+			return send(unchanged ? 304 : 200, unchanged ? "" : asset.body, asset.type, headers);
+		}
 		if (url.pathname === "/logo.svg")
 			return send(
 				200,
 				await readFile(new URL("../../site/public/logo.svg", import.meta.url)),
 				"image/svg+xml",
 				{ "Cache-Control": "public, max-age=86400" },
-			);
-		if (url.pathname === "/editor.js")
-			return send(
-				200,
-				await readFile(new URL("./editor.js", import.meta.url)),
-				"text/javascript; charset=utf-8",
-			);
-		if (url.pathname === "/session.js")
-			return send(
-				200,
-				await readFile(new URL("./session.js", import.meta.url)),
-				"text/javascript; charset=utf-8",
 			);
 		if (url.pathname === "/uitnodiging" && req.method === "GET")
 			return send(
@@ -529,20 +521,21 @@ export function createHandler({
 				),
 			);
 		if (["/login", "/register", "/aanmelden"].includes(url.pathname)) {
-			if (identity) {
-				// Someone who is already signed in goes to the overview instead of being asked to sign in again.
-				const signedIn = await identity.current(req, false).catch(() => null);
-				if (signedIn) return send(303, "", undefined, { Location: "/" });
-			}
+			const stepUp = url.pathname === "/login" && (url.searchParams.get("opnieuw") === "1" || url.searchParams.get("fresh") === "1");
+			const switching = url.pathname === "/login" && url.searchParams.get("switch") === "1";
+			const signedIn = identity ? await identity.current(req, false).catch(() => null) : null;
+			if (signedIn && !stepUp && !switching) return send(303, "", undefined, { Location: "/" });
 			// breinhap#signup: Breinhap's own pages; ASafariM only sends the e-mail code.
 			if (identity?.headless) {
 				const lang = localeOf(req, url);
-				const notice = url.searchParams.has("verlopen")
+				const notice = stepUp
+					? `<p class="notice" role="status">${T[lang].stepUpNotice}</p>`
+					: url.searchParams.has("verlopen")
 					? `<p class="notice" role="status">${T[lang].errors.flow}</p>`
 					: "";
 				return send(
 					200,
-					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice }),
+					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice, email: stepUp ? signedIn?.saved.email ?? "" : "", stepUp, switching, next: stepUp ? safeNext(url.searchParams.get("next")) : null }),
 					undefined,
 					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);

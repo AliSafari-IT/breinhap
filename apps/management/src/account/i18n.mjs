@@ -38,6 +38,7 @@ const ROLES = {
 
 export const T = {
 	nl: {
+		stepUpNotice: "Bevestig opnieuw je identiteit om wijzigingen te maken. We sturen je een nieuwe e-mailcode.",
 		eyebrow: "Voor ouders, begeleiders en leerkrachten",
 		signinTitle: "Aanmelden",
 		signinLead: "Welkom terug. Vul je e-mailadres in; je krijgt een code om je aan te melden.",
@@ -101,6 +102,7 @@ export const T = {
 		roles: ROLES.nl,
 	},
 	fr: {
+		stepUpNotice: "Confirmez à nouveau votre identité pour effectuer des modifications. Nous vous enverrons un nouveau code par e-mail.",
 		eyebrow: "Pour les parents, accompagnateurs et enseignants",
 		signinTitle: "Se connecter",
 		signinLead: "Bon retour. Indiquez votre adresse e-mail ; vous recevrez un code pour vous connecter.",
@@ -163,6 +165,7 @@ export const T = {
 		roles: ROLES.fr,
 	},
 	en: {
+		stepUpNotice: "Confirm your identity again to make changes. We will send you a new email code.",
 		eyebrow: "For parents, tutors and teachers",
 		signinTitle: "Sign in",
 		signinLead: "Welcome back. Enter your e-mail address; we'll send you a code to sign in.",
@@ -225,6 +228,7 @@ export const T = {
 		roles: ROLES.en,
 	},
 	de: {
+		stepUpNotice: "Bestätigen Sie Ihre Identität erneut, um Änderungen vorzunehmen. Wir senden Ihnen einen neuen E-Mail-Code.",
 		eyebrow: "Für Eltern, Betreuer und Lehrkräfte",
 		signinTitle: "Anmelden",
 		signinLead: "Willkommen zurück. Geben Sie Ihre E-Mail-Adresse ein; Sie erhalten einen Code zur Anmeldung.",

@@ -246,7 +246,7 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 		headers: { Cookie: session, Origin: "https://breinhap.com" },
 	});
 	assert.equal(fromSite.status, 200);
-	assert.deepEqual(JSON.parse(fromSite.body), { active: true });
+	assert.deepEqual(JSON.parse(fromSite.body), { active: true, access: true });
 	assert.equal(
 		fromSite.headers["access-control-allow-origin"],
 		"https://breinhap.com",

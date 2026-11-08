@@ -27,23 +27,23 @@ function steps(lang, current, key = "steps") {
  */
 export function shell(lang, title, card, { path = "/login", version = "", signout = "" } = {}) {
 	const switcher = `<nav class="lang-switch" aria-label="Taal / Langue / Language / Sprache">${LANGUAGES.map((l) =>
-		l === lang ? `<span aria-current="true" lang="${l}">${l.toUpperCase()}</span>` : `<a href="${esc(path)}?lang=${l}" lang="${l}" hreflang="${l}" title="${LANGUAGE_NAMES[l]}">${l.toUpperCase()}</a>`,
+		l === lang ? `<span aria-current="true" lang="${l}">${l.toUpperCase()}</span>` : `<a href="${esc(path)}${path.includes("?") ? "&amp;" : "?"}lang=${l}" lang="${l}" hreflang="${l}" title="${LANGUAGE_NAMES[l]}">${l.toUpperCase()}</a>`,
 	).join("")}</nav>`;
 	return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} — Breinhap</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script></head><body class="auth-body"><a class="skip" href="#inhoud">${lang === "fr" ? "Aller au contenu" : lang === "en" ? "Skip to content" : lang === "de" ? "Zum Inhalt" : "Naar inhoud"}</a>${header({ lang, tools: `<div class="locale-selector" data-locale-selector data-lang="${lang}">${switcher}</div>` })}<main id="inhoud" tabindex="-1" class="auth"><section class="auth-card" aria-labelledby="auth-title"><p class="eyebrow">${T[lang].eyebrow}</p><h1 id="auth-title">${esc(title)}</h1>${card}${signout}</section></main><footer>Breinhap beheer · ${esc(version)}</footer></body></html>`;
 }
 
 /** Sign in or register: one e-mail field. */
-export function emailPage(lang, { register = false, email = "", errorCode = "", version, notice = "" }) {
+export function emailPage(lang, { register = false, email = "", errorCode = "", version, notice = "", stepUp = false, switching = false, next = null }) {
 	const t = T[lang];
 	const [switchText, switchLink] = register ? t.toSignin : t.toRegister;
 	const card = `${notice}<p class="auth-lead">${register ? t.registerLead : t.signinLead}</p>${register ? steps(lang, 0) : ""}
-<form method="post" action="${register ? "/register" : "/login"}" class="auth-form" novalidate>
+<form method="post" action="${register ? "/register" : "/login"}" class="auth-form" novalidate>${stepUp ? hidden("stepUp", "1") : ""}${next ? hidden("next", next) : ""}
 <div class="field"><label for="email">${t.email}</label><input id="email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder="${esc(t.emailPlaceholder)}" value="${esc(email)}"${errorCode ? ' aria-invalid="true" aria-describedby="form-error"' : ""}></div>
 ${error(lang, errorCode)}<button type="submit" class="action-block">${t.sendCode} <span aria-hidden="true">→</span></button></form>
 <p class="auth-secure">${LOCK} ${t.secure}</p>
 <p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
 <p class="auth-student">${t.student}</p>`;
-	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : "/login", version });
+	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : stepUp ? `/login?opnieuw=1&next=${encodeURIComponent(next ?? "/")}` : switching ? "/login?switch=1" : "/login", version });
 }
 
 /**
@@ -68,7 +68,7 @@ export function codePage(lang, { masked, csrf, register = false, errorCode = "",
 <div class="field"><label for="code">${t.code}</label><input id="code" name="code" class="code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="9" required autofocus${errorCode ? ' aria-invalid="true" aria-describedby="form-error"' : ""}></div>
 ${error(lang, errorCode)}<button type="submit" class="action-block">${t.verify}</button></form>
 <form method="post" action="/login/opnieuw" class="auth-inline">${hidden("csrf", csrf)}<button type="submit" class="link">${t.resend}</button></form>
-<p class="auth-switch"><a href="${register ? "/register" : "/login"}">${t.otherEmail}</a></p>
+<p class="auth-switch"><a href="${register ? "/register" : "/login?switch=1"}">${t.otherEmail}</a></p>
 <p class="auth-student">${t.noMail}</p>`;
 	return shell(lang, t.codeTitle, card, { path: "/login/code", version });
 }

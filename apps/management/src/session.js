@@ -29,8 +29,8 @@
 				cache: "no-store",
 				signal: AbortSignal.timeout(5000),
 			});
-			if (response.status === 401 || response.status === 403)
-				location.replace("/login");
+			if (response.status === 401) location.replace("/login");
+			else if (response.status === 403) location.replace("/registreren");
 			else if (!response.ok) {
 				// Hide private content during an outage; reload triggers a fresh server-side check.
 				const main = document.querySelector("main");

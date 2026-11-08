@@ -108,7 +108,11 @@ test("signed back-channel tokens validate issuer/audience/time/event/sid and rej
 						req.on("error", reject);
 						req.end(new URLSearchParams({ logout_token: value }).toString());
 					});
-				for (let n = 0; n < 125; n++) assert.equal(await post("invalid"), 400);
+				// Reject abusive input before JWT validation, including a valid token once the IP is over budget.
+				for (let n = 0; n < 120; n++) assert.equal(await post("invalid"), 400);
+				assert.equal(await post("invalid"), 429);
+				assert.equal(await post(token), 429);
+				store.now = () => Date.now() + 61_000;
 				assert.equal(await post(token), 200);
 				assert.equal(await store.getSession("logout-victim"), null);
 			} finally {

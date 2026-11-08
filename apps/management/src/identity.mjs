@@ -4,11 +4,12 @@ import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import * as oidc from "openid-client";
 import { localeOf, langCookie } from "./account/i18n.mjs";
 import { codePage, emailPage, maskEmail } from "./account/pages.mjs";
-import { managementAccess, roleLabels } from "./platform.mjs";
+import { managementAccess, roleLabels, validSubject } from "./platform.mjs";
 import { ABSOLUTE_MS, SELF_SERVICE_ROLES } from "./store.mjs";
 
 export const ORIGIN = "https://management.breinhap.com";
 export const SITE_ORIGIN = "https://breinhap.com";
+export const TERMS_VERSION = "2026-11-08";
 const SESSION = "__Host-breinhap-session";
 const FLOW = "__Host-breinhap-login";
 const INVITE = "__Host-breinhap-invitation";
@@ -27,6 +28,18 @@ const html = (status, body, headers = {}) => ({ status, body, type: "text/html; 
 /** How long a headless account check is reused before asking identity again. */
 const STATUS_CACHE_MS = 60_000;
 const EMAIL = /^[^\s@<>"]{1,64}@[^\s@<>"]{1,190}\.[^\s@<>"]{2,}$/;
+/** Only local management destinations may survive an authentication round trip. */
+export function safeNext(value) {
+	if (typeof value !== "string" || value.length > 200 || !value.startsWith("/") ||
+		value.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+	let url;
+	try { url = new URL(value, ORIGIN); } catch { return "/"; }
+	const path = url.pathname;
+	if (url.origin !== ORIGIN || !(path === "/" || path === "/beheer" ||
+		path.startsWith("/beheer/") || path.startsWith("/bibliotheek") ||
+		path === "/uitnodiging/bevestigen")) return "/";
+	return `${path}${url.search}${url.hash}`;
+}
 export const readCookie = (req, name) => {
 	const matches = (req.headers.cookie ?? "")
 		.split(";")
@@ -71,7 +84,10 @@ export function createIdentity({
 	version = "",
 }) {
 	if (!store) throw new Error("A shared identity store is required");
-	const stepUp = () => stepUpTo(headless ? "/login?opnieuw=1" : "/auth/start?fresh=1");
+	const stepUpLink = (next = "/") => headless
+		? `/login?opnieuw=1&next=${encodeURIComponent(safeNext(next))}`
+		: "/auth/start?fresh=1";
+	const stepUp = (next) => stepUpTo(stepUpLink(next));
 	const statusCache = new Map();
 	/** Whether identity still lets this account use Breinhap (revoked accounts lose their session). */
 	async function stillActive(sub) {
@@ -268,6 +284,8 @@ export function createIdentity({
 					...message(405, "Method not allowed"),
 					headers: { Allow: "POST" },
 				};
+			if (!(await store.budget("logout-invalid", 120, 60, requesterOf(req))))
+				return message(429, "Probeer later opnieuw.");
 			let claims;
 			try {
 				const form = await readForm(req, 16384);
@@ -300,7 +318,7 @@ export function createIdentity({
 			const site = req.headers.origin === SITE_ORIGIN;
 			return {
 				status: value?.allowed ? 200 : value ? 403 : 401,
-				body: JSON.stringify({ active: value?.allowed === true }),
+				body: JSON.stringify(value ? { active: true, access: value.allowed } : { active: false }),
 				type: "application/json; charset=utf-8",
 				headers: {
 					Vary: "Origin",
@@ -314,6 +332,7 @@ export function createIdentity({
 			};
 		}
 		if (path === "/afmelden") {
+			if (req.method !== "POST") return { ...message(405, "Method not allowed"), headers: { Allow: "POST" } };
 			// Local logout does not depend on the provider or permission service being reachable.
 			const id = readCookie(req, SESSION);
 			const saved = id ? await store.getSession(id, false) : null;
@@ -371,7 +390,7 @@ export function createIdentity({
 				expires: now() + 600_000,
 			};
 			const location = await provider.authorizationUrl(state);
-			await store.putFlow(flow, state);
+			if (!(await store.putFlow(flow, state))) return message(503, "Aanmelden is tijdelijk niet beschikbaar.");
 			return redirect(location, [cookie(FLOW, flow, 600)]);
 		}
 		const token = readCookie(req, FLOW);
@@ -431,14 +450,19 @@ export function createIdentity({
 			cookie(FLOW, "", 0),
 		]);
 	}
-	async function privileged(req) {
+	async function administrator(req) {
 		const value = await current(req);
 		if (!value?.admin) {
 			await audit("management.denied", value?.saved.sub);
 			return { response: message(403, "Geen beheertoegang.") };
 		}
-		if (!isFresh(value.saved, now())) return { response: stepUp() };
 		return { value };
+	}
+	async function privileged(req, next = req.url) {
+		const check = await administrator(req);
+		if (check.response) return check;
+		if (!isFresh(check.value.saved, now())) return { response: stepUp(next) };
+		return check;
 	}
 	// Signed in but no access yet: show, or file, a request for one self-service role.
 	async function roleRequest(req) {
@@ -480,7 +504,7 @@ export function createIdentity({
 			email: value.saved.email ?? "",
 			organisation: values.organisation,
 			note: values.note,
-		});
+		}, { at: now(), version: TERMS_VERSION });
 		if (result === "full") return { busy: true };
 		if (result === "created")
 			await audit("role.requested", value.saved.sub, values.role);
@@ -488,8 +512,8 @@ export function createIdentity({
 	}
 	async function acceptInvitation(req) {
 		const value = await current(req);
-		if (!value) return redirect("/auth/start?fresh=1");
-		if (!isFresh(value.saved, now())) return stepUp();
+		if (!value) return redirect(headless ? stepUpLink("/uitnodiging/bevestigen") : "/auth/start?fresh=1");
+		if (!isFresh(value.saved, now())) return stepUp("/uitnodiging/bevestigen");
 		const token = readCookie(req, INVITE);
 		const invitation = token ? await store.invitation(token) : null;
 		if (!invitation?.data || invitation.data.subject !== value.saved.sub)
@@ -537,15 +561,17 @@ export function createIdentity({
 		if (req.headers.origin !== ORIGIN) return message(403, "Aanvraag geweigerd.");
 		const form = await readForm(req);
 		const email = (form.getAll("email").length === 1 ? form.get("email") : "").trim().toLowerCase().slice(0, 254);
-		const page = (status, errorCode) => html(status, emailPage(lang, { register, email, errorCode, version }));
+		const stepUp = !register && form.getAll("stepUp").length === 1 && form.get("stepUp") === "1";
+		const next = form.getAll("next").length === 1 ? safeNext(form.get("next")) : null;
+		const page = (status, errorCode) => html(status, emailPage(lang, { register, email, errorCode, version, stepUp, next }));
 		if (!EMAIL.test(email)) return page(400, "invalid_email");
 		const requester = requesterOf(req);
-		if (!(await store.budget("start", 30, 60, requester)) || !(await store.budget("start-global", 3000)))
+		if (!(await store.budget("start", 30, 60, requester)) || !(await store.budget("start-global", 3000)) || !(await store.budget("start-email", 5, 900, email)))
 			return page(429, "rate_limited");
 		const sent = await headless.startEmail({ email, locale: lang, intent: register ? "register" : "signin", ...(isIP(requester) ? { clientIp: requester } : {}) });
 		if (!sent.ok) return page(sent.error === "invalid_email" ? 400 : sent.error === "send_failed" || sent.error === "unavailable" ? 503 : 429, sent.error);
 		const flow = random();
-		await store.putFlow(flow, { kind: "email", email, challenge: sent.challenge, register, csrf: random(), expires: now() + 600_000 });
+		if (!(await store.putFlow(flow, { kind: "email", email, challenge: sent.challenge, register, stepUp, next, csrf: random(), expires: now() + 600_000 }))) return page(503, "unavailable");
 		await audit("login.code_sent", "anonymous");
 		return redirect("/login/code", [cookie(FLOW, flow, 600)]);
 	}
@@ -568,9 +594,14 @@ export function createIdentity({
 		if (req.method !== "POST") return { ...message(405, "Method not allowed"), headers: { Allow: "GET, POST" } };
 		const form = await readForm(req);
 		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== flow.csrf) return message(403, "Aanvraag geweigerd.");
-		const code = (form.get("code") ?? "").replace(/\s/g, "");
-		if (!/^\d{6}$/.test(code)) return page(400, "invalid_code");
 		const requester = requesterOf(req);
+		if (!(await store.budget("verify", 5, 600, token))) {
+			await store.takeFlow(token);
+			return html(429, emailPage(lang, { errorCode: "rate_limited", version }), { "Set-Cookie": cookie(FLOW, "", 0) });
+		}
+		if (!(await store.budget("verify-ip", 30, 600, requester))) return page(429, "rate_limited");
+		const code = (form.getAll("code").length === 1 ? form.get("code") : "").replace(/\s/g, "");
+		if (!/^\d{6}$/.test(code)) return page(400, "invalid_code");
 		const result = await headless.verifyEmail({ challenge: flow.challenge, email: flow.email, code, ...(isIP(requester) ? { clientIp: requester } : {}) });
 		if (!result.ok) {
 			if (result.error === "not_connected" || result.error === "revoked") {
@@ -579,10 +610,21 @@ export function createIdentity({
 			}
 			return page(result.error === "rate_limited" ? 429 : result.error === "unavailable" ? 503 : 400, result.error);
 		}
-		await store.takeFlow(token);
+		// Only the request that consumes the single-use flow may establish or refresh a session.
+		if (!(await store.takeFlow(token))) return html(400, emailPage(lang, { errorCode: "flow", version }), { "Set-Cookie": cookie(FLOW, "", 0) });
+		if (!validSubject(result.sub) || typeof result.email !== "string" ||
+			!result.email || result.email.length > 254 || !EMAIL.test(result.email))
+			return { ...message(400, "Ongeldige aanmelding. Probeer opnieuw."), headers: { "Set-Cookie": cookie(FLOW, "", 0) } };
 		const previous = readCookie(req, SESSION);
-		if (previous) await store.destroySession(previous);
+		const existing = flow.stepUp && previous ? await store.getSession(previous, false) : null;
 		const time = now();
+		const destination = flow.next ? safeNext(flow.next) : readCookie(req, INVITE) ? "/uitnodiging/bevestigen" : "/";
+		if (existing?.sub === result.sub) {
+			if (!(await store.updateSession(previous, { ...existing, authTime: Math.floor(time / 1000) })))
+				return { ...message(400, "Deze aanmelding is beëindigd. Probeer opnieuw."), headers: { "Set-Cookie": cookie(FLOW, "", 0) } };
+			return redirect(destination, [cookie(FLOW, "", 0), langCookie(lang, req.headers.host)]);
+		}
+		if (previous) await store.destroySession(previous);
 		const id = random();
 		const saved = {
 			method: "headless",
@@ -599,7 +641,7 @@ export function createIdentity({
 		statusCache.set(result.sub, { active: true, email: result.email, at: time });
 		if (!(await store.saveSession(id, saved))) return message(400, "Deze aanmelding is beëindigd. Probeer opnieuw.");
 		await audit("login.headless", result.sub);
-		return redirect(readCookie(req, INVITE) ? "/uitnodiging/bevestigen" : "/", [
+		return redirect(destination, [
 			cookie(SESSION, id, Math.floor(ABSOLUTE_MS / 1000)),
 			cookie(FLOW, "", 0),
 			langCookie(lang, req.headers.host),
@@ -616,6 +658,10 @@ export function createIdentity({
 		const form = await readForm(req);
 		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== flow.csrf) return message(403, "Aanvraag geweigerd.");
 		const requester = requesterOf(req);
+		if (!(await store.budget("resend", 3, 900, token)) ||
+			!(await store.budget("resend-email", 5, 3600, flow.email)) ||
+			!(await store.budget("resend-ip", 10, 3600, requester)))
+			return redirect("/login/code?fout=rate_limited");
 		const sent = await headless.startEmail({ email: flow.email, locale: lang, intent: flow.register ? "register" : "signin", ...(isIP(requester) ? { clientIp: requester } : {}) });
 		if (!sent.ok) return redirect(`/login/code?fout=${encodeURIComponent(sent.error)}`);
 		await store.replaceFlow(token, { ...flow, challenge: sent.challenge });
@@ -635,7 +681,9 @@ export function createIdentity({
 		current,
 		principal,
 		handle,
+		administrator,
 		privileged,
+		stepUpLink,
 		acceptInvitation,
 		roleRequest,
 		grants,

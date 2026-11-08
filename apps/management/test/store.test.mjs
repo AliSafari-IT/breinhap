@@ -246,6 +246,7 @@ test("the deployed Redis ACL supports the store while denying other namespaces a
 		await restricted.revokeMember("indexed");
 		assert.deepEqual(await restricted.members(), []);
 		assert.ok(await restricted.getSession("session"));
+		assert.ok(await restricted.updateSession("session", await restricted.getSession("session", false)));
 		await restricted.audit("management.denied", "actor");
 		assert.equal(await restricted.budget("start"), true);
 		await restricted.bootstrap("admin");
@@ -322,4 +323,32 @@ test("a quiet Redis connection stays up: the idle timeout no longer drops it, so
 	assert.deepEqual(kept.errors, []);
 	assert.equal(await kept.store.client.ping(), "PONG");
 	await kept.store.client.close();
+});
+
+
+test("step-up atomically updates existing sessions with their TTL and rejects expiry and sid/sub revocation", async () => {
+	let time = Date.now();
+	const store = await makeStore(() => time);
+	const value = session(time);
+	assert.equal(await store.putFlow("collision", {}), true);
+	assert.equal(await store.putFlow("collision", {}), false);
+	assert.equal(await store.updateSession("missing", value), false);
+	for (const kind of ["sid", "sub"]) {
+		const value = session(time, { sid: `browser-${kind}`, sub: `person-${kind}` });
+		const id = `session-${kind}`;
+		await store.saveSession(id, value);
+		const key = store.keyFor("session", id);
+		await store.client.pExpire(key, 120_000);
+		const ttl = await store.client.pTTL(key);
+		const updated = { ...value, authTime: value.authTime + 301 };
+		assert.equal(await store.updateSession(id, updated), true);
+		assert.ok((await store.client.pTTL(key)) <= ttl);
+		assert.ok((await store.client.pTTL(key)) > ttl - 1000);
+		assert.deepEqual(await store.getSession(id, false), updated);
+		await store.logout({ [kind]: value[kind], jti: `revoked-${kind}`, iat: value.issuedAt });
+		assert.equal(await store.updateSession(id, updated), false);
+	}
+	await store.saveSession("expired", { ...value, sub: "other", sid: "other" });
+	time += ABSOLUTE_MS + 1;
+	assert.equal(await store.updateSession("expired", { ...value, sub: "other", sid: "other" }), false);
 });

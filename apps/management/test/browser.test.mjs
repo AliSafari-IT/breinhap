@@ -142,3 +142,101 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 		await new Promise((resolve) => server.close(resolve));
 	}
 });
+
+// Real HTTPS and host resolution keep redirects, Secure __Host- cookies, Origin and CORS browser-native.
+test("browser: adult registration, approval after headless step-up, navbar and local logout", async () => {
+	const { execFileSync } = await import("node:child_process");
+	const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+	const { tmpdir } = await import("node:os");
+	const { join } = await import("node:path");
+	const { createServer } = await import("node:https");
+	const { createHandler } = await import("../src/server.mjs");
+	const temporary = await mkdtemp(join(tmpdir(), "breinhap-auth-browser-"));
+	let browser;
+	let server;
+	try {
+		execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=management.breinhap.com", "-keyout", join(temporary, "key.pem"), "-out", join(temporary, "cert.pem")], { stdio: "ignore" });
+		let time = Date.now();
+		const store = await makeStore(() => time);
+		await member(store, "admin", "breinhap.admin");
+		const identity = createIdentity({
+			store, now: () => time,
+			headless: {
+				startEmail: async ({ email }) => ({ ok: true, challenge: email }),
+				verifyEmail: async ({ email, code }) => code === "123456" ? { ok: true, sub: email === "admin@example.test" ? "admin" : "adult", email } : { ok: false, error: "wrong_code" },
+				principal: async () => ({ active: true }),
+			},
+			grants: async (subject) => ({ appId: "breinhap", subject, state: subject === "admin" ? "active" : "inactive", roles: subject === "admin" ? ["breinhap.admin"] : [], permissions: subject === "admin" ? ["breinhap.management.access", "breinhap.memberships.manage"] : [] }),
+		});
+		const handler = createHandler({ identity });
+		const navbarScript = await readFile(new URL("../../web/src/account.js", import.meta.url));
+		server = createServer({ key: await readFile(join(temporary, "key.pem")), cert: await readFile(join(temporary, "cert.pem")) }, (req, res) => {
+			if (req.headers.host === "breinhap.com") {
+				res.writeHead(200, { "Content-Type": req.url === "/account.js" ? "text/javascript" : "text/html", "Cache-Control": "no-store" });
+				res.end(req.url === "/account.js" ? navbarScript : '<!doctype html><html lang="nl"><title>Navbar test</title><a data-account="login" data-signed-in-label="Aangemeld" href="https://management.breinhap.com/login">Aanmelden</a><a data-account="register" href="https://management.breinhap.com/register">Registreren</a><script src="/account.js" defer></script></html>');
+				return;
+			}
+			handler(req, res).catch(() => { res.writeHead(500); res.end(); });
+		});
+		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+		const endpoint = `127.0.0.1:${server.address().port}`;
+		browser = await chromium.launch({ headless: true, args: ["--no-proxy-server", `--host-resolver-rules=MAP management.breinhap.com:443 ${endpoint}, MAP breinhap.com:443 ${endpoint}`] });
+		const adultContext = await browser.newContext({ ignoreHTTPSErrors: true });
+		const adminContext = await browser.newContext({ ignoreHTTPSErrors: true });
+		const adult = await adultContext.newPage();
+		const admin = await adminContext.newPage();
+		const code = async (page) => {
+			await page.waitForURL(`${ORIGIN}/login/code`);
+			await page.getByLabel("Code", { exact: true }).fill("123456");
+			await page.getByRole("button", { name: "Bevestigen", exact: true }).click();
+		};
+		const login = async (page, email, path = "/login") => {
+			await page.goto(`${ORIGIN}${path}`);
+			await page.getByLabel("E-mailadres", { exact: true }).fill(email);
+			await page.getByRole("button", { name: /Stuur me een code/ }).click();
+			await code(page);
+		};
+		await login(adult, "adult@example.test", "/register");
+		await adult.waitForURL(`${ORIGIN}/registreren`);
+		await adult.locator('[name="firstName"]').fill("Test");
+		await adult.locator('[name="lastName"]').fill("Ouder");
+		await adult.locator('[name="role"][value="breinhap.parent"]').check();
+		await adult.locator('[name="consent"]').check();
+		await adult.locator('form[action="/registreren"] button[type="submit"]').click();
+		await adult.getByRole("heading", { name: "Aanvraag verstuurd" }).waitFor();
+		await adult.goto("https://breinhap.com/");
+		await adult.getByRole("link", { name: "Aangemeld", exact: true }).waitFor();
+		assert.equal(await adult.locator('[data-account="register"]').isVisible(), false);
+
+		await login(admin, "admin@example.test");
+		await admin.waitForURL(`${ORIGIN}/`);
+		time += 301_000;
+		assert.equal((await admin.goto(`${ORIGIN}/beheer`)).status(), 200);
+		await admin.getByText("Bevestig opnieuw je identiteit om wijzigingen te maken.", { exact: false }).waitFor();
+		const denied = admin.waitForResponse((r) => r.url().endsWith("/beheer/goedkeuren") && r.request().method() === "POST");
+		await admin.getByRole("button", { name: "Goedkeuren", exact: true }).click();
+		assert.equal((await denied).status(), 428);
+		await admin.getByRole("link", { name: "Opnieuw aanmelden", exact: true }).click();
+		assert.equal(await admin.getByLabel("E-mailadres", { exact: true }).inputValue(), "admin@example.test");
+		await admin.getByRole("button", { name: /Stuur me een code/ }).click();
+		await code(admin);
+		await admin.waitForURL(`${ORIGIN}/beheer`);
+		if (process.env.AUTH_SCREENSHOT_PATH) await admin.screenshot({ path: process.env.AUTH_SCREENSHOT_PATH, fullPage: true });
+		await admin.getByRole("button", { name: "Goedkeuren", exact: true }).click();
+		await admin.getByText("Er zijn geen open aanvragen.", { exact: true }).waitFor();
+		assert.equal((await store.membership("adult")).active, true);
+		assert.equal((await adult.goto(`${ORIGIN}/bibliotheek`)).status(), 200);
+		await adult.getByRole("button", { name: "Afmelden", exact: true }).click();
+		await adult.waitForURL(`${ORIGIN}/login?logged-out=1`);
+		assert.ok(!(await adultContext.cookies(ORIGIN)).some((c) => c.name === "__Host-breinhap-session"));
+		await adult.goto("https://breinhap.com/");
+		await adult.waitForLoadState("networkidle");
+		assert.equal(await adult.locator('[data-account="login"]').textContent(), "Aanmelden");
+		assert.equal(await adult.locator('[data-account="register"]').isVisible(), true);
+	} finally {
+		await browser?.close();
+		server?.closeAllConnections();
+		if (server?.listening) await new Promise((resolve) => server.close(resolve));
+		await rm(temporary, { recursive: true, force: true });
+	}
+});

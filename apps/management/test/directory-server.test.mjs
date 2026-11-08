@@ -189,6 +189,9 @@ test("refusals: wrong role for the target, linking yourself, and a non-admin, a 
 	assert.equal((await post(teacher, "/beheer/leerlingen/nieuw", { displayName: "X", schoolYear: "3" })).status, 403);
 	assert.equal((await s.call("/beheer/leerlingen", { cookie: teacher.cookie })).status, 403);
 	const stale = await s.login("admin", 301);
+	const staleList = await s.call("/beheer/leerlingen", { cookie: stale.cookie });
+	assert.equal(staleList.status, 200);
+	assert.match(staleList.body, /Bevestig opnieuw je identiteit om wijzigingen te maken/);
 	assert.equal((await post(stale, "/beheer/leerlingen/nieuw", { displayName: "X", schoolYear: "3" })).status, 428);
 	const forged = await s.call("/beheer/leerlingen/nieuw", {
 		cookie: boss.cookie,
