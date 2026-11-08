@@ -35,16 +35,17 @@ const cookieHeader = (response) =>
 		.map((value) => value.split(";")[0])
 		.join("; ");
 
-async function setup({ maxEntries, shared } = {}) {
+async function setup({ maxEntries, shared, memberRole = "breinhap.teacher", headless, authAge = 0 } = {}) {
 	let time = 1000;
 	let current = roles("breinhap.teacher");
 	let unavailable = false;
 	let exchanged = 0;
 	let lastFlow;
 	const store = shared ?? (await makeStore(() => time));
-	if (!shared) await member(store, "person");
+	if (!shared && memberRole) await member(store, "person", memberRole);
 	const identity = createIdentity({
 		store,
+		headless,
 		now: () => time,
 		maxEntries,
 		grants: async () => current,
@@ -59,7 +60,7 @@ async function setup({ maxEntries, shared } = {}) {
 				return {
 					sub: "person",
 					sid: "browser",
-					authTime: Math.floor(time / 1000),
+					authTime: Math.floor(time / 1000) - authAge,
 					issuedAt: Math.floor(time / 1000),
 					accessToken: "private-token",
 					expiresIn: 3600,
@@ -72,10 +73,10 @@ async function setup({ maxEntries, shared } = {}) {
 			logoutUrl: () => "https://id.asafarim.site/session/end",
 		},
 	});
-	async function start() {
+	async function start(path = "/auth/start", extraCookie = "") {
 		const response = await identity.handle(
-			request(),
-			new URL(`${ORIGIN}/auth/start`),
+			request(extraCookie),
+			new URL(`${ORIGIN}${path}`),
 		);
 		const cookie = cookieHeader(response);
 		const state = new URL(response.headers.Location).searchParams.get("state");
@@ -95,6 +96,7 @@ async function setup({ maxEntries, shared } = {}) {
 	}
 	return {
 		identity,
+		store,
 		start,
 		login,
 		setGrants: (value) => {
@@ -345,6 +347,8 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 	};
 	for (const mode of [
 		"valid",
+		"unverified-email",
+		"invalid-email",
 		"signature",
 		"audience",
 		"issuer",
@@ -376,6 +380,8 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 					const claims = {
 						auth_time: time,
 						sid: "browser",
+						email: mode === "invalid-email" ? "bad" : "person@example.test",
+						email_verified: mode !== "unverified-email",
 						iss: mode === "issuer" ? "https://attacker.test" : issuer,
 						sub: "person",
 						aud: mode === "audience" ? "other" : "breinhap",
@@ -407,6 +413,7 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 		const location = new URL(await provider.authorizationUrl(flow));
 		nonce = location.searchParams.get("nonce");
 		assert.equal(location.searchParams.get("code_challenge_method"), "S256");
+		assert.equal(location.searchParams.get("scope"), "openid email offline_access");
 		assert.equal(
 			location.searchParams.get("redirect_uri"),
 			`${ORIGIN}/auth/callback`,
@@ -415,7 +422,11 @@ test("real OIDC client verifies signed ID tokens, audience, nonce and expiration
 			new URL(`${ORIGIN}/auth/callback?code=valid&state=state`),
 			flow,
 		);
-		if (mode === "valid") assert.equal((await promise).sub, "person");
+		if (["valid", "unverified-email", "invalid-email"].includes(mode)) {
+			const account = await promise;
+			assert.equal(account.sub, "person");
+			assert.equal(account.email, mode === "valid" ? "person@example.test" : undefined);
+		}
 		else await assert.rejects(promise, undefined, mode);
 	}
 });
@@ -459,4 +470,48 @@ test("stale logout clears local cookies without identity logout and still reject
 	assert.equal(result.headers.Location, "/login?logged-out=1");
 	assert.equal(result.headers["Set-Cookie"].length, 3);
 	assert.ok(result.headers["Set-Cookie"].every((c) => c.includes("Max-Age=0")));
+});
+
+test("web SSO keeps locale/return intent in the flow, resists callback tampering and grants no membership", async () => {
+	for (const lang of ["nl", "fr", "en", "de"]) {
+		const ctx = await setup({ memberRole: null, headless: { principal: async () => ({ active: true }) } });
+		ctx.setGrants({ ...roles("breinhap.teacher"), state: "inactive", roles: [], permissions: [] });
+		const flow = await ctx.start(`/auth/start?web=1&lang=${lang}&next=https://evil.test`);
+		assert.equal(flow.flow.webLocale, lang);
+		const url = new URL(`${ORIGIN}/auth/callback?state=${flow.state}&code=valid&web=0&lang=xx&next=https://evil.test`);
+		const response = await ctx.identity.handle(request(flow.cookie), url);
+		assert.equal(response.headers.Location, `https://breinhap.com/${lang === "nl" ? "" : `${lang}/`}`);
+		assert.ok(response.headers["Set-Cookie"].some((c) => c.startsWith(`breinhap-lang=${lang};`)));
+		assert.doesNotMatch(JSON.stringify(response), /private-token|person|evil.test/);
+		const session = cookieHeader(response).split("; ")[0];
+		const state = await ctx.identity.handle(request(session), new URL(`${ORIGIN}/auth/session`));
+		assert.equal(state.status, 403);
+		assert.deepEqual(JSON.parse(state.body), { active: true, access: false });
+		assert.equal(await ctx.store.membership("person"), null);
+		assert.deepEqual(await ctx.store.roleRequests(), []);
+		assert.equal((await ctx.identity.handle(request(flow.cookie), url)).status, 400);
+	}
+});
+
+test("ordinary OIDC callbacks cannot opt into a web destination and malformed launch intents remain local", async () => {
+	for (const suffix of ["", "?web=https://evil.test", "?web=1&web=1"]) {
+		const ctx = await setup();
+		const flow = await ctx.start(`/auth/start${suffix}`);
+		const response = await ctx.identity.handle(request(flow.cookie), new URL(`${ORIGIN}/auth/callback?state=${flow.state}&code=valid&web=1&lang=fr`));
+		assert.equal(response.headers.Location, "/");
+	}
+});
+
+test("web SSO cannot bypass an invitation or a requested fresh authentication", async () => {
+	const ctx = await setup();
+	const flow = await ctx.start("/auth/start?web=1&lang=en", `__Host-breinhap-invitation=${"i".repeat(43)}`);
+	assert.equal(flow.flow.fresh, true);
+	const invited = await ctx.identity.handle(request(flow.cookie), new URL(`${ORIGIN}/auth/callback?state=${flow.state}&code=valid`));
+	assert.equal(invited.headers.Location, "/uitnodiging/bevestigen");
+	const stale = await setup({ authAge: 301 });
+	const freshFlow = await stale.start("/auth/start?web=1&fresh=1");
+	assert.equal(freshFlow.flow.fresh, true);
+	const refused = await stale.identity.handle(request(freshFlow.cookie), new URL(`${ORIGIN}/auth/callback?state=${freshFlow.state}&code=valid`));
+	assert.equal(refused.status, 400);
+	assert.match(refused.body, /Nieuwe identiteitsbevestiging ontbreekt/);
 });

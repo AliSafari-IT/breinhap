@@ -144,7 +144,7 @@ test("a real browser can submit the rendered logout form with a valid Origin and
 });
 
 // Real HTTPS and host resolution keep redirects, Secure __Host- cookies, Origin and CORS browser-native.
-test("browser: adult registration, approval after headless step-up, navbar and local logout", async () => {
+test("browser: adult registration, approval, logout and central SSO web launch", async () => {
 	const { execFileSync } = await import("node:child_process");
 	const { mkdtemp, readFile, rm } = await import("node:fs/promises");
 	const { tmpdir } = await import("node:os");
@@ -157,10 +157,17 @@ test("browser: adult registration, approval after headless step-up, navbar and l
 	try {
 		execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=management.breinhap.com", "-keyout", join(temporary, "key.pem"), "-out", join(temporary, "cert.pem")], { stdio: "ignore" });
 		let time = Date.now();
+		let centralVisits = 0;
 		const store = await makeStore(() => time);
 		await member(store, "admin", "breinhap.admin");
 		const identity = createIdentity({
 			store, now: () => time,
+			// Test provider: real cross-domain HTTPS redirects/cookies, simulated authorization and token exchange.
+			provider: {
+				authorizationUrl: async (flow) => `https://id.asafarim.site/authorize?state=${flow.state}`,
+				exchange: async () => ({ sub: "sso-adult", sid: "sso-browser", email: "central@example.test", issuedAt: Math.floor(time / 1000), authTime: Math.floor(time / 1000), accessToken: "sso-test-token", expiresIn: 3600 }),
+				userInfo: async () => ({ sub: "sso-adult" }),
+			},
 			headless: {
 				startEmail: async ({ email }) => ({ ok: true, challenge: email }),
 				verifyEmail: async ({ email, code }) => code === "123456" ? { ok: true, sub: email === "admin@example.test" ? "admin" : "adult", email } : { ok: false, error: "wrong_code" },
@@ -171,6 +178,15 @@ test("browser: adult registration, approval after headless step-up, navbar and l
 		const handler = createHandler({ identity });
 		const navbarScript = await readFile(new URL("../../web/src/account.js", import.meta.url));
 		server = createServer({ key: await readFile(join(temporary, "key.pem")), cert: await readFile(join(temporary, "cert.pem")) }, (req, res) => {
+			if (req.headers.host === "id.asafarim.site") {
+				centralVisits++;
+				if (req.headers.cookie !== "__Host-central-test=existing-session") {
+					res.writeHead(401); res.end("Central session missing"); return;
+				}
+				const state = new URL(req.url, "https://id.asafarim.site").searchParams.get("state");
+				res.writeHead(303, { Location: `${ORIGIN}/auth/callback?state=${encodeURIComponent(state)}&code=sso-test-code` });
+				res.end(); return;
+			}
 			if (req.headers.host === "breinhap.com") {
 				res.writeHead(200, { "Content-Type": req.url === "/account.js" ? "text/javascript" : "text/html", "Cache-Control": "no-store" });
 				res.end(req.url === "/account.js" ? navbarScript : '<!doctype html><html lang="nl"><title>Navbar test</title><a data-account="login" data-signed-in-label="Aangemeld" href="https://management.breinhap.com/login">Aanmelden</a><a data-account="register" href="https://management.breinhap.com/register">Registreren</a><script src="/account.js" defer></script></html>');
@@ -180,7 +196,7 @@ test("browser: adult registration, approval after headless step-up, navbar and l
 		});
 		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 		const endpoint = `127.0.0.1:${server.address().port}`;
-		browser = await chromium.launch({ headless: true, args: ["--no-proxy-server", `--host-resolver-rules=MAP management.breinhap.com:443 ${endpoint}, MAP breinhap.com:443 ${endpoint}`] });
+		browser = await chromium.launch({ headless: true, args: ["--no-proxy-server", `--host-resolver-rules=MAP management.breinhap.com:443 ${endpoint}, MAP breinhap.com:443 ${endpoint}, MAP id.asafarim.site:443 ${endpoint}`] });
 		const adultContext = await browser.newContext({ ignoreHTTPSErrors: true });
 		const adminContext = await browser.newContext({ ignoreHTTPSErrors: true });
 		const adult = await adultContext.newPage();
@@ -249,6 +265,23 @@ test("browser: adult registration, approval after headless step-up, navbar and l
 		await adult.waitForLoadState("networkidle");
 		assert.equal(await adult.locator('[data-account="login"]').textContent(), "Aanmelden");
 		assert.equal(await adult.locator('[data-account="register"]').isVisible(), true);
+
+		// This browser has only the central session, with no Breinhap cookie or membership.
+		const centralContext = await browser.newContext({ ignoreHTTPSErrors: true });
+		await centralContext.addCookies([{ name: "__Host-central-test", value: "existing-session", url: "https://id.asafarim.site", secure: true, httpOnly: true, sameSite: "Lax" }]);
+		const central = await centralContext.newPage();
+		await central.goto(`${ORIGIN}/auth/start?web=1&lang=en`);
+		await central.waitForURL("https://breinhap.com/en/");
+		await central.getByRole("link", { name: "Aangemeld", exact: true }).waitFor();
+		assert.equal(await central.locator('[data-account="register"]').isVisible(), false);
+		assert.equal(centralVisits, 1, "the existing central session is reused without another email code");
+		assert.ok((await centralContext.cookies(ORIGIN)).some((c) => c.name === "__Host-breinhap-session" && c.httpOnly && c.secure));
+		assert.equal(await store.membership("sso-adult"), null);
+		await central.goto(`${ORIGIN}/bibliotheek`);
+		await central.waitForURL(`${ORIGIN}/registreren`);
+		await central.getByRole("heading", { name: "Finish your registration", exact: true }).waitFor();
+		assert.equal(await central.locator("#p-email").inputValue(), "central@example.test");
+		await centralContext.close();
 	} finally {
 		await browser?.close();
 		server?.closeAllConnections();
