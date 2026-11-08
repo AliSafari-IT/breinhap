@@ -217,7 +217,7 @@ test("existing sessions lose privileges immediately on role revocation, identity
 	);
 });
 
-test("logout requires same-origin POST and session CSRF then destroys the session", async () => {
+test("logout GET returns 405; same-origin POST and session CSRF destroy the session", async () => {
 	const context = await setup();
 	const { session } = await context.login();
 	const authenticated = request(session);
@@ -226,7 +226,7 @@ test("logout requires same-origin POST and session CSRF then destroys the sessio
 	const body = `csrf=${authenticated.managementSession.csrf}`;
 	assert.equal(
 		(await context.identity.handle(request(session), url)).status,
-		403,
+		405,
 	);
 	assert.equal(
 		(

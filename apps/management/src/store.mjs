@@ -32,6 +32,14 @@ if ARGV[4] == 'update' then
   redis.call('SET', KEYS[1], ARGV[1], 'PX', math.min(ttl, r.expires - now)); return 1
 end
 local ok=redis.call('SET', KEYS[1], ARGV[1], 'PX', math.min(tonumber(ARGV[3]), r.expires - now), 'NX'); if ok then return 1 end return 0`;
+// Separate from refresh ownership: step-up replaces only an existing, unrevoked session.
+const UPDATE = `
+local raw = redis.call('GET', KEYS[1]); if not raw then return 0 end
+local old = cjson.decode(raw); local r = cjson.decode(ARGV[1]); local now = tonumber(ARGV[2])
+local ttl = redis.call('PTTL', KEYS[1]); if ttl <= 0 or old.expires <= now or r.expires <= now then return 0 end
+if old.subKey ~= r.subKey or old.sidKey ~= r.sidKey or old.issuedAt ~= r.issuedAt or old.expires ~= r.expires then return 0 end
+if tonumber(redis.call('GET', old.subKey) or '-1') >= old.issuedAt or tonumber(redis.call('GET', old.sidKey) or '-1') >= old.issuedAt then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'KEEPTTL'); return 1`;
 const LOGOUT = `
 if not redis.call('SET', KEYS[1], '1', 'EX', 300, 'NX') then return 0 end
 for i=2,#KEYS do
@@ -167,7 +175,7 @@ export class IdentityStore {
 	}
 	async putFlow(id, value) {
 		const key = this.keyFor("flow", id);
-		await this.client.set(key, this.encode(key, value), { EX: 600, NX: true });
+		return (await this.client.set(key, this.encode(key, value), { EX: 600, NX: true })) === "OK";
 	}
 	async readFlow(id) {
 		const key = this.keyFor("flow", id);
@@ -224,6 +232,16 @@ export class IdentityStore {
 				}),
 			) === 1
 		);
+	}
+	async updateSession(id, value) {
+		const key = this.keyFor("session", id);
+		const record = {
+			payload: this.encode(key, value), expires: value.expires, issuedAt: value.issuedAt,
+			subKey: this.keyFor("revoked-sub", value.sub), sidKey: this.keyFor("revoked-sid", value.sid),
+		};
+		return Number(await this.client.eval(UPDATE, {
+			keys: [key], arguments: [JSON.stringify(record), String(this.now())],
+		})) === 1;
 	}
 	async destroySession(id) {
 		await this.client.del(this.keyFor("session", id));
@@ -353,7 +371,7 @@ export class IdentityStore {
 		return [`${base}requests`, `${base}request:${id}`];
 	}
 	// A signed-in adult asks for one self-service role. Returns "created", "exists" or "full".
-	async requestRole(subject, role, profile = {}) {
+	async requestRole(subject, role, profile = {}, consent) {
 		if (!SELF_SERVICE_ROLES.includes(role)) throw new Error("Invalid role");
 		const id = digest(subject);
 		const keys = this.requestKeys(id);
@@ -362,7 +380,7 @@ export class IdentityStore {
 				keys,
 				arguments: [
 					id,
-					this.encode(keys[1], { subject, role, profile: cleanProfile(profile), at: this.now() }),
+					this.encode(keys[1], { subject, role, profile: cleanProfile(profile), at: this.now(), ...(consent ? { consent: { at: consent.at, version: consent.version } } : {}) }),
 					String(MAX_PENDING_REQUESTS),
 				],
 			}),
