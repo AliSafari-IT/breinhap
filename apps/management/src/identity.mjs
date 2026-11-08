@@ -234,6 +234,7 @@ export function createIdentity({
 		if (!(await store.getSession(value.id, false))) return null;
 		req.managementSession = {
 			csrf: value.saved.csrf,
+			email: value.saved.email ?? "",
 			roles: allowed ? [roleLabels[membership.role]] : [],
 			fresh: isFresh(value.saved, now()),
 			admin:
@@ -471,9 +472,15 @@ export function createIdentity({
 		if (value.allowed) return { allowed: true };
 		if (value.studentOnly) return { student: true };
 		if (req.method !== "POST")
-			return { pending: await store.roleRequest(value.saved.sub) };
+			return { pending: await store.roleRequest(value.saved.sub), rejected: await store.rejectedRequest(value.saved.sub) };
 		const form = await readForm(req, 8192);
 		if (!csrfValid(req, form, value.saved)) return { refused: true };
+		if (new URL(req.url, ORIGIN).pathname === "/registreren/intrekken") {
+			if ([...form.keys()].some((key) => key !== "csrf")) return { refused: true };
+			await store.cancelRequest(value.saved.sub);
+			await audit("role.withdrawn", value.saved.sub);
+			return { cancelled: true };
+		}
 		const one = (name) => (form.getAll(name).length === 1 ? form.get(name).trim() : "");
 		const values = {
 			firstName: one("firstName"),
@@ -482,6 +489,7 @@ export function createIdentity({
 			organisation: one("organisation"),
 			note: one("note"),
 			consent: one("consent") === "1",
+			editing: one("editing") === "1",
 		};
 		// The profile completes a registration: who they are and which role they ask for.
 		const invalid = !SELF_SERVICE_ROLES.includes(values.role)
@@ -504,8 +512,9 @@ export function createIdentity({
 			email: value.saved.email ?? "",
 			organisation: values.organisation,
 			note: values.note,
-		}, { at: now(), version: TERMS_VERSION });
+		}, { at: now(), version: TERMS_VERSION }, { update: one("editing") === "1" });
 		if (result === "full") return { busy: true };
+		if (result === "changed") return { invalid: "changed", values };
 		if (result === "created")
 			await audit("role.requested", value.saved.sub, values.role);
 		return { pending: await store.roleRequest(value.saved.sub) };

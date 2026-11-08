@@ -118,11 +118,11 @@ test("registering: e-mail, code, profile, then the administrator approves by nam
 	// signed in, no membership yet: the profile form completes the registration
 	assert.equal((await call("/")).headers.Location, "/registreren");
 	const form = await call("/registreren");
-	assert.match(form.body, /<h1 id="auth-title">Je gegevens<\/h1>/);
+	assert.match(form.body, /<h1 id="auth-title">Maak je registratie af<\/h1>/);
 	const body = new URLSearchParams({ csrf: csrf(form.body), firstName: "Kim", lastName: "Peeters", role: "breinhap.teacher", organisation: "Sint-Jozefcollege", note: "Klas 3B", consent: "1" });
 	assert.equal((await call("/registreren", { method: "POST", body: body.toString() })).status, 303);
 	const waiting = await call("/registreren");
-	assert.match(waiting.body, /Aanvraag verstuurd/);
+	assert.match(waiting.body, /Je aanvraag is in behandeling/);
 	assert.match(waiting.body, /kim@example\.test/);
 	const consent = (await store.roleRequests())[0].consent;
 	assert.equal(consent.version, TERMS_VERSION);
@@ -396,4 +396,90 @@ test("stale headless invitation recipients reauthenticate and return to acceptan
 	assert.equal(page.status, 200);
 	assert.equal((await call("/uitnodiging/bevestigen", { method: "POST", body: `csrf=${csrf(page.body)}` })).status, 303);
 	assert.equal((await store.membership("sub-1")).role, "breinhap.parent");
+});
+
+test("pending identity, check feedback, edit, decision mail and approval destination", async () => {
+	const ctx = await setup();
+	const { call, csrf, store } = ctx;
+	await signIn(ctx, "kim@example.test");
+	const form = await call("/registreren");
+	assert.match(form.body, /Aangemeld als <strong>kim@example.test<\/strong>/);
+	assert.match(form.body, /id="p-email" type="email" value="kim@example.test" readonly/);
+	assert.doesNotMatch(form.body, /name="email"/);
+	const fields = { csrf: csrf(form.body), firstName: "Kim", lastName: "Peeters", role: "breinhap.parent", consent: "1" };
+	await call("/registreren", { method: "POST", body: new URLSearchParams(fields).toString() });
+	const [before] = await store.roleRequests();
+	const pending = await call("/registreren");
+	for (const pattern of [/Meestal binnen één werkdag/, /Aangevraagd op/, /href="\/registreren\?gecontroleerd=1"/, /href="\/registreren\?aanpassen=1"/, /action="\/registreren\/intrekken"/]) assert.match(pending.body, pattern);
+	assert.doesNotMatch(pending.body, /Laatst gecontroleerd/);
+	assert.match((await call("/registreren?gecontroleerd=1")).body, /role="status">Nog niet goedgekeurd\. Laatst gecontroleerd om \d{2}:\d{2}\./);
+	const edit = await call("/registreren?aanpassen=1");
+	assert.match(edit.body, /name="editing" value="1"/);
+	assert.match(edit.body, /value="Peeters"/);
+	await call("/registreren", { method: "POST", body: new URLSearchParams({ ...fields, editing: "1", lastName: "Nieuw", email: "forged@example.test" }).toString() });
+	const [after] = await store.roleRequests();
+	assert.equal(after.at, before.at);
+	assert.equal(after.profile.lastName, "Nieuw");
+	assert.equal(after.profile.email, "kim@example.test");
+	assert.equal(after.id, before.id);
+	for (const lang of ["nl", "fr", "en", "de"]) {
+		const localized = await call(`/registreren?gecontroleerd=1&lang=${lang}`);
+		assert.equal(localized.status, 200);
+		assert.doesNotMatch(localized.body, /undefined|<style|style=|<script(?! src)/);
+	}
+	await signIn(ctx, "admin@example.test");
+	const admin = await call("/beheer");
+	await call("/beheer/goedkeuren", { method: "POST", body: `csrf=${csrf(admin.body)}&request=${after.id}` });
+	const feedback = await call("/beheer?lang=nl");
+	assert.match(feedback.body, /Breng de aanvrager per e-mail op de hoogte/);
+	assert.match(feedback.body, /mailto:kim%40example.test\?subject=Je%20Breinhap-aanvraag%20is%20goedgekeurd&amp;body=/);
+	await signIn(ctx, "kim@example.test");
+	assert.equal((await call("/registreren?gecontroleerd=1")).headers.Location, "/");
+});
+
+test("rejection is visible, admin can notify, and the requester can apply again", async () => {
+	const ctx = await setup();
+	const { call, csrf, store } = ctx;
+	await signIn(ctx, "kim@example.test");
+	const form = await call("/registreren");
+	const fields = { csrf: csrf(form.body), firstName: "Kim", lastName: "Peeters", role: "breinhap.parent", consent: "1" };
+	await call("/registreren", { method: "POST", body: new URLSearchParams(fields).toString() });
+	const [request] = await store.roleRequests();
+	await signIn(ctx, "admin@example.test");
+	const admin = await call("/beheer");
+	await call("/beheer/weigeren", { method: "POST", body: `csrf=${csrf(admin.body)}&request=${request.id}` });
+	assert.match((await call("/beheer")).body, /mailto:kim%40example.test\?subject=Je%20Breinhap-aanvraag%20is%20niet%20goedgekeurd/);
+	await signIn(ctx, "kim@example.test");
+	const rejected = await call("/registreren");
+	assert.match(rejected.body, /Je aanvraag is niet goedgekeurd/);
+	assert.match(rejected.body, /href="\/registreren\?opnieuw=1"/);
+	assert.doesNotMatch(rejected.body, /name="firstName"/);
+	const retry = await call("/registreren?opnieuw=1");
+	assert.match(retry.body, /Maak je registratie af/);
+	await call("/registreren", { method: "POST", body: new URLSearchParams({ ...fields, csrf: csrf(retry.body) }).toString() });
+	assert.match((await call("/registreren")).body, /Je aanvraag is in behandeling/);
+	assert.equal(await store.rejectedRequest(request.subject), null);
+});
+
+test("withdrawal requires caller CSRF/origin and rejects another subject's target", async () => {
+	const ctx = await setup();
+	const { call, csrf, store } = ctx;
+	await signIn(ctx, "kim@example.test");
+	const form = await call("/registreren");
+	const token = csrf(form.body);
+	await call("/registreren", { method: "POST", body: new URLSearchParams({ csrf: token, firstName: "Kim", lastName: "Peeters", role: "breinhap.parent", consent: "1" }).toString() });
+	await store.requestRole("victim", "breinhap.parent");
+	const post = (body, origin = ORIGIN) => call("/registreren/intrekken", { method: "POST", body, origin });
+	assert.equal((await call("/registreren/intrekken")).status, 405);
+	assert.equal((await post("csrf=forged")).status, 403);
+	assert.equal((await post(`csrf=${token}`, "https://evil.test")).status, 403);
+	for (const target of ["subject=victim", "request=" + (await store.roleRequests()).find((r) => r.subject === "victim").id])
+		assert.equal((await post(`csrf=${token}&${target}`)).status, 403);
+	assert.equal((await store.roleRequests()).length, 2);
+	const withdrawn = await post(`csrf=${token}`);
+	assert.equal(withdrawn.headers.Location, "/registreren?ingetrokken=1");
+	const remaining = await store.roleRequests();
+	assert.equal(remaining.length, 1);
+	assert.equal(remaining[0].subject, "victim");
+	assert.match((await call(withdrawn.headers.Location)).body, /role="status">Je aanvraag is ingetrokken/);
 });

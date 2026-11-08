@@ -123,7 +123,7 @@ test("a new account fills in its profile and role, waits for approval, and then 
 	assert.equal(home.headers.Location, "/registreren");
 	const form = await call("/registreren", { cookie });
 	assert.equal(form.status, 200);
-	assert.match(form.body, /Je gegevens/);
+	assert.match(form.body, /Maak je registratie af/);
 	assert.match(form.body, /name="firstName"/);
 	assert.match(form.body, /name="consent"/);
 	for (const role of ["breinhap.parent", "breinhap.tutor", "breinhap.teacher"])
@@ -182,14 +182,14 @@ test("a new account fills in its profile and role, waits for approval, and then 
 	});
 	assert.equal(sent.status, 303);
 	const waiting = await call("/registreren", { cookie });
-	assert.match(waiting.body, /Aanvraag verstuurd/);
+	assert.match(waiting.body, /Je aanvraag is in behandeling/);
 	assert.match(waiting.body, /Leerkracht/);
 	assert.match(waiting.body, /Kim Peeters/);
 	assert.match(waiting.body, /Sint-Jozefcollege/);
 	// the requester is told who decides
 	assert.match(waiting.body, /beheerder van Breinhap/);
 	// in their language
-	assert.match((await call("/registreren?lang=fr", { cookie })).body, /Demande envoyée/);
+	assert.match((await call("/registreren?lang=fr", { cookie })).body, /Votre demande est en cours de traitement/);
 	assert.equal((await call("/bibliotheek", { cookie })).status, 303);
 	// A second request does not replace the first.
 	await call("/registreren", {
@@ -327,4 +327,44 @@ test("a registry 404 means a new account without grants, not an outage", async (
 	});
 	status.value = 500;
 	await assert.rejects(platform.grants("newcomer"));
+});
+
+test("minimal rejection tombstones expire in 30 days; pending role changes reset the date", async () => {
+	let time = Date.UTC(2026, 10, 8, 12);
+	const store = await makeStore(() => time);
+	await store.requestRole("person", "breinhap.parent", { firstName: "Private", note: "Delete this" });
+	const [request] = await store.roleRequests();
+	assert.ok(await store.rejectRequest(request.id));
+	assert.deepEqual(await store.rejectedRequest("person"), { subject: "person", at: time });
+	assert.ok(await store.client.ttl(store.keyFor("rejected", "person")) > 29 * 86400);
+	assert.equal(await store.roleRequest("person"), null);
+	assert.deepEqual(await store.roleRequests(), []);
+	await store.requestRole("person", "breinhap.parent");
+	assert.equal(await store.rejectedRequest("person"), null);
+	time += 60_000;
+	await store.requestRole("person", "breinhap.parent", { firstName: "Updated" }, undefined, { update: true });
+	assert.equal((await store.roleRequest("person")).at, request.at);
+	time += 60_000;
+	await store.requestRole("person", "breinhap.teacher", {}, undefined, { update: true });
+	assert.equal((await store.roleRequest("person")).at, time);
+	assert.equal((await store.roleRequests()).length, 1);
+	await store.cancelRequest("person");
+	assert.equal(await store.requestRole("person", "breinhap.parent", {}, undefined, { update: true }), "changed");
+	assert.equal(await store.roleRequest("person"), null);
+});
+
+test("decision snapshots refuse edited requests and pending timestamps use Brussels time", async () => {
+	const { pendingPage } = await import("../src/account/pages.mjs");
+	const page = pendingPage("nl", { csrf: "token", email: "a@example.test", request: { role: "breinhap.parent", at: Date.UTC(2026, 6, 8, 12) }, checked: true, now: Date.UTC(2026, 10, 8, 12) });
+	assert.match(page, /14:00/); // Zomertijd in Brussel.
+	assert.match(page, /Laatst gecontroleerd om 13:00/); // Wintertijd in Brussel.
+	const store = await makeStore();
+	const admin = await member(store, "admin", "breinhap.admin");
+	await store.requestRole("person", "breinhap.parent");
+	const [request] = await store.roleRequests();
+	const raw = await store.client.get(store.requestKeys(request.id)[1]);
+	await store.requestRole("person", "breinhap.teacher", {}, undefined, { update: true });
+	assert.equal(await store.approveRequest(request.id, "admin", admin.version, raw), false);
+	assert.equal(await store.rejectRequest(request.id, raw), false);
+	assert.equal((await store.roleRequest("person")).role, "breinhap.teacher");
 });

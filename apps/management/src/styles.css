@@ -660,3 +660,19 @@ button.secondary {
 .extraction .block-head {
 	font-size: 0.9rem;
 }
+
+.auth-account {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: .5rem;
+	padding-bottom: 1rem;
+	margin-bottom: 1rem;
+	border-bottom: 1px solid var(--line);
+	overflow-wrap: anywhere;
+}
+.auth-account .auth-signout {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}

@@ -19,7 +19,7 @@ import {
 } from "./directory-pages.mjs";
 import { langCookie, localeOf, T } from "./account/i18n.mjs";
 import { header } from "./header.mjs";
-import { emailPage, fallbackPage, pendingPage, profilePage } from "./account/pages.mjs";
+import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice } from "./account/pages.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
 import { handleExtractions } from "./extract/routes.mjs";
@@ -184,7 +184,9 @@ export function createHandler({
 				result.headers,
 			);
 		}
-		if (identity && url.pathname === "/registreren") {
+		if (identity && ["/registreren", "/registreren/intrekken"].includes(url.pathname)) {
+			if (url.pathname === "/registreren/intrekken" && req.method !== "POST")
+				return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "POST" });
 			if (!["GET", "HEAD", "POST"].includes(req.method))
 				return send(405, "Method not allowed", "text/plain; charset=utf-8", {
 					Allow: "GET, POST",
@@ -210,7 +212,7 @@ export function createHandler({
 			if (result.refused)
 				return send(403, page("Aanvraag geweigerd", "Laad de pagina opnieuw en probeer nog eens."));
 			if (result.invalid)
-				return send(400, profilePage(lang, { csrf: session.csrf, values: result.values ?? {}, errorCode: result.invalid, version: manifest.version }));
+				return send(400, profilePage(lang, { csrf: session.csrf, email: session.email, editing: result.values?.editing, values: result.values ?? {}, errorCode: result.invalid, version: manifest.version }));
 			if (result.busy)
 				return send(
 					429,
@@ -222,11 +224,13 @@ export function createHandler({
 					),
 				);
 			if (req.method === "POST")
-				return send(303, "", undefined, { Location: "/registreren" });
+				return send(303, "", undefined, { Location: result.cancelled ? "/registreren?ingetrokken=1" : "/registreren" });
 			const langHeader = url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {};
-			if (result.pending)
-				return send(200, pendingPage(lang, { csrf: session.csrf, request: result.pending, version: manifest.version }), undefined, langHeader);
-			return send(200, profilePage(lang, { csrf: session.csrf, version: manifest.version }), undefined, langHeader);
+			if (result.pending && url.searchParams.get("aanpassen") !== "1")
+				return send(200, pendingPage(lang, { csrf: session.csrf, email: session.email, request: result.pending, checked: url.searchParams.get("gecontroleerd") === "1", version: manifest.version }), undefined, langHeader);
+			if (!result.pending && result.rejected && url.searchParams.get("opnieuw") !== "1")
+				return send(200, rejectedPage(lang, { csrf: session.csrf, email: session.email, version: manifest.version }), undefined, langHeader);
+			return send(200, profilePage(lang, { csrf: session.csrf, email: session.email, editing: !!result.pending, retry: url.searchParams.get("opnieuw") === "1", values: result.pending ? { ...result.pending.profile, role: result.pending.role, consent: !!result.pending.consent } : {}, cancelled: url.searchParams.get("ingetrokken") === "1", version: manifest.version }), undefined, langHeader);
 		}
 		if (identity && url.pathname.startsWith("/beheer")) {
 			const check = await (["GET", "HEAD"].includes(req.method) ? identity.administrator(req) : identity.privileged(req, DIRECTORY_PATHS.test(url.pathname) ? "/beheer/leerlingen" : "/beheer"));
@@ -252,6 +256,8 @@ export function createHandler({
 			}
 			if (req.method === "GET" && url.pathname === "/beheer") {
 				const csrf = value.saved.csrf;
+				const decision = await identity.store.readFlow(`decision:${value.id}`);
+				const decisionFeedback = decision?.email ? decisionNotice(localeOf(req, url), decision) : "";
 				const hiddenCsrf = `<input type="hidden" name="csrf" value="${csrf}">`;
 				const requests = await identity.store.roleRequests();
 				const members = await identity.store.members();
@@ -282,7 +288,7 @@ export function createHandler({
 					200,
 					page(
 						"Toegang beheren",
-						`${notice}Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
+						`${notice}${decisionFeedback}Nieuwe ouders, begeleiders en leerkrachten maken zelf een account aan op <a href="/register">management.breinhap.com/register</a> en vullen daar hun gegevens en gewenste rol in. Hun aanvraag verschijnt hieronder; keur ze goed of weiger ze. Leerlingen, groepen en koppelingen beheer je bij <a href="/beheer/leerlingen">Leerlingen en groepen</a>.</p><h2>Aanvragen${requests.length ? ` (${requests.length})` : ""}</h2>${pending}<h2>Leden</h2>${people}<p>`,
 						null,
 						req.managementSession,
 					),
@@ -326,13 +332,23 @@ export function createHandler({
 				)
 					return send(400, "Ongeldige aanvraag.");
 				const approve = url.pathname === "/beheer/goedkeuren";
+				const requestKey = identity.store.requestKeys(id)[1];
+				const raw = await identity.store.client.get(requestKey);
+				const request = identity.store.decode(requestKey, raw);
 				const done = approve
 					? await identity.store.approveRequest(
 							id,
 							value.saved.sub,
 							value.membership.version,
+							raw,
 						)
-					: await identity.store.rejectRequest(id);
+					: await identity.store.rejectRequest(id, raw);
+				if (done) {
+					const key = `decision:${value.id}`;
+					await identity.store.takeFlow(key);
+					if (request?.profile?.email)
+						await identity.store.putFlow(key, { email: request.profile.email, approved: approve });
+				}
 				await identity.audit(
 					approve ? "role.approved" : "role.rejected",
 					value.saved.sub,

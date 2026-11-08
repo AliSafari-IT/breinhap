@@ -64,10 +64,19 @@ const DROP = `local function drop(id)
 end
 `;
 const REQUEST = `
-if redis.call('EXISTS',KEYS[2])==1 then return 2 end
+local old = redis.call('GET',KEYS[2])
+if old then
+  if ARGV[4] ~= 'update' then return 2 end
+  if old ~= ARGV[5] then return 3 end
+  redis.call('SET',KEYS[2],ARGV[2]); redis.call('DEL',KEYS[3]); return 1
+end
+if ARGV[4] == 'update' then return 3 end
 local list = cjson.decode(redis.call('GET',KEYS[1]) or '[]')
 if #list >= tonumber(ARGV[3]) then return 0 end
-table.insert(list, ARGV[1]); redis.call('SET',KEYS[1],cjson.encode(list)); redis.call('SET',KEYS[2],ARGV[2]); return 1`;
+table.insert(list, ARGV[1]); redis.call('SET',KEYS[1],cjson.encode(list)); redis.call('SET',KEYS[2],ARGV[2]); redis.call('DEL',KEYS[3]); return 1`;
+const REJECT = `${DROP}
+if redis.call('GET',KEYS[2]) ~= ARGV[2] then return 0 end
+redis.call('SET',KEYS[3],ARGV[3],'EX',2592000); redis.call('DEL',KEYS[2]); drop(ARGV[1]); return 1`;
 const REMOVE = `${DROP}
 local n = redis.call('DEL',KEYS[2]); drop(ARGV[1]); return n`;
 // Approve only while the approver's membership is unchanged and the requester has none yet.
@@ -370,22 +379,26 @@ export class IdentityStore {
 		const base = `${prefix}${this.workspace}:`;
 		return [`${base}requests`, `${base}request:${id}`];
 	}
-	// A signed-in adult asks for one self-service role. Returns "created", "exists" or "full".
-	async requestRole(subject, role, profile = {}, consent) {
+	// Eén aanvraag per persoon; wijzigingen vergelijken de versleutelde vorige versie atomair.
+	async requestRole(subject, role, profile = {}, consent, { update = false } = {}) {
 		if (!SELF_SERVICE_ROLES.includes(role)) throw new Error("Invalid role");
 		const id = digest(subject);
-		const keys = this.requestKeys(id);
+		const keys = [...this.requestKeys(id), this.keyFor("rejected", subject)];
+		const raw = update ? await this.client.get(keys[1]) : null;
+		const previous = this.decode(keys[1], raw);
 		const result = Number(
 			await this.client.eval(REQUEST, {
 				keys,
 				arguments: [
 					id,
-					this.encode(keys[1], { subject, role, profile: cleanProfile(profile), at: this.now(), ...(consent ? { consent: { at: consent.at, version: consent.version } } : {}) }),
+					this.encode(keys[1], { subject, role, profile: cleanProfile(profile), at: previous?.role === role ? previous.at : this.now(), ...(consent ? { consent: { at: consent.at, version: consent.version } } : {}) }),
 					String(MAX_PENDING_REQUESTS),
+					update ? "update" : "create",
+					raw ?? "",
 				],
 			}),
 		);
-		return result === 1 ? "created" : result === 2 ? "exists" : "full";
+		return result === 1 ? "created" : result === 2 ? "exists" : result === 3 ? "changed" : "full";
 	}
 	async roleRequest(subject) {
 		const key = this.requestKeys(digest(subject))[1];
@@ -404,20 +417,31 @@ export class IdentityStore {
 		}
 		return requests.sort((a, b) => a.at - b.at);
 	}
-	async rejectRequest(id) {
-		return (
-			Number(
-				await this.client.eval(REMOVE, {
-					keys: this.requestKeys(id),
-					arguments: [id],
-				}),
-			) === 1
-		);
+	async rejectedRequest(subject) {
+		const key = this.keyFor("rejected", subject);
+		return this.decode(key, await this.client.get(key));
 	}
-	async approveRequest(id, approver, approverVersion) {
+	async cancelRequest(subject) {
+		// Alleen de ingelogde identiteit bepaalt de sleutel, nooit een formulierwaarde.
+		return Number(await this.client.eval(REMOVE, {
+			keys: this.requestKeys(digest(subject)), arguments: [digest(subject)],
+		})) === 1;
+	}
+	async rejectRequest(id, expected) {
 		const keys = this.requestKeys(id);
 		const raw = await this.client.get(keys[1]);
-		if (!raw) return false;
+		if (!raw || (expected !== undefined && expected !== raw)) return false;
+		const request = this.decode(keys[1], raw);
+		const key = this.keyFor("rejected", request.subject);
+		return Number(await this.client.eval(REJECT, {
+			keys: [...keys, key],
+			arguments: [id, raw, this.encode(key, { subject: request.subject, at: this.now() })],
+		})) === 1;
+	}
+	async approveRequest(id, approver, approverVersion, expected) {
+		const keys = this.requestKeys(id);
+		const raw = await this.client.get(keys[1]);
+		if (!raw || (expected !== undefined && expected !== raw)) return false;
 		const request = this.decode(keys[1], raw);
 		if (!SELF_SERVICE_ROLES.includes(request.role)) return false;
 		const approverKey = this.keyFor("member", approver);
