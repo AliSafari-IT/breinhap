@@ -31,7 +31,7 @@ const EMAIL = /^[^\s@<>"]{1,64}@[^\s@<>"]{1,190}\.[^\s@<>"]{2,}$/;
 /** Only local management destinations may survive an authentication round trip. */
 export function safeNext(value) {
 	if (typeof value !== "string" || value.length > 200 || !value.startsWith("/") ||
-		value.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+		value.startsWith("//") || /[\\\u0000-\u001f\u007f-\u009f]/.test(value)) return "/";
 	let url;
 	try { url = new URL(value, ORIGIN); } catch { return "/"; }
 	const path = url.pathname;

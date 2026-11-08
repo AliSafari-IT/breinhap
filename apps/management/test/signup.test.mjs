@@ -257,7 +257,7 @@ test("headless step-up: stale admin reads lists, gets 428 on changes, confirms a
 test("step-up destinations are local and allowlisted", () => {
 	for (const path of ["/", "/beheer", "/beheer/leerlingen", "/bibliotheek/nieuw", "/bibliotheek?map=1", "/uitnodiging/bevestigen"])
 		assert.equal(safeNext(path), path);
-	for (const path of [undefined, 1, "https://evil.test", "//evil.test", "/\\evil.test", "/beheer/\\evil", "/beheer/../login", "/beheer\n", "/beheer\u007f", "/afmelden", "/beheer" + "x".repeat(201)])
+	for (const path of [undefined, 1, "https://evil.test", "//evil.test", "/\\evil.test", "/beheer/\\evil", "/beheer/../login", "/beheer\n", "/beheer\u007f", "/beheer\u0085", "/afmelden", "/beheer" + "x".repeat(201)])
 		assert.equal(safeNext(path), "/");
 });
 

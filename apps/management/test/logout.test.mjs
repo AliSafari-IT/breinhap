@@ -75,7 +75,7 @@ test("signed back-channel tokens validate issuer/audience/time/event/sid and rej
 				sub: "person",
 				sid: "browser",
 				issuedAt: now - 1,
-				expires: Date.now() + 60000,
+				expires: Date.now() + 600_000,
 			});
 			const identity = createIdentity({
 				provider,
