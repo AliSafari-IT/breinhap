@@ -317,10 +317,11 @@ export function createIdentity({
 			const value = await current(req, false);
 			// breinhap.com is same-site, so the SameSite=Lax host-only cookie is sent with its credentialed
 			// fetch; only that origin may read whether someone is signed in, to show it in its navbar.
+			// Always 200 with a state body so anonymous probes do not log a browser console error (#91).
 			const site = req.headers.origin === SITE_ORIGIN;
 			return {
-				status: value?.allowed ? 200 : value ? 403 : 401,
-				body: JSON.stringify(value ? { active: true, access: value.allowed } : { active: false }),
+				status: 200,
+				body: JSON.stringify(value ? { active: true, access: !!value.allowed } : { active: false, access: false }),
 				type: "application/json; charset=utf-8",
 				headers: {
 					Vary: "Origin",

@@ -269,11 +269,12 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	const anonymous = await get("/auth/session", {
 		headers: { Origin: "https://breinhap.com" },
 	});
-	assert.equal(anonymous.status, 401);
+	assert.equal(anonymous.status, 200);
 	assert.equal(
 		anonymous.headers["access-control-allow-origin"],
 		"https://breinhap.com",
 	);
+	assert.deepEqual(JSON.parse(anonymous.body), { active: false, access: false });
 	const csrf = /name="csrf" value="([^"]+)"/.exec(home.body)[1];
 	const logout = await get("/afmelden", {
 		method: "POST",
