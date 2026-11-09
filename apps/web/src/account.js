@@ -21,10 +21,18 @@
   if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) options.signal = AbortSignal.timeout(5000);
   fetch(MANAGEMENT + "/auth/session", options).then(
     function (response) {
-      // 200: signed in with access; 403: signed in without management access yet. 401: not signed in.
-      if (response.status !== 200 && response.status !== 403) return;
-      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show);
-      else show();
+      if (!response || !response.ok) return;
+      return response.json().then(
+        function (state) {
+          // active: signed in (with or without management access). Anonymous probes return 200 to avoid console noise.
+          if (!state || state.active !== true) return;
+          if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show);
+          else show();
+        },
+        function () {
+          /* Invalid JSON: keep the sign-in links. */
+        },
+      );
     },
     function () {
       /* Offline or blocked: keep the sign-in links. */

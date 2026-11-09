@@ -485,7 +485,7 @@ test("web SSO keeps locale/return intent in the flow, resists callback tampering
 		assert.doesNotMatch(JSON.stringify(response), /private-token|person|evil.test/);
 		const session = cookieHeader(response).split("; ")[0];
 		const state = await ctx.identity.handle(request(session), new URL(`${ORIGIN}/auth/session`));
-		assert.equal(state.status, 403);
+		assert.equal(state.status, 200);
 		assert.deepEqual(JSON.parse(state.body), { active: true, access: false });
 		assert.equal(await ctx.store.membership("person"), null);
 		assert.deepEqual(await ctx.store.roleRequests(), []);

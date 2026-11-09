@@ -318,11 +318,11 @@ test("a failed flow insert never sets a login cookie", async () => {
 test("session JSON distinguishes signed-in without access from anonymous; logout GET advertises POST", async () => {
 	const ctx = await setup();
 	let response = await ctx.call("/auth/session");
-	assert.equal(response.status, 401);
-	assert.deepEqual(JSON.parse(response.body), { active: false });
+	assert.equal(response.status, 200);
+	assert.deepEqual(JSON.parse(response.body), { active: false, access: false });
 	await signIn(ctx, "a@example.test");
 	response = await ctx.call("/auth/session");
-	assert.equal(response.status, 403);
+	assert.equal(response.status, 200);
 	assert.deepEqual(JSON.parse(response.body), { active: true, access: false });
 	response = await ctx.call("/afmelden");
 	assert.equal(response.status, 405);
