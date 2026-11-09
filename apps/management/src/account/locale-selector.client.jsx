@@ -41,7 +41,8 @@ if (mount) {
 			value: { country: "BE", language },
 			triggerVariant: "compact",
 			align: "end",
-			ariaLabel: messages?.ariaLabel || "Taal · Langue · Sprache · Language",
+			// Include the visible trigger label (e.g. "🇧🇪 BE") to satisfy WCAG 2.5.3 Label in Name.
+			ariaLabel: `BE, ${messages?.ariaLabel || "Taal · Langue · Sprache · Language"}`,
 			strings: messages || undefined,
 			onChange: (next, meta) => {
 				if (meta?.reason === "init" || next.language === language) return;
