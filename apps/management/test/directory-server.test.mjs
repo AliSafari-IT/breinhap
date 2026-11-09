@@ -228,17 +228,21 @@ test("revoking a membership ends the adult's links and extra rights", async () =
 test("without the database the pages say they are not available, and nothing else changes", async () => {
 	const s = await stack({ withDirectory: false });
 	const boss = await s.login("admin");
-	assert.equal((await s.call("/beheer/leerlingen", { cookie: boss.cookie })).status, 503);
+	const admin = await s.call("/beheer/leerlingen", { cookie: boss.cookie });
+	assert.equal(admin.status, 200);
+	assert.match(admin.body, /nog niet ingericht/);
 	const teacher = await s.login("teacher");
 	const mine = await s.call("/leerlingen", { cookie: teacher.cookie });
-	assert.equal(mine.status, 503);
+	assert.equal(mine.status, 200);
 	assert.match(mine.body, /nog niet ingericht/);
 	assert.equal((await s.call("/", { cookie: teacher.cookie })).status, 200);
 });
 
-test("students and signed-out visitors never reach the learner pages", async () => {
+test("students and signed-out visitors never reach the learner and admin management pages", async () => {
 	const s = await stack();
 	assert.equal((await s.call("/leerlingen")).status, 303);
+	assert.equal((await s.call("/beheer")).status, 303);
+	assert.equal((await s.call("/beheer/leerlingen")).status, 303);
 	const student = await s.login("student");
 	const res = await s.call("/leerlingen", { cookie: student.cookie });
 	assert.notEqual(res.status, 200);
