@@ -244,6 +244,9 @@ export function createHandler({
 			return send(200, profilePage(lang, { csrf: session.csrf, email: session.email, editing: !!result.pending, retry: url.searchParams.get("opnieuw") === "1", values: result.pending ? { ...result.pending.profile, role: result.pending.role, consent: !!result.pending.consent } : {}, cancelled: url.searchParams.get("ingetrokken") === "1", version: manifest.version }), undefined, langHeader);
 		}
 		if (identity && url.pathname.startsWith("/beheer")) {
+			// Anonymous visitors use the same sign-in path as every other private route.
+			if (!(await identity.current(req, false).catch(() => null)))
+				return send(303, "", undefined, { Location: `/login?next=${encodeURIComponent(url.pathname + url.search)}` });
 			const check = await (["GET", "HEAD"].includes(req.method) ? identity.administrator(req) : identity.privileged(req, DIRECTORY_PATHS.test(url.pathname) ? "/beheer/leerlingen" : "/beheer"));
 			if (check.response)
 				return send(
@@ -254,7 +257,7 @@ export function createHandler({
 			const notice = req.managementSession.fresh ? "" : ui`<p class="notice" role="status">Bevestig opnieuw je identiteit om wijzigingen te maken. <a href="${esc(identity.stepUpLink(url.pathname + url.search))}">Opnieuw aanmelden</a></p>`;
 			const adminPrincipal = { sub: value.saved.sub, role: "breinhap.admin" };
 			if (req.method === "GET" && url.pathname === "/beheer/leerlingen") {
-				if (!directory) return send(503, directoryUnavailable(req.managementSession));
+				if (!directory) return send(200, directoryUnavailable(req.managementSession));
 				return send(
 					200,
 					page(
@@ -317,7 +320,7 @@ export function createHandler({
 			)
 				return send(403, tr("Aanvraag geweigerd."));
 			if (DIRECTORY_PATHS.test(url.pathname)) {
-				if (!directory) return send(503, directoryUnavailable(req.managementSession));
+				if (!directory) return send(200, directoryUnavailable(req.managementSession));
 				const result = await adminDirectoryAction(url.pathname, form, {
 					directory,
 					principal: adminPrincipal,
@@ -627,7 +630,7 @@ export function createHandler({
 			);
 		}
 		if (url.pathname === "/leerlingen") {
-			if (!directory) return send(503, directoryUnavailable(req.managementSession));
+			if (!directory) return send(200, directoryUnavailable(req.managementSession));
 			const principal = await identity?.principal(req);
 			if (!principal)
 				return send(403, page(tr("Geen toegang"), tr("Je hebt geen toegang tot deze pagina.")));
