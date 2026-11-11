@@ -41,6 +41,15 @@ export function safeNext(value) {
 		path === "/uitnodiging/bevestigen")) return "/";
 	return `${path}${url.search}${url.hash}`;
 }
+/**
+ * At most two letters for the breinhap.com account menu, from the verified e-mail's local part
+ * ("jan.peeters@…" → "JP"). Letters and digits only, so the answer is never markup; "" when there is none.
+ */
+export function initialsOf(email) {
+	const local = typeof email === "string" ? email.split("@")[0] : "";
+	const parts = local.split(/[._+-]+/u).map((part) => part.match(/[\p{L}\p{N}]/u)?.[0] ?? "").filter(Boolean);
+	return parts.slice(0, 2).join("").toLocaleUpperCase("nl-BE").slice(0, 2);
+}
 export const readCookie = (req, name) => {
 	const matches = (req.headers.cookie ?? "")
 		.split(";")
@@ -321,7 +330,8 @@ export function createIdentity({
 			const site = req.headers.origin === SITE_ORIGIN;
 			return {
 				status: 200,
-				body: JSON.stringify(value ? { active: true, access: !!value.allowed } : { active: false, access: false }),
+				// breinhap#24 (S4): the navbar's account menu shows initials; nothing else about the person leaves.
+				body: JSON.stringify(value ? { active: true, access: !!value.allowed, initials: initialsOf(value.saved.email) } : { active: false, access: false }),
 				type: "application/json; charset=utf-8",
 				headers: {
 					Vary: "Origin",

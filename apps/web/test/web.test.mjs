@@ -58,7 +58,7 @@ test("the navbar: Sign in and Create account go straight to management in the pa
   for (const [folder, , , lang] of LANGUAGES) {
     const html = read(`${folder}index.html`);
     const [login, register] = label[lang];
-    assert.match(html, new RegExp(`<a class="nav-link" href="https://management\\.breinhap\\.com/login\\?lang=${lang}" data-account="login" data-signed-in-label="[^"]+">${login}</a>`), lang);
+    assert.match(html, new RegExp(`<a class="nav-link" href="https://management\\.breinhap\\.com/login\\?lang=${lang}" data-account="login">${login}</a>`), lang);
     assert.match(html, new RegExp(`<a class="nav-cta" href="https://management\\.breinhap\\.com/register\\?lang=${lang}" data-account="register">${register}</a>`), lang);
     // the OS light/dark toggle, not a glyph
     assert.match(html, /<button type="button" class="os-theme-toggle" data-theme-toggle aria-label="[^"]+" aria-pressed="false" title="[^"]+"><svg/);
@@ -98,18 +98,39 @@ test("login and register links from before go to management, in the same languag
   for (const block of redirects) assert.doesNotMatch(block, /add_header/);
 });
 
-test("a signed-in adult sees it in the navbar: the page asks management, and the CSP allows only that", () => {
+test("the navbar's account state comes from management, and the CSP allows only that", () => {
   const nginx = readFileSync(new URL("../nginx.conf", import.meta.url), "utf8");
   assert.match(nginx, /connect-src https:\/\/management\.breinhap\.com;/);
   const script = read("account.js");
   assert.match(script, /"https:\/\/management\.breinhap\.com"/);
   assert.match(script, /\/auth\/session/);
   assert.match(script, /credentials: "include"/);
-  const labels = { "": "Naar Breinhap beheer", "en/": "Go to Breinhap management", "fr/": "Aller à la gestion Breinhap", "de/": "Zur Breinhap-Verwaltung" };
-  for (const [folder, label] of Object.entries(labels)) {
+  // breinhap#24 (S4): asked again within 60 s so a logout or revocation reaches an open page
+  assert.match(script, /RECHECK_MS = 60000/);
+  assert.match(script, /visibilitychange/);
+  const labels = {
+    "": ["nl", "Account", "Breinhap beheer", "Mijn account"],
+    "en/": ["en", "Account", "Breinhap management", "My account"],
+    "fr/": ["fr", "Compte", "Gestion Breinhap", "Mon compte"],
+    "de/": ["de", "Konto", "Breinhap-Verwaltung", "Mein Konto"],
+  };
+  for (const [folder, [lang, account, manage, profile]] of Object.entries(labels)) {
     const html = read(`${folder}index.html`);
-    assert.ok(html.includes('<script src="/account.js" defer></script>'), folder);
-    assert.ok(html.includes(`data-account="login" data-signed-in-label="${label}"`), folder);
+    // not deferred: it marks the page as checking before the navbar paints (no flash of Sign in)
+    assert.ok(html.includes('<script src="/account.js"></script>'), folder);
+    assert.doesNotMatch(html, /account\.js" defer/);
+    assert.match(html, /data-account="login"/, folder);
     assert.match(html, /data-account="register"/, folder);
+    const menu = /<details class="account-menu" data-account="menu" hidden>.*?<\/details>/.exec(html)?.[0];
+    assert.ok(menu, folder);
+    // its accessible name contains the visible label (WCAG 2.5.3); the initials are decoration
+    assert.ok(menu.includes(`<summary class="account-trigger"><span class="account-initials" data-account="initials" aria-hidden="true"></span><span>${account}</span></summary>`), folder);
+    assert.doesNotMatch(menu, /aria-label/);
+    // the management entry is hidden until management reports access; nothing in the page grants it
+    assert.ok(menu.includes(`<a href="https://management.breinhap.com/?lang=${lang}" data-account="manage" hidden>${manage}</a>`), folder);
+    assert.ok(menu.includes(`<a href="https://management.breinhap.com/?lang=${lang}" data-account="profile" hidden>${profile}</a>`), folder);
+    assert.ok(menu.includes(`href="https://management.breinhap.com/login?switch=1&amp;lang=${lang}"`), folder);
   }
+  const css = read("styles.css");
+  assert.match(css, /html\[data-account-state="checking"\] \.nav-actions \{ visibility: hidden; \}/);
 });

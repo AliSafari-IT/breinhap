@@ -486,7 +486,7 @@ test("web SSO keeps locale/return intent in the flow, resists callback tampering
 		const session = cookieHeader(response).split("; ")[0];
 		const state = await ctx.identity.handle(request(session), new URL(`${ORIGIN}/auth/session`));
 		assert.equal(state.status, 200);
-		assert.deepEqual(JSON.parse(state.body), { active: true, access: false });
+		assert.deepEqual(JSON.parse(state.body), { active: true, access: false, initials: "" });
 		assert.equal(await ctx.store.membership("person"), null);
 		assert.deepEqual(await ctx.store.roleRequests(), []);
 		assert.equal((await ctx.identity.handle(request(flow.cookie), url)).status, 400);
@@ -514,4 +514,13 @@ test("web SSO cannot bypass an invitation or a requested fresh authentication", 
 	const refused = await stale.identity.handle(request(freshFlow.cookie), new URL(`${ORIGIN}/auth/callback?state=${freshFlow.state}&code=valid`));
 	assert.equal(refused.status, 400);
 	assert.match(refused.body, /Nieuwe identiteitsbevestiging ontbreekt/);
+});
+
+test("initials for breinhap.com's account menu come only from letters and digits of the e-mail's local part", async () => {
+	const { initialsOf } = await import("../src/identity.mjs");
+	assert.equal(initialsOf("jan.peeters@example.test"), "JP");
+	assert.equal(initialsOf("émile@example.test"), "É");
+	assert.equal(initialsOf("a_b_c@example.test"), "AB");
+	assert.equal(initialsOf("<b>@example.test"), "B");
+	for (const nothing of ["+@example.test", "", undefined, null, 42]) assert.equal(initialsOf(nothing), "");
 });

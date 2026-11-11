@@ -323,7 +323,7 @@ test("session JSON distinguishes signed-in without access from anonymous; logout
 	await signIn(ctx, "a@example.test");
 	response = await ctx.call("/auth/session");
 	assert.equal(response.status, 200);
-	assert.deepEqual(JSON.parse(response.body), { active: true, access: false });
+	assert.deepEqual(JSON.parse(response.body), { active: true, access: false, initials: "A" });
 	response = await ctx.call("/afmelden");
 	assert.equal(response.status, 405);
 	assert.equal(response.headers.Allow, "POST");

@@ -29,7 +29,7 @@ const LEGAL_PATHS = {
 const copy = {
   nl: {
     skip: "Naar de inhoud", theme: "Donker thema", mainNav: "Hoofdmenu", languageLabel: "Taal · Langue · Sprache · Language",
-    login: "Aanmelden", register: "Account aanmaken", signedIn: "Naar Breinhap beheer", legalNav: "Juridisch",
+    login: "Aanmelden", register: "Account aanmaken", account: "Account", manage: "Breinhap beheer", myAccount: "Mijn account", switchAccount: "Wissel van account", legalNav: "Juridisch",
     title: "Leren in kleine happen.", intro: "Een rustige plek om te beginnen, één kleine stap tegelijk.",
     badge: "Binnenkort op het web", notice: "We bouwen Breinhap stap voor stap. Dit is onze eerste pagina; je kunt hier nog geen missies starten.",
     text: "Breinhap helpt je om te starten met studeren. Korte missies, duidelijke stappen en ruimte om op je eigen tempo te leren.",
@@ -44,7 +44,7 @@ const copy = {
   },
   en: {
     skip: "Skip to content", theme: "Dark theme", mainNav: "Main", languageLabel: "Taal · Langue · Sprache · Language",
-    login: "Sign in", register: "Create account", signedIn: "Go to Breinhap management", legalNav: "Legal",
+    login: "Sign in", register: "Create account", account: "Account", manage: "Breinhap management", myAccount: "My account", switchAccount: "Switch account", legalNav: "Legal",
     title: "Learning in small bites.", intro: "A calm place to start, one small step at a time.",
     badge: "Coming soon to the web", notice: "We are building Breinhap step by step. This is our first page; you cannot start missions here yet.",
     text: "Breinhap helps you get started with studying. Short missions, clear steps and room to learn at your own pace.",
@@ -59,7 +59,7 @@ const copy = {
   },
   fr: {
     skip: "Aller au contenu", theme: "Thème sombre", mainNav: "Menu principal", languageLabel: "Taal · Langue · Sprache · Language",
-    login: "Se connecter", register: "Créer un compte", signedIn: "Aller à la gestion Breinhap", legalNav: "Mentions légales",
+    login: "Se connecter", register: "Créer un compte", account: "Compte", manage: "Gestion Breinhap", myAccount: "Mon compte", switchAccount: "Changer de compte", legalNav: "Mentions légales",
     title: "Apprendre par petites bouchées.", intro: "Un endroit calme pour commencer, une petite étape à la fois.",
     badge: "Bientôt sur le web", notice: "Nous construisons Breinhap étape par étape. Voici notre première page ; vous ne pouvez pas encore y lancer de missions.",
     text: "Breinhap vous aide à vous mettre aux études. De courtes missions, des étapes claires et la place d’apprendre à votre rythme.",
@@ -74,7 +74,7 @@ const copy = {
   },
   de: {
     skip: "Zum Inhalt", theme: "Dunkles Design", mainNav: "Hauptmenü", languageLabel: "Taal · Langue · Sprache · Language",
-    login: "Anmelden", register: "Konto erstellen", signedIn: "Zur Breinhap-Verwaltung", legalNav: "Rechtliches",
+    login: "Anmelden", register: "Konto erstellen", account: "Konto", manage: "Breinhap-Verwaltung", myAccount: "Mein Konto", switchAccount: "Konto wechseln", legalNav: "Rechtliches",
     title: "Lernen in kleinen Happen.", intro: "Ein ruhiger Ort zum Anfangen, ein kleiner Schritt nach dem anderen.",
     badge: "Bald im Web", notice: "Wir bauen Breinhap Schritt für Schritt. Dies ist unsere erste Seite; Missionen können Sie hier noch nicht starten.",
     text: "Breinhap hilft Ihnen beim Einstieg ins Lernen. Kurze Missionen, klare Schritte und Raum, in Ihrem eigenen Tempo zu lernen.",
@@ -106,6 +106,15 @@ const switcher = (lang, t) =>
       : `<a href="${pathOf(l)}" hreflang="${l}" lang="${l}" title="${LANGUAGE_NAMES[l]}">${l.toUpperCase()}</a>`,
   ).join("")}</nav></div>`;
 
+/**
+ * The signed-in account menu (breinhap#24, S4), hidden until /account.js learns from management that this visitor
+ * has a Breinhap session. "Breinhap beheer" shows only when management reports management access; otherwise "My
+ * account" leads to the registration and role status. The initials are decoration: the visible word names the
+ * control, so its accessible name contains its visible label (WCAG 2.5.3, #90).
+ */
+const accountMenu = (lang, t) =>
+  `<details class="account-menu" data-account="menu" hidden><summary class="account-trigger"><span class="account-initials" data-account="initials" aria-hidden="true"></span><span>${esc(t.account)}</span></summary><div class="account-panel"><a href="${MANAGEMENT}/?lang=${lang}" data-account="manage" hidden>${esc(t.manage)}</a><a href="${MANAGEMENT}/?lang=${lang}" data-account="profile" hidden>${esc(t.myAccount)}</a><a href="${MANAGEMENT}/login?switch=1&amp;lang=${lang}">${esc(t.switchAccount)}</a></div></details>`;
+
 function page(lang, missing = false) {
   const t = copy[lang];
   const path = pathOf(lang);
@@ -124,14 +133,14 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 <meta property="og:title" content="Breinhap · ${esc(t.title)}"><meta property="og:description" content="${esc(t.intro)}">
 <meta property="og:type" content="website"><meta property="og:url" content="${origin}${path}"><meta property="og:locale" content="${OG_LOCALE[lang]}">
 <meta name="theme-color" content="#222222"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script><script src="/account.js" defer></script>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script><script src="/account.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">${t.skip}</a>
 <header class="os-topbar"><div class="wrap topbar-inner">
   <a class="brand" href="${path}"><img src="/logo.svg" width="40" height="40" alt=""><span>Breinhap</span></a>
   <div class="tools" role="group" aria-label="${esc(t.mainNav)}">
-    <div class="nav-actions"><a class="nav-link" href="${entry("login")}" data-account="login" data-signed-in-label="${esc(t.signedIn)}">${t.login}</a><a class="nav-cta" href="${entry("register")}" data-account="register">${t.register}</a></div>
+    <div class="nav-actions"><a class="nav-link" href="${entry("login")}" data-account="login">${t.login}</a><a class="nav-cta" href="${entry("register")}" data-account="register">${t.register}</a>${accountMenu(lang, t)}</div>
     ${switcher(lang, t)}
     ${themeToggle(t.theme)}
   </div>
