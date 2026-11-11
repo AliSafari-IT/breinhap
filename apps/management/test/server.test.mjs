@@ -247,7 +247,7 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	});
 	assert.equal(fromSite.status, 200);
 	// Session status now reports sign-in and management access separately.
-	assert.deepEqual(JSON.parse(fromSite.body), { active: true, access: true });
+	assert.deepEqual(JSON.parse(fromSite.body), { active: true, access: true, initials: "" });
 	assert.equal(
 		fromSite.headers["access-control-allow-origin"],
 		"https://breinhap.com",

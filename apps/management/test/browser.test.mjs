@@ -253,7 +253,7 @@ test("browser: adult registration, approval, logout and central SSO web launch",
 			}
 			if (req.headers.host === "breinhap.com") {
 				res.writeHead(200, { "Content-Type": req.url === "/account.js" ? "text/javascript" : "text/html", "Cache-Control": "no-store" });
-				res.end(req.url === "/account.js" ? navbarScript : '<!doctype html><html lang="nl"><title>Navbar test</title><a data-account="login" data-signed-in-label="Aangemeld" href="https://management.breinhap.com/login">Aanmelden</a><a data-account="register" href="https://management.breinhap.com/register">Registreren</a><script src="/account.js" defer></script></html>');
+				res.end(req.url === "/account.js" ? navbarScript : '<!doctype html><html lang="nl"><title>Navbar test</title><script src="/account.js"></script><div class="nav-actions"><a data-account="login" href="https://management.breinhap.com/login">Aanmelden</a><a data-account="register" href="https://management.breinhap.com/register">Registreren</a><details data-account="menu" hidden><summary><span data-account="initials" aria-hidden="true"></span><span>Account</span></summary><a href="https://management.breinhap.com/" data-account="manage" hidden>Breinhap beheer</a><a href="https://management.breinhap.com/" data-account="profile" hidden>Mijn account</a></details></div></html>');
 				return;
 			}
 			handler(req, res).catch(() => { res.writeHead(500); res.end(); });
@@ -301,8 +301,15 @@ test("browser: adult registration, approval, logout and central SSO web launch",
 		await adult.locator('form[action="/registreren"] button[type="submit"]').click();
 		await adult.getByRole("heading", { name: "Je aanvraag is in behandeling" }).waitFor();
 		await adult.goto("https://breinhap.com/");
-		await adult.getByRole("link", { name: "Aangemeld", exact: true }).waitFor();
+		// breinhap#24 (S4): signed in but not (yet) approved: the account menu without the management entry
+		await adult.locator('[data-account="menu"]').waitFor();
+		assert.equal(await adult.locator('[data-account="initials"]').textContent(), "A");
 		assert.equal(await adult.locator('[data-account="register"]').isVisible(), false);
+		assert.equal(await adult.locator('[data-account="login"]').isVisible(), false);
+		assert.equal(await adult.locator("html").getAttribute("data-account-state"), "signed-in");
+		await adult.getByText("Account", { exact: true }).click();
+		await adult.getByRole("link", { name: "Mijn account", exact: true }).waitFor();
+		assert.equal(await adult.getByRole("link", { name: "Breinhap beheer", exact: true }).count(), 0);
 
 		await login(admin, "admin@example.test");
 		await admin.waitForURL(`${ORIGIN}/`);
@@ -323,9 +330,24 @@ test("browser: adult registration, approval, logout and central SSO web launch",
 		assert.equal((await store.membership("adult")).active, true);
 		assert.equal((await adult.goto(`${ORIGIN}/bibliotheek`)).status(), 200);
 		assert.equal(await adult.getByRole("navigation", { name: "Beheernavigatie" }).getByRole("link", { name: "Toegang beheren", exact: true }).count(), 0);
+		// approved: the same navbar now offers management, decided by management's grant check
+		const site = await adultContext.newPage();
+		await site.clock.install();
+		await site.goto("https://breinhap.com/");
+		await site.locator('[data-account="menu"]').waitFor();
+		await site.getByText("Account", { exact: true }).click();
+		await site.getByRole("link", { name: "Breinhap beheer", exact: true }).waitFor();
+		assert.equal(await site.getByRole("link", { name: "Mijn account", exact: true }).count(), 0);
+		assert.equal(await site.locator("html").getAttribute("data-account-state"), "management");
 		await adult.locator(".management-account summary").click();
 		await adult.getByRole("button", { name: "Afmelden", exact: true }).click();
 		await adult.waitForURL(`${ORIGIN}/login?logged-out=1`);
+		// the page that stayed open learns of the logout within 60 seconds
+		await site.clock.runFor(60_000);
+		await site.locator('[data-account="login"]').waitFor();
+		assert.equal(await site.locator('[data-account="menu"]').isVisible(), false);
+		assert.equal(await site.locator("html").getAttribute("data-account-state"), "signed-out");
+		await site.close();
 		assert.ok(!(await adultContext.cookies(ORIGIN)).some((c) => c.name === "__Host-breinhap-session"));
 		await adult.goto("https://breinhap.com/");
 		await adult.waitForLoadState("networkidle");
@@ -338,7 +360,7 @@ test("browser: adult registration, approval, logout and central SSO web launch",
 		const central = await centralContext.newPage();
 		await central.goto(`${ORIGIN}/auth/start?web=1&lang=en`);
 		await central.waitForURL("https://breinhap.com/en/");
-		await central.getByRole("link", { name: "Aangemeld", exact: true }).waitFor();
+		await central.locator('[data-account="menu"]').waitFor();
 		assert.equal(await central.locator('[data-account="register"]').isVisible(), false);
 		assert.equal(centralVisits, 1, "the existing central session is reused without another email code");
 		assert.ok((await centralContext.cookies(ORIGIN)).some((c) => c.name === "__Host-breinhap-session" && c.httpOnly && c.secure));
