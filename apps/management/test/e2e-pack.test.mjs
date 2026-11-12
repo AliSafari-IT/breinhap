@@ -94,7 +94,7 @@ async function https(w, dir) {
 	execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=breinhap.com", "-addext", "subjectAltName=DNS:breinhap.com,DNS:management.breinhap.com", "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stdio: "ignore" });
 	const requests = [];
 	const server = createServer({ key: await readFile(join(dir, "key.pem")), cert: await readFile(join(dir, "cert.pem")) }, (req, res) => {
-		requests.push(`${req.method} ${req.headers.host}${req.url}`);
+		requests.push({ host: req.headers.host, line: `${req.method} ${req.url}` });
 		const upstream = http.request({ hostname: "127.0.0.1", port: w.s.port, path: req.url, method: req.method, headers: req.headers }, (back) => {
 			res.writeHead(back.statusCode, back.headers);
 			back.pipe(res);
@@ -168,7 +168,7 @@ test("browser: the fragment bootstrap, keyboard play, three widths and no outsid
 			assert.ok(!names.some((n) => n.includes("breinhap-session")), "no management cookie in a learner browser");
 			// every request stayed on the public origin and on /p
 			assert.ok(seen.every((u) => new URL(u).origin === "https://breinhap.com" && new URL(u).pathname.startsWith("/p")), seen.join("\n"));
-			assert.ok(front.requests.every((r) => !r.includes("management.breinhap.com")));
+			assert.ok(front.requests.every((r) => r.host === "breinhap.com"), "the browser only ever asked for the public Host");
 			await context.close();
 			await chrome.close();
 			await new Promise((resolve) => front.server.close(resolve));
