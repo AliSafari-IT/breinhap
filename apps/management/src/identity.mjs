@@ -714,6 +714,7 @@ export function createIdentity({
 		roleRequest,
 		grants,
 		store,
+		requesterOf,
 		audit,
 		ready: () => store.ready(),
 		readInvitation: (req) => readCookie(req, INVITE),

@@ -124,6 +124,13 @@ const M = {
 	unfinished: ["Beantwoord eerst de vraag.", "Answer the question first.", "Répondez d’abord à la question.", "Beantworte zuerst die Frage."],
 	errorTitle: ["Er ging iets mis", "Something went wrong", "Une erreur s’est produite", "Etwas ist schiefgelaufen"],
 	errorText: ["Probeer het over een poosje opnieuw.", "Try again in a little while.", "Réessayez dans un moment.", "Versuche es in einer Weile noch einmal."],
+	tooManyTitle: ["Even wachten", "Please wait a moment", "Patientez un instant", "Bitte einen Moment warten"],
+	tooManyText: [
+		"Er kwamen te veel aanvragen tegelijk. Probeer het over een minuut opnieuw; er is niets verloren gegaan.",
+		"Too many requests came in at once. Try again in a minute; nothing has been lost.",
+		"Trop de demandes sont arrivées en même temps. Réessayez dans une minute ; rien n’a été perdu.",
+		"Es kamen zu viele Anfragen auf einmal. Versuche es in einer Minute erneut; nichts ist verloren gegangen.",
+	],
 	continue: ["Ga verder", "Continue", "Continuer", "Weiter machen"],
 	footer: [
 		"Breinhap · geen account nodig · geen advertenties of tracking",

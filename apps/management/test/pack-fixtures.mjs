@@ -269,9 +269,9 @@ export function browser(w) {
 			api.store(res);
 			return res;
 		},
-		async post(path, fields, { origin = "https://breinhap.com", host = "breinhap.com", cookie } = {}) {
+		async post(path, fields, { origin = "https://breinhap.com", host = "breinhap.com", cookie, headers = {} } = {}) {
 			const body = new URLSearchParams(fields).toString();
-			const res = await w.s.call(path, { method: "POST", raw: { body }, origin, cookie: cookie ?? api.cookieHeader(), headers: { Host: host } });
+			const res = await w.s.call(path, { method: "POST", raw: { body }, origin, cookie: cookie ?? api.cookieHeader(), headers: { ...headers, Host: host } });
 			api.store(res);
 			return res;
 		},
