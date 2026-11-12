@@ -1,6 +1,6 @@
 import { LearningObject } from "../vendor/content-schema.mjs";
 import { studentPayload } from "../vendor/content-mission.mjs";
-import { Draft, PracticeError, fail } from "./model.mjs";
+import { Draft, PracticeError, fail, pages } from "./model.mjs";
 
 /**
  * Authoring of practice packs (breinhap#80). It composes the owner's own learning objects into a pack
@@ -275,6 +275,79 @@ export class PackAuthoring {
 			status: linkStatus(r, new Date(r.now)),
 		}));
 	}
+	// ── results (breinhap#83): the owner's own link attempts, nobody else's ────────────────────────
+
+	async ownerOnly(p, id) {
+		await this.practice.author(p, "practice.results");
+		await this.practice.owned(this.pool, p, id, false, true);
+		if ((await this.practice.eligibility(p.sub, p.membershipVersion)) !== "eligible") fail("gone");
+	}
+	/**
+	 * Attempts on this pack's links, newest first, with counts. Rows past their 30-day retention are
+	 * already hidden here, before any maintenance job has erased them. Answers are never listed.
+	 */
+	async results(p, id, { linkId } = {}) {
+		await this.ownerOnly(p, id);
+		const params = [this.workspace, id];
+		let filter = "";
+		if (linkId) {
+			params.push(linkId);
+			filter = " AND link_id = $3";
+		}
+		const { rows } = await this.pool.query(
+			`SELECT id, link_id AS "linkId", pack_version AS version, state, started_at AS "startedAt", completed_at AS "completedAt",
+			   closed_at AS "closedAt", server_score AS score, question_count AS "questionCount", delete_after AS "deleteAfter"
+			 FROM practice_attempts WHERE workspace_id = $1 AND pack_id = $2 AND delete_after > now()${filter}
+			 ORDER BY started_at DESC, id LIMIT 200`,
+			params,
+		);
+		const attempts = rows.map((r) => ({ ...r, status: attemptStatus(r), minutes: r.completedAt ? Math.max(1, Math.round((new Date(r.completedAt) - new Date(r.startedAt)) / 60000)) : null }));
+		return {
+			started: attempts.length,
+			completed: attempts.filter((a) => a.completedAt).length,
+			attempts,
+		};
+	}
+	/** One attempt. Before submission only its status: no provisional answers or correctness. */
+	async attempt(p, id, attemptId) {
+		await this.ownerOnly(p, id);
+		const { rows } = await this.pool.query(
+			`SELECT id, link_id AS "linkId", pack_version AS version, state, started_at AS "startedAt", completed_at AS "completedAt",
+			   closed_at AS "closedAt", server_score AS score, question_count AS "questionCount", delete_after AS "deleteAfter"
+			 FROM practice_attempts WHERE workspace_id = $1 AND pack_id = $2 AND id = $3 AND delete_after > now()`,
+			[this.workspace, id, /^[0-9a-f-]{36}$/.test(String(attemptId)) ? attemptId : "00000000-0000-0000-0000-000000000000"],
+		);
+		const row = rows[0] ?? fail("not_found");
+		const summary = { ...row, status: attemptStatus(row), minutes: row.completedAt ? Math.max(1, Math.round((new Date(row.completedAt) - new Date(row.startedAt)) / 60000)) : null };
+		if (!row.completedAt) return { ...summary, items: null };
+		const envelope = await this.practice.frozen(this.pool, id, row.version);
+		const answers = new Map(
+			(await this.pool.query("SELECT page_key, answer, server_correct FROM practice_answers WHERE workspace_id=$1 AND attempt_id=$2", [this.workspace, attemptId])).rows.map((r) => [r.page_key, r]),
+		);
+		const items = pages(envelope)
+			.filter((page) => page.kind === "question")
+			.map((page) => {
+				const q = page.question;
+				const saved = answers.get(page.key);
+				return {
+					step: page.step,
+					kind: q.kind,
+					prompt: q.prompt,
+					options: q.kind === "choice" ? q.options : undefined,
+					chosen: saved?.answer?.chosen,
+					placed: saved?.answer?.placed,
+					correct: saved?.server_correct ?? false,
+					correctAnswer: q.kind === "choice" ? q.options[q.answerIndex] : q.items,
+					explanation: q.explanation,
+				};
+			});
+		return { ...summary, items };
+	}
+	async deleteResults(p, id, attemptId) {
+		await this.practice.author(p, "practice.delete");
+		return this.practice.deleteAttempts(p, id, attemptId);
+	}
+
 	async freeze(p, id, expectedVersion) {
 		await this.practice.assign(p);
 		return this.practice.freeze(p, id, expectedVersion);
@@ -370,6 +443,12 @@ export class PackAuthoring {
 }
 
 export { PracticeError };
+
+/** What an attempt is, in the owner's words: never a provisional result. */
+export function attemptStatus(row) {
+	if (row.completedAt) return row.state === "closed" ? "submitted_done" : "submitted";
+	return row.state === "closed" ? "abandoned" : "active";
+}
 
 /** The state of a share link as the owner sees it. */
 export function linkStatus(row, now) {

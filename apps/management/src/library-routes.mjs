@@ -14,7 +14,7 @@ import {
 import { previewPage } from "./preview.mjs";
 import { publicationPage } from "./publishing-page.mjs";
 import { assignmentsPage } from "./assignments-page.mjs";
-import { learnerUrl, mintedPage, packEditorPage, packLinksPage, packsListPage } from "./packs-page.mjs";
+import { learnerUrl, mintedPage, packAttemptPage, packEditorPage, packLinksPage, packResultsPage, packsListPage } from "./packs-page.mjs";
 import { randomBytes } from "node:crypto";
 import { PackAuthoring } from "./practice/authoring.mjs";
 import { LINK_TARGETS } from "./directory.mjs";
@@ -629,9 +629,40 @@ async function handlePacks(req, url, { principal, practice, csrf, form, refused 
 		});
 	}
 
-	const match = /^\/bibliotheek\/packs\/([^/]+)(?:\/(dupliceren|archiveren|voorbeeld|vastleggen|links|links\/nieuw|links\/[^/]+\/(?:intrekken|roteren)))?$/.exec(path);
+	const match = /^\/bibliotheek\/packs\/([^/]+)(?:\/(dupliceren|archiveren|voorbeeld|vastleggen|links|links\/nieuw|links\/[^/]+\/(?:intrekken|roteren)|resultaten|resultaten\/verwijderen|resultaten\/[^/]+|resultaten\/[^/]+\/verwijderen))?$/.exec(path);
 	if (!match || !PACK_ID.test(match[1])) return notFound;
 	const [, id, action] = match;
+
+	// breinhap#83: the owner's results. Read lists and one attempt; deletion is a confirmed POST.
+	if (action === "resultaten" || action?.startsWith("resultaten/")) {
+		const parts = action.split("/");
+		const deleting = parts[1] === "verwijderen" || parts[2] === "verwijderen";
+		if (deleting) {
+			if (req.method !== "POST") return wrong("POST");
+			return guard(async () => {
+				if (form.get("bevestig") !== "1") return { status: 422, title: tr("Bevestig het verwijderen"), active: "/bibliotheek", body: ui`Vink aan dat je wilt verwijderen. Er is niets verwijderd. <a href="/bibliotheek/packs/${id}/resultaten">Terug</a>` };
+				const done = await practice.deleteResults(principal, id, parts[2] === "verwijderen" ? parts[1] : undefined);
+				return redirect(`/bibliotheek/packs/${id}/resultaten?verwijderd=${done.deleted}`);
+			});
+		}
+		if (req.method === "POST") return wrong("GET");
+		return guard(async () => {
+			if (parts[1]) {
+				const attempt = await practice.attempt(principal, id, parts[1]);
+				return { status: 200, title: tr("Poging"), active: "/bibliotheek", body: packAttemptPage({ id, attempt, csrf }), headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex" } };
+			}
+			const linkId = PACK_ID.test(url.searchParams.get("link") ?? "") ? url.searchParams.get("link") : undefined;
+			const [results, links] = await Promise.all([practice.results(principal, id, { linkId }), practice.links(principal, id).catch(() => [])]);
+			const deleted = url.searchParams.get("verwijderd");
+			return {
+				status: 200,
+				title: tr("Resultaten"),
+				active: "/bibliotheek",
+				body: packResultsPage({ id, links, filter: linkId, results, csrf, notice: deleted !== null ? notice(tr`Verwijderd: ${Number(deleted) || 0}.`) : "" }),
+				headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex" },
+			};
+		});
+	}
 
 	// breinhap#81: sharing. Freeze a version, then mint, rotate or revoke its single link.
 	if (action === "vastleggen" || action === "links" || action?.startsWith("links/")) {
