@@ -29,6 +29,7 @@ import { handleImports } from "./imports/routes.mjs";
 import { ImportStore } from "./imports/store.mjs";
 import { handleLibrary } from "./library-routes.mjs";
 import { PublishingStore } from "./publishing.mjs";
+import { AssignmentStore } from "./assignments.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
 import { S3Client } from "./uploads/s3.mjs";
@@ -106,6 +107,10 @@ export function createHandler({
 	content = directory ? new ContentStore({ directory }) : undefined,
 	// breinhap#33: publishing immutable reviewed packs, on the same content store
 	publishing = content ? new PublishingStore({ content }) : undefined,
+	// breinhap#34: assigning active publications to linked learners and groups
+	assignments = directory && identity?.store
+		? new AssignmentStore({ directory, membership: (sub) => identity.store.membership(sub) })
+		: undefined,
 	// breinhap#30: imports, on the same content store
 	imports = content ? new ImportStore({ content }) : undefined,
 	// breinhap#29: uploads (private object store + virus scanner); absent, the page says it is not set up
@@ -490,7 +495,7 @@ export function createHandler({
 				(await handleUploads(req, url, { identity, uploads, extractions })) ??
 				(await handleImports(req, url, { identity, imports })) ??
 				(await handleExtractions(req, url, { identity, extractions })) ??
-				(await handleLibrary(req, url, { identity, content, publishing, extractions }));
+				(await handleLibrary(req, url, { identity, content, publishing, assignments, extractions }));
 			if (result.raw) return send(result.status, result.body, result.type, result.headers);
 			if (result.status === 303)
 				return send(303, "", undefined, result.headers);

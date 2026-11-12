@@ -129,6 +129,7 @@ async function stack({ withDirectory = true, uploadsOf, extractionsOf, locale = 
 	const rows = new Map([
 		["admin", "breinhap.admin"],
 		["teacher", "breinhap.teacher"],
+		["tutor", "breinhap.tutor"],
 		["parent", "breinhap.parent"],
 	]);
 	const grants = async (sub) => ({
@@ -1413,4 +1414,167 @@ test("publishing (breinhap#33): an explicitly granted publisher releases an appr
 	const denied = await s.call("/bibliotheek/publicaties/prikkel-reactie/intrekken", { who: reviewer, method: "POST", form: {} });
 	assert.equal(denied.status, 403);
 	assert.match(denied.body, /Alleen aangewezen uitgevers kunnen inhoud publiceren/);
+});
+
+test("assigning (breinhap#34): a linked adult assigns, changes and revokes; roles, CSRF, Origin and publication state are enforced", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const parent = await s.login("parent");
+	const tutor = await s.login("tutor");
+	const boss = await s.login("admin");
+	const adminP = { sub: "admin", role: "breinhap.admin" };
+	const teacherP = { sub: "teacher", role: "breinhap.teacher" };
+	const parentP = { sub: "parent", role: "breinhap.parent" };
+	const tutorP = { sub: "tutor", role: "breinhap.tutor" };
+	const learner = await s.directory.createLearner(adminP, { displayName: "Leerling Een", schoolYear: 3 });
+	const group = await s.directory.createGroup(adminP, { name: "Klas 3A" });
+	await s.directory.addToGroup(adminP, { groupId: group, learnerId: learner });
+	await s.directory.link(adminP, teacherP, { groupId: group });
+	await s.directory.link(adminP, parentP, { learnerId: learner });
+	await s.directory.link(adminP, tutorP, { learnerId: learner });
+	await s.directory.link(adminP, tutorP, { groupId: group });
+
+	// a published, independently approved revision is the only assignable authority
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() });
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	await s.call("/bibliotheek/prikkel-reactie/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	await s.directory.grantCapability(adminP, parentP, "content.review");
+	await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: parent, method: "POST", form: { decision: "approved" } });
+	await s.directory.grantCapability(adminP, teacherP, "content.publish");
+	const published = await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", { who: teacher, method: "POST", form: { revision: "1" } });
+	assert.equal(published.status, 303);
+	const publicationId = (
+		await pool.query(
+			"SELECT id FROM content_publications WHERE workspace_id = $1 AND learning_object_id = 'prikkel-reactie' AND state = 'active'",
+			[s.workspace],
+		)
+	).rows[0].id;
+
+	// the link is on every assigner's library, never on the administrator's
+	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /href="\/bibliotheek\/toewijzen"/);
+	assert.match((await s.call("/bibliotheek", { who: parent })).body, /href="\/bibliotheek\/toewijzen"/);
+	assert.doesNotMatch((await s.call("/bibliotheek", { who: boss })).body, /href="\/bibliotheek\/toewijzen"/);
+	assert.equal((await s.call("/bibliotheek/toewijzen", { who: boss })).status, 403);
+
+	// the page lists only the targets the current role may use
+	const teacherPage = await s.call("/bibliotheek/toewijzen", { who: teacher });
+	assert.equal(teacherPage.status, 200);
+	assert.match(teacherPage.body, /Inhoud toewijzen/);
+	assert.match(teacherPage.body, /Prikkel en reactie/);
+	assert.match(teacherPage.body, /Klas 3A/);
+	assert.doesNotMatch(teacherPage.body, /Leerling Een/);
+	const parentPage = await s.call("/bibliotheek/toewijzen", { who: parent });
+	assert.match(parentPage.body, /Leerling Een/);
+	assert.doesNotMatch(parentPage.body, /Klas 3A/);
+	const tutorPage = await s.call("/bibliotheek/toewijzen", { who: tutor });
+	assert.match(tutorPage.body, /Leerling Een/);
+	assert.match(tutorPage.body, /Klas 3A/);
+
+	// CSRF and Origin are required for every change
+	assert.equal(
+		(await s.call("/bibliotheek/toewijzen", {
+			who: teacher,
+			method: "POST",
+			form: { publicationId, audience: `group:${group}`, csrf: "forged" },
+		})).status,
+		403,
+	);
+	assert.equal(
+		(await s.call("/bibliotheek/toewijzen", {
+			who: teacher,
+			method: "POST",
+			form: { publicationId, audience: `group:${group}` },
+			origin: "https://evil.example",
+		})).status,
+		403,
+	);
+	assert.equal(
+		(await s.call("/bibliotheek/toewijzen", {
+			who: boss,
+			method: "POST",
+			form: { publicationId, audience: `group:${group}` },
+		})).status,
+		403,
+	);
+
+	// a teacher assigns to a linked group, never to an individual learner
+	assert.equal(
+		(await s.call("/bibliotheek/toewijzen", {
+			who: teacher,
+			method: "POST",
+			form: { publicationId, audience: `learner:${learner}` },
+		})).status,
+		404,
+	);
+	const assigned = await s.call("/bibliotheek/toewijzen", {
+		who: teacher,
+		method: "POST",
+		form: { publicationId, audience: `group:${group}` },
+	});
+	assert.equal(assigned.status, 303);
+	assert.equal(assigned.headers.location, "/bibliotheek/toewijzen?toegewezen=1");
+	const afterAssign = await s.call(assigned.headers.location, { who: teacher });
+	assert.match(afterAssign.body, /De inhoud is toegewezen\./);
+	assert.match(afterAssign.body, /Beschikbaar/);
+	assert.match(afterAssign.body, /Klas 3A/);
+
+	// one active assignment per publication and target
+	const duplicate = await s.call("/bibliotheek/toewijzen", {
+		who: teacher,
+		method: "POST",
+		form: { publicationId, audience: `group:${group}` },
+	});
+	assert.equal(duplicate.status, 409);
+	assert.match(duplicate.body, /al aan dit doel toegewezen/);
+
+	// the window can change only with the current version
+	const row = (
+		await pool.query("SELECT id, version FROM content_assignments WHERE workspace_id = $1 AND group_id = $2", [s.workspace, group])
+	).rows[0];
+	const day = (offset) => new Date(Date.now() + offset * 86400_000).toISOString().slice(0, 10);
+	const changed = await s.call(`/bibliotheek/toewijzen/${row.id}`, {
+		who: teacher,
+		method: "POST",
+		form: { expectedVersion: String(row.version), notBefore: day(1), availableUntil: day(30) },
+	});
+	assert.equal(changed.status, 303);
+	assert.equal(changed.headers.location, "/bibliotheek/toewijzen?gewijzigd=1");
+	assert.match((await s.call(changed.headers.location, { who: teacher })).body, /De periode is gewijzigd\./);
+	const stale = await s.call(`/bibliotheek/toewijzen/${row.id}`, {
+		who: teacher,
+		method: "POST",
+		form: { expectedVersion: String(row.version), notBefore: day(1), availableUntil: day(30) },
+	});
+	assert.equal(stale.status, 409);
+	assert.match(stale.body, /intussen gewijzigd/);
+
+	// explicit revocation keeps the history
+	const revoked = await s.call(`/bibliotheek/toewijzen/${row.id}/intrekken`, { who: teacher, method: "POST", form: {} });
+	assert.equal(revoked.status, 303);
+	assert.equal(revoked.headers.location, "/bibliotheek/toewijzen?ingetrokken=1");
+	const afterRevoke = await s.call(revoked.headers.location, { who: teacher });
+	assert.match(afterRevoke.body, /De toewijzing is ingetrokken\./);
+	assert.match(afterRevoke.body, /Ingetrokken/);
+
+	// a parent assigns to their linked learner
+	const parentAssigned = await s.call("/bibliotheek/toewijzen", {
+		who: parent,
+		method: "POST",
+		form: { publicationId, audience: `learner:${learner}` },
+	});
+	assert.equal(parentAssigned.status, 303);
+	assert.match((await s.call("/bibliotheek/toewijzen", { who: parent })).body, /Leerling Een/);
+
+	// withdrawing the publication ends future access and leaves a clear state
+	const withdrawn = await s.call("/bibliotheek/publicaties/prikkel-reactie/intrekken", { who: teacher, method: "POST", form: {} });
+	assert.equal(withdrawn.status, 303);
+	const withdrawnPage = await s.call("/bibliotheek/toewijzen", { who: parent });
+	assert.match(withdrawnPage.body, /Publicatie ingetrokken/);
+	assert.match(withdrawnPage.body, /Er is nog geen actieve publicatie om toe te wijzen/);
+	const gone = await s.call("/bibliotheek/toewijzen", {
+		who: parent,
+		method: "POST",
+		form: { publicationId, audience: `learner:${learner}` },
+	});
+	assert.equal(gone.status, 404);
 });
