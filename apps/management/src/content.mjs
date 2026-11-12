@@ -273,6 +273,18 @@ export class ContentStore {
 			submittedAt: row.submittedAt ?? null,
 			submittedBy: row.submittedBy ?? null,
 		}));
+		const published = await this.pool.query(
+			`SELECT id, revision, pack_version AS "version", pack_hash AS "hash", state,
+			   published_at AS "publishedAt", state_changed_at AS "stateChangedAt"
+			 FROM content_publications
+			 WHERE workspace_id = $1 AND learning_object_id = $2
+			 ORDER BY published_at DESC, pack_version DESC`,
+			[this.workspace, id],
+		);
+		const publications = published.rows.map((row) => ({
+			...row,
+			stateChangedAt: row.stateChangedAt ?? null,
+		}));
 		const latest = revisions[0];
 		return {
 			id,
@@ -281,6 +293,9 @@ export class ContentStore {
 			sources: draft.sources,
 			updatedAt: draft.updatedAt,
 			revisions,
+			publications,
+			activePublication: publications.find((publication) => publication.state === "active") ?? null,
+			latestPublication: publications[0] ?? null,
 			draftChanged: Boolean(latest && (latest.sourceVersion == null || latest.sourceVersion !== draft.version)),
 		};
 	}
@@ -305,7 +320,9 @@ export class ContentStore {
 		const { rows } = await this.pool.query(
 			`SELECT lo.id, lo.subject, lo.grade, lo.title, d.version, d.updated_at AS "updatedAt",
 			   latest.revision AS "latestRevision", latest.decision AS "latestDecision",
-			   latest.submitted_at AS "latestSubmittedAt", latest.source_version AS "latestSourceVersion"
+			   latest.submitted_at AS "latestSubmittedAt", latest.source_version AS "latestSourceVersion",
+			   published.revision AS "publicationRevision", published.pack_version AS "publicationVersion",
+			   published.state AS "publicationState"
 			 FROM learning_objects lo JOIN learning_object_drafts d ON d.workspace_id = lo.workspace_id AND d.learning_object_id = lo.id
 			 LEFT JOIN LATERAL (
 			   SELECT r.revision, r.source_version, v.decision, s.submitted_at
@@ -314,6 +331,12 @@ export class ContentStore {
 			   LEFT JOIN revision_submissions s ON s.workspace_id = r.workspace_id AND s.learning_object_id = r.learning_object_id AND s.revision = r.revision
 			   WHERE r.workspace_id = lo.workspace_id AND r.learning_object_id = lo.id ORDER BY r.revision DESC LIMIT 1
 			 ) latest ON TRUE
+			 LEFT JOIN LATERAL (
+			   SELECT p.revision, p.pack_version, p.state
+			   FROM content_publications p
+			   WHERE p.workspace_id = lo.workspace_id AND p.learning_object_id = lo.id
+			   ORDER BY p.published_at DESC, p.pack_version DESC LIMIT 1
+			 ) published ON TRUE
 			 WHERE lo.workspace_id = $1 AND lo.owner_sub = $2 AND lo.archived_at IS NULL${filter}
 			 ORDER BY d.updated_at DESC, lo.id`,
 			params,
@@ -322,6 +345,9 @@ export class ContentStore {
 			...row,
 			latestDecision: row.latestDecision ?? null,
 			latestSubmittedAt: row.latestSubmittedAt ?? null,
+			publicationRevision: row.publicationRevision ?? null,
+			publicationVersion: row.publicationVersion ?? null,
+			publicationState: row.publicationState ?? null,
 			draftChanged: Boolean(
 				row.latestRevision &&
 					(row.latestSourceVersion == null || row.latestSourceVersion !== row.version),

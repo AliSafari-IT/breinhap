@@ -40,6 +40,10 @@ const YEAR = (y) => uiLocale() === "nl" ? `${y}${y === 1 ? "ste" : "de"} jaar` :
 
 /** What the library shows for an object: its draft, and where its latest revision stands. */
 export function stateOf(row) {
+	if (row.publicationState === "active")
+		return { label: tr`Gepubliceerd · revisie ${row.publicationRevision}`, tone: "ok" };
+	if (row.publicationState === "withdrawn")
+		return { label: tr`Publicatie ingetrokken · revisie ${row.publicationRevision}`, tone: "pending" };
 	if (!row.latestRevision) return { label: tr("Concept"), tone: "draft" };
 	if (row.latestDecision === "approved") {
 		if (row.draftChanged)
@@ -344,7 +348,7 @@ ${isNew ? "" : ui`<label class="remove"><input type="checkbox" name="${at("remov
  * `notice` an alert above the form. New objects get the id field; existing ones keep theirs. `hidden`
  * fields travel with the form (breinhap#31: the extraction a new draft is made from).
  */
-export function editorPage({ values, errors = {}, notice = "", csrf, id, version, revisions = [], draftChanged = false, hidden = {} }) {
+export function editorPage({ values, errors = {}, notice = "", csrf, id, version, revisions = [], publications = [], draftChanged = false, canPublish = false, hidden = {} }) {
 	const missionCount = Math.max(
 		0,
 		...Object.keys(values)
@@ -354,16 +358,42 @@ export function editorPage({ values, errors = {}, notice = "", csrf, id, version
 	);
 	const slots = Math.min(SLOTS.missions, missionCount + 1);
 	const errorCount = Object.keys(errors).length;
+	const publicationOf = (revision) =>
+		publications.find((publication) => publication.revision === revision && publication.state === "active") ??
+		publications.find((publication) => publication.revision === revision) ??
+		null;
+	const activePublication = publications.find((publication) => publication.state === "active") ?? null;
+	const publicationNotice = canPublish
+		? activePublication
+			? ui`<div class="notice" role="status"><p>${tr`Gepubliceerd: revisie ${activePublication.revision} (packversie ${activePublication.version}).`}</p></div>`
+			: ui`<p>${tr("Nog geen actieve publicatie.")}</p>`
+		: "";
+	const publicationAction = (revision) => {
+		const publication = publicationOf(revision);
+		if (publication?.state === "active")
+			return ui`<form method="post" action="/bibliotheek/publicaties/${esc(id)}/intrekken"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>${tr("Intrekken")}</button></form>`;
+		if (publication)
+			return ui`<form method="post" action="/bibliotheek/publicaties/${esc(id)}/herstellen"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${revision}"><button>${tr("Opnieuw publiceren")}</button></form>`;
+		return ui`<form method="post" action="/bibliotheek/publicaties/${esc(id)}/publiceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${revision}"><button>${tr("Publiceren")}</button></form>`;
+	};
 	const history = id
 		? ui`<p><a href="/bibliotheek/${esc(id)}/voorbeeld">Voorbeeld bekijken zoals een leerling</a> <small>(het laatst opgeslagen concept)</small></p>${
 				draftChanged
 					? ui`<div class="notice" role="status"><p>${tr("Je concept is gewijzigd na de laatste revisie. Leg een nieuwe revisie vast en bied die aan ter nakijking.")}</p></div>`
 					: ""
-			}<h2>Geschiedenis</h2>${
+			}${publicationNotice}<h2>Geschiedenis</h2>${
 				revisions.length
 					? ui`<ol class="history">${revisions
 							.map((r) => {
 								const status = r.decision === "approved" ? tr("goedgekeurd") : r.decision === "changes_requested" ? tr("aanpassen gevraagd") : tr("nog niet nagekeken");
+								const publication = publicationOf(r.revision);
+								const publicationStatus = publication
+									? publication.state === "active"
+										? tr` · gepubliceerd (packversie ${publication.version})`
+										: publication.state === "withdrawn"
+											? tr` · publicatie ingetrokken`
+											: tr` · vervangen`
+									: "";
 								const offered = r.submittedAt ? ui` <span>${tr`Ingediend op ${new Date(r.submittedAt).toLocaleString(formatLocale(), { timeZone: "Europe/Brussels" })}.`}</span>` : "";
 								const decided = r.decision
 									? ui` <span>${r.decision === "approved" ? tr`Goedgekeurd door ${r.reviewer}.` : tr`Aanpassingen gevraagd door ${r.reviewer}.`}</span>`
@@ -377,7 +407,8 @@ export function editorPage({ values, errors = {}, notice = "", csrf, id, version
 								const offer = canOffer
 									? ui`<form method="post" action="/bibliotheek/${esc(id)}/aanbieden"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${r.revision}"><button>${tr("Ter nakijking aanbieden")}</button></form>`
 									: "";
-								return ui`<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString(formatLocale(), { timeZone: "Europe/Brussels" })} · ${status} · <a href="/bibliotheek/${esc(id)}/voorbeeld?revisie=${r.revision}">Voorbeeld</a>${offered}${decided}${note}${offer}</li>`;
+								const publish = canPublish && r.decision === "approved" ? publicationAction(r.revision) : "";
+								return ui`<li>Revisie ${r.revision} · ${new Date(r.createdAt).toLocaleString(formatLocale(), { timeZone: "Europe/Brussels" })} · ${status}${publicationStatus} · <a href="/bibliotheek/${esc(id)}/voorbeeld?revisie=${r.revision}">Voorbeeld</a>${offered}${decided}${note}${offer}${publish}</li>`;
 							})
 							.join("")}</ol>`
 					: ui`<p>Nog geen vastgelegde revisies. Leg een revisie vast wanneer de inhoud klaar is om na te kijken.</p>`
@@ -412,7 +443,7 @@ ${history}<p>`;
 }
 
 /** The library: filters, then one row per object with its subject, year and state. */
-export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "", canReview = false, pending = 0 } = {}) {
+export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "", canReview = false, canPublish = false, pending = 0 } = {}) {
 	const list = rows.length
 		? ui`<table class="library"><caption>Jouw leerobjecten</caption><thead><tr><th scope="col">Titel</th><th scope="col">Vak</th><th scope="col">Jaar</th><th scope="col">Status</th><th scope="col">Gewijzigd</th></tr></thead><tbody>${rows
 				.map((row) => {
@@ -421,7 +452,7 @@ export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "
 				})
 				.join("")}</tbody></table>`
 		: ui`<p>Geen leerobjecten gevonden.</p>`;
-	return ui`${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p>${canReview ? ui`<p><a class="action" href="/bibliotheek/nakijken">${tr("Inhoud nakijken")}${pending ? ui` (${pending})` : ""}</a></p>` : ""}<form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
+	return ui`${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p>${canReview ? ui`<p><a class="action" href="/bibliotheek/nakijken">${tr("Inhoud nakijken")}${pending ? ui` (${pending})` : ""}</a></p>` : ""}${canPublish ? ui`<p><a class="action" href="/bibliotheek/publicaties">${tr("Publicaties beheren")}</a></p>` : ""}<form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
 <p><a class="action" href="/bibliotheek/nieuw">Nieuw leerobject</a></p>${list}<p>`;
 }
 

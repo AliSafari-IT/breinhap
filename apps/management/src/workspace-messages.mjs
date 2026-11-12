@@ -3455,5 +3455,233 @@ export const MESSAGES = {
 		"en": "Revision {0} submitted for review.",
 		"fr": "Révision {0} soumise pour relecture.",
 		"de": "Revision {0} zur Prüfung eingereicht."
+	},
+	"Publicaties": {
+		"nl": "Publicaties",
+		"en": "Publications",
+		"fr": "Publications",
+		"de": "Veröffentlichungen"
+	},
+	"Publicaties beheren": {
+		"nl": "Publicaties beheren",
+		"en": "Manage publications",
+		"fr": "Gérer les publications",
+		"de": "Veröffentlichungen verwalten"
+	},
+	"Publicaties zijn nog niet ingericht op deze server.": {
+		"nl": "Publicaties zijn nog niet ingericht op deze server.",
+		"en": "Publishing is not configured on this server yet.",
+		"fr": "La publication n’est pas encore configurée sur ce serveur.",
+		"de": "Veröffentlichungen sind auf diesem Server noch nicht eingerichtet."
+	},
+	"Alleen aangewezen uitgevers kunnen inhoud publiceren.": {
+		"nl": "Alleen aangewezen uitgevers kunnen inhoud publiceren.",
+		"en": "Only designated publishers can publish content.",
+		"fr": "Seuls les éditeurs désignés peuvent publier du contenu.",
+		"de": "Nur benannte Veröffentlichende können Inhalte veröffentlichen."
+	},
+	"Gepubliceerd · revisie {0}": {
+		"nl": "Gepubliceerd · revisie {0}",
+		"en": "Published · revision {0}",
+		"fr": "Publiée · révision {0}",
+		"de": "Veröffentlicht · Revision {0}"
+	},
+	"Publicatie ingetrokken · revisie {0}": {
+		"nl": "Publicatie ingetrokken · revisie {0}",
+		"en": "Publication withdrawn · revision {0}",
+		"fr": "Publication retirée · révision {0}",
+		"de": "Veröffentlichung zurückgezogen · Revision {0}"
+	},
+	"Gepubliceerd: revisie {0} (packversie {1}).": {
+		"nl": "Gepubliceerd: revisie {0} (packversie {1}).",
+		"en": "Published: revision {0} (pack version {1}).",
+		"fr": "Publiée : révision {0} (version du paquet {1}).",
+		"de": "Veröffentlicht: Revision {0} (Paketversion {1})."
+	},
+	"Nog geen actieve publicatie.": {
+		"nl": "Nog geen actieve publicatie.",
+		"en": "No active publication yet.",
+		"fr": "Aucune publication active pour l’instant.",
+		"de": "Noch keine aktive Veröffentlichung."
+	},
+	"Intrekken": {
+		"nl": "Intrekken",
+		"en": "Withdraw",
+		"fr": "Retirer",
+		"de": "Zurückziehen"
+	},
+	"Opnieuw publiceren": {
+		"nl": "Opnieuw publiceren",
+		"en": "Publish again",
+		"fr": "Publier à nouveau",
+		"de": "Erneut veröffentlichen"
+	},
+	"Publiceren": {
+		"nl": "Publiceren",
+		"en": "Publish",
+		"fr": "Publier",
+		"de": "Veröffentlichen"
+	},
+	"· gepubliceerd (packversie {0})": {
+		"nl": "· gepubliceerd (packversie {0})",
+		"en": "· published (pack version {0})",
+		"fr": "· publiée (version du paquet {0})",
+		"de": "· veröffentlicht (Paketversion {0})"
+	},
+	"· publicatie ingetrokken": {
+		"nl": "· publicatie ingetrokken",
+		"en": "· publication withdrawn",
+		"fr": "· publication retirée",
+		"de": "· Veröffentlichung zurückgezogen"
+	},
+	"· vervangen": {
+		"nl": "· vervangen",
+		"en": "· superseded",
+		"fr": "· remplacée",
+		"de": "· ersetzt"
+	},
+	"Gepubliceerd (packversie {0})": {
+		"nl": "Gepubliceerd (packversie {0})",
+		"en": "Published (pack version {0})",
+		"fr": "Publiée (version du paquet {0})",
+		"de": "Veröffentlicht (Paketversion {0})"
+	},
+	"Ingetrokken": {
+		"nl": "Ingetrokken",
+		"en": "Withdrawn",
+		"fr": "Retirée",
+		"de": "Zurückgezogen"
+	},
+	"Vervangen": {
+		"nl": "Vervangen",
+		"en": "Superseded",
+		"fr": "Remplacée",
+		"de": "Ersetzt"
+	},
+	"Nog niet gepubliceerd": {
+		"nl": "Nog niet gepubliceerd",
+		"en": "Not published yet",
+		"fr": "Pas encore publiée",
+		"de": "Noch nicht veröffentlicht"
+	},
+	"Vervangt de huidige publicatie.": {
+		"nl": "Vervangt de huidige publicatie.",
+		"en": "Replaces the current publication.",
+		"fr": "Remplace la publication actuelle.",
+		"de": "Ersetzt die aktuelle Veröffentlichung."
+	},
+	"Goedgekeurde revisies": {
+		"nl": "Goedgekeurde revisies",
+		"en": "Approved revisions",
+		"fr": "Révisions approuvées",
+		"de": "Genehmigte Revisionen"
+	},
+	"Gepubliceerd op {0}": {
+		"nl": "Gepubliceerd op {0}",
+		"en": "Published on {0}",
+		"fr": "Publiée le {0}",
+		"de": "Veröffentlicht am {0}"
+	},
+	"Er zijn geen goedgekeurde revisies om te publiceren.": {
+		"nl": "Er zijn geen goedgekeurde revisies om te publiceren.",
+		"en": "There are no approved revisions to publish.",
+		"fr": "Il n’y a aucune révision approuvée à publier.",
+		"de": "Es gibt keine genehmigten Revisionen zum Veröffentlichen."
+	},
+	"Publiceer alleen inhoud die onafhankelijk is nagekeken. Leerlingen krijgen enkel de actieve publicatie. Wat leerlingen al kregen, kan niet worden teruggehaald.": {
+		"nl": "Publiceer alleen inhoud die onafhankelijk is nagekeken. Leerlingen krijgen enkel de actieve publicatie. Wat leerlingen al kregen, kan niet worden teruggehaald.",
+		"en": "Publish only content that has been independently reviewed. Students receive only the active publication. What students already received cannot be recalled.",
+		"fr": "Ne publiez que du contenu relu de manière indépendante. Les élèves ne reçoivent que la publication active. Ce que les élèves ont déjà reçu ne peut pas être retiré.",
+		"de": "Veröffentlichen Sie nur unabhängig geprüfte Inhalte. Schüler erhalten nur die aktive Veröffentlichung. Was Schüler bereits erhalten haben, kann nicht zurückgeholt werden."
+	},
+	"Revisie {0} is gepubliceerd.": {
+		"nl": "Revisie {0} is gepubliceerd.",
+		"en": "Revision {0} has been published.",
+		"fr": "La révision {0} a été publiée.",
+		"de": "Revision {0} wurde veröffentlicht."
+	},
+	"Revisie {0} is opnieuw gepubliceerd.": {
+		"nl": "Revisie {0} is opnieuw gepubliceerd.",
+		"en": "Revision {0} has been published again.",
+		"fr": "La révision {0} a été publiée à nouveau.",
+		"de": "Revision {0} wurde erneut veröffentlicht."
+	},
+	"De publicatie is ingetrokken.": {
+		"nl": "De publicatie is ingetrokken.",
+		"en": "The publication has been withdrawn.",
+		"fr": "La publication a été retirée.",
+		"de": "Die Veröffentlichung wurde zurückgezogen."
+	},
+	"Terug naar de publicaties": {
+		"nl": "Terug naar de publicaties",
+		"en": "Back to publications",
+		"fr": "Retour aux publications",
+		"de": "Zurück zu den Veröffentlichungen"
+	},
+	"Dit leerobject of deze revisie bestaat niet.": {
+		"nl": "Dit leerobject of deze revisie bestaat niet.",
+		"en": "This learning object or revision does not exist.",
+		"fr": "Cet objet d’apprentissage ou cette révision n’existe pas.",
+		"de": "Dieses Lernobjekt oder diese Revision existiert nicht."
+	},
+	"Deze revisie is nog niet goedgekeurd.": {
+		"nl": "Deze revisie is nog niet goedgekeurd.",
+		"en": "This revision has not been approved yet.",
+		"fr": "Cette révision n’est pas encore approuvée.",
+		"de": "Diese Revision ist noch nicht genehmigt."
+	},
+	"Deze revisie is niet onafhankelijk nagekeken.": {
+		"nl": "Deze revisie is niet onafhankelijk nagekeken.",
+		"en": "This revision was not independently reviewed.",
+		"fr": "Cette révision n’a pas été relue de manière indépendante.",
+		"de": "Diese Revision wurde nicht unabhängig geprüft."
+	},
+	"Deze revisie is al gepubliceerd.": {
+		"nl": "Deze revisie is al gepubliceerd.",
+		"en": "This revision has already been published.",
+		"fr": "Cette révision a déjà été publiée.",
+		"de": "Diese Revision wurde bereits veröffentlicht."
+	},
+	"Niet ingetrokken": {
+		"nl": "Niet ingetrokken",
+		"en": "Not withdrawn",
+		"fr": "Non retirée",
+		"de": "Nicht zurückgezogen"
+	},
+	"Er is nog geen actieve publicatie om in te trekken.": {
+		"nl": "Er is nog geen actieve publicatie om in te trekken.",
+		"en": "There is no active publication to withdraw.",
+		"fr": "Il n’y a aucune publication active à retirer.",
+		"de": "Es gibt keine aktive Veröffentlichung zum Zurückziehen."
+	},
+	"Deze inhoud gebruikt een schemaversie die publicatie niet ondersteunt.": {
+		"nl": "Deze inhoud gebruikt een schemaversie die publicatie niet ondersteunt.",
+		"en": "This content uses a schema version that publishing does not support.",
+		"fr": "Ce contenu utilise une version de schéma que la publication ne prend pas en charge.",
+		"de": "Dieser Inhalt verwendet eine Schemaversion, die das Veröffentlichen nicht unterstützt."
+	},
+	"Deze revisie is niet klaar om te publiceren:": {
+		"nl": "Deze revisie is niet klaar om te publiceren:",
+		"en": "This revision is not ready to publish:",
+		"fr": "Cette révision n’est pas prête à être publiée :",
+		"de": "Diese Revision ist nicht bereit zur Veröffentlichung:"
+	},
+	"De publicatie is intussen gewijzigd. Probeer opnieuw.": {
+		"nl": "De publicatie is intussen gewijzigd. Probeer opnieuw.",
+		"en": "The publication has changed in the meantime. Try again.",
+		"fr": "La publication a changé entre-temps. Réessayez.",
+		"de": "Die Veröffentlichung hat sich inzwischen geändert. Versuchen Sie es erneut."
+	},
+	"Deze inhoud kan niet als pakket worden gepubliceerd.": {
+		"nl": "Deze inhoud kan niet als pakket worden gepubliceerd.",
+		"en": "This content cannot be published as a pack.",
+		"fr": "Ce contenu ne peut pas être publié sous forme de paquet.",
+		"de": "Dieser Inhalt kann nicht als Paket veröffentlicht werden."
+	},
+	"Niet gepubliceerd": {
+		"nl": "Niet gepubliceerd",
+		"en": "Not published",
+		"fr": "Non publiée",
+		"de": "Nicht veröffentlicht"
 	}
 };
