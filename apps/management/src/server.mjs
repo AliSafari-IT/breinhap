@@ -32,6 +32,8 @@ import { PublishingStore } from "./publishing.mjs";
 import { AssignmentStore } from "./assignments.mjs";
 import { PracticeStore } from "./practice/store.mjs";
 import { PackAuthoring } from "./practice/authoring.mjs";
+import { PracticeLearner } from "./practice/learner.mjs";
+import { createLearnerHandler, PUBLIC_HOST } from "./learner-server.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
 import { S3Client } from "./uploads/s3.mjs";
@@ -113,9 +115,9 @@ export function createHandler({
 	assignments = directory && identity?.store
 		? new AssignmentStore({ directory, membership: (sub) => identity.store.membership(sub) })
 		: undefined,
-	// breinhap#80: practice-pack authoring on the closed practice storage (no links or learner routes yet)
-	practice = directory && content
-		? new PackAuthoring({ practice: new PracticeStore({
+	// breinhap#80: the practice storage, shared by pack authoring (#80/#81) and the public learner (#82)
+	practiceStore = directory && content
+		? new PracticeStore({
 				directory,
 				publishedContent: publishing,
 				// the owner must still be an active parent/tutor/teacher on the membership version the link was minted on
@@ -131,8 +133,11 @@ export function createHandler({
 							},
 						}
 					: undefined,
-			}), content })
+			})
 		: undefined,
+	practice = practiceStore && content ? new PackAuthoring({ practice: practiceStore, content }) : undefined,
+	// breinhap#82: the isolated public learner player (breinhap.com/p); only dispatched for that exact Host
+	learner = practiceStore ? new PracticeLearner(practiceStore) : undefined,
 	// breinhap#30: imports, on the same content store
 	imports = content ? new ImportStore({ content }) : undefined,
 	// breinhap#29: uploads (private object store + virus scanner); absent, the page says it is not set up
@@ -140,6 +145,7 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
+	const learnerHandle = learner ? createLearnerHandler({ learner }) : undefined;
 	const handle = async (req, res) => {
 		const send = (
 			status,
@@ -167,6 +173,9 @@ export function createHandler({
 			});
 			res.end(req.method === "HEAD" ? undefined : body);
 		};
+		// breinhap#82: the public learner Host is served by its own handler, before any identity or session
+		// code, and nothing else is served on it. Without practice storage the Host stays misdirected (421).
+		if (req.headers.host === PUBLIC_HOST && learnerHandle) return learnerHandle(req, res);
 		// Match the real request Host, never X-Forwarded-Host; only origin-form targets are accepted.
 		if (
 			req.headers.host !== "management.breinhap.com" ||
@@ -176,6 +185,8 @@ export function createHandler({
 			return send(421, tr("Misdirected request"), "text/plain; charset=utf-8");
 		}
 		const url = new URL(req.url, origin);
+		// the learner paths exist on the public Host only; the management Host never serves them
+		if (url.pathname === "/p" || url.pathname.startsWith("/p/")) return send(404, "Not found", "text/plain; charset=utf-8");
 		const page = (title, content, active, session) => documentPage(title, content, active, session, url.pathname, url.search);
 		const directoryUnavailable = (session) =>
 			page(
