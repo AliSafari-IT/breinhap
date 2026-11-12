@@ -275,6 +275,9 @@ export class AssignmentStore {
 			).rows[0];
 			if (!row) fail("not_found");
 			if (row.version !== expectedVersion) fail("stale");
+			// A known id is not authority: the target must still be in the adult's current scope.
+			const kind = row.learner_id ? "learner" : "group";
+			await this.targetVisible(p, kind, row.learner_id ?? row.group_id);
 			const now = await this.time(db);
 			const { notBefore, availableUntil } = windowOf(
 				{
@@ -348,18 +351,19 @@ export class AssignmentStore {
 				 WHERE a.workspace_id = $1 AND a.revoked_at IS NULL
 				   AND a.not_before <= $2
 				   AND (a.available_until IS NULL OR a.available_until > $2)
+				   AND EXISTS (SELECT 1 FROM learners l
+				                WHERE l.workspace_id = a.workspace_id AND l.id = $3
+				                  AND l.archived_at IS NULL)
 				   AND (
 				     (a.learner_id = $3
-				       AND EXISTS (SELECT 1 FROM learners l
-				                    WHERE l.workspace_id = a.workspace_id AND l.id = $3
-				                      AND l.archived_at IS NULL)
 				       AND EXISTS (SELECT 1 FROM adult_links al
 				                    WHERE al.workspace_id = a.workspace_id AND al.adult_sub = a.assigned_by
 				                      AND al.learner_id = $3 AND al.revoked_at IS NULL))
 				     OR
 				     (a.group_id IS NOT NULL
 				       AND EXISTS (SELECT 1 FROM group_learners gl
-				                    JOIN groups g ON g.id = gl.group_id AND g.archived_at IS NULL
+				                    JOIN groups g ON g.id = gl.group_id
+				                      AND g.workspace_id = a.workspace_id AND g.archived_at IS NULL
 				                    WHERE gl.group_id = a.group_id AND gl.learner_id = $3)
 				       AND EXISTS (SELECT 1 FROM adult_links al
 				                    WHERE al.workspace_id = a.workspace_id AND al.adult_sub = a.assigned_by

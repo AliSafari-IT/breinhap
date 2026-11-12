@@ -377,7 +377,7 @@ test("membership, link and group changes end future access at read time", async 
 	const learner = await f.learner();
 	const link = await f.link(parent, { learnerId: learner });
 	const publication = await f.publication();
-	await f.assignments.assign(parent, {
+	const assignment = await f.assignments.assign(parent, {
 		publicationId: publication.id,
 		audienceKind: "learner",
 		audienceId: learner,
@@ -407,6 +407,13 @@ test("membership, link and group changes end future access at read time", async 
 	await f.directory.unlink(f.boss, link);
 	assert.deepEqual(await f.assignments.availableForLearner(learner), []);
 	assert.deepEqual(await f.assignments.list(parent), []);
+	// a known id and current version are not authority: the target left the adult's scope
+	await rejects(
+		f.assignments.update(parent, assignment.id, 1, {
+			availableUntil: iso(now + 30 * DAY),
+		}),
+		"not_found",
+	);
 
 	// a group assignment follows current group membership only
 	const teacher = adult("teacher");
@@ -423,6 +430,12 @@ test("membership, link and group changes end future access at read time", async 
 	});
 	assert.equal((await f.assignments.availableForLearner(member)).length, 1);
 	assert.deepEqual(await f.assignments.availableForLearner(outsider), []);
+	// archiving a learner ends a group assignment too, even though the membership row stays
+	const archived = await f.learner("Gearchiveerd");
+	await f.directory.addToGroup(f.boss, { groupId: group, learnerId: archived });
+	assert.equal((await f.assignments.availableForLearner(archived)).length, 1);
+	await f.directory.archiveLearner(f.boss, archived);
+	assert.deepEqual(await f.assignments.availableForLearner(archived), []);
 	await f.directory.removeFromGroup(f.boss, { groupId: group, learnerId: member });
 	assert.deepEqual(await f.assignments.availableForLearner(member), []);
 });
