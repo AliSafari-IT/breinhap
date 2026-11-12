@@ -168,7 +168,7 @@ test("browser: the fragment bootstrap, keyboard play, three widths and no outsid
 			assert.ok(!names.some((n) => n.includes("breinhap-session")), "no management cookie in a learner browser");
 			// every request stayed on the public origin and on /p
 			assert.ok(seen.every((u) => new URL(u).origin === "https://breinhap.com" && new URL(u).pathname.startsWith("/p")), seen.join("\n"));
-			assert.ok(front.requests.every((r) => !/management\.breinhap\.com/.test(r)));
+			assert.ok(front.requests.every((r) => !r.includes("management.breinhap.com")));
 			await context.close();
 			await chrome.close();
 			await new Promise((resolve) => front.server.close(resolve));
