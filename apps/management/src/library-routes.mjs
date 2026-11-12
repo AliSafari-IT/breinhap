@@ -14,6 +14,8 @@ import {
 import { previewPage } from "./preview.mjs";
 import { publicationPage } from "./publishing-page.mjs";
 import { assignmentsPage } from "./assignments-page.mjs";
+import { packEditorPage, packsListPage } from "./packs-page.mjs";
+import { PackAuthoring } from "./practice/authoring.mjs";
 import { LINK_TARGETS } from "./directory.mjs";
 import { issueText, reviewPage, reviewQueuePage } from "./review.mjs";
 import { assertSupported, studentPayload, SUPPORTED_SCHEMA_VERSIONS } from "./vendor/content-mission.mjs";
@@ -44,7 +46,7 @@ const dayValue = (value, end) => {
 	return `${value}T${end ? "23:59:59.999" : "00:00:00.000"}Z`;
 };
 
-export async function handleLibrary(req, url, { identity, content, publishing, assignments, extractions }) {
+export async function handleLibrary(req, url, { identity, content, publishing, assignments, practice, extractions }) {
 	const path = url.pathname;
 	if (path !== "/bibliotheek" && !path.startsWith("/bibliotheek/")) return null;
 	if (!["GET", "HEAD", "POST"].includes(req.method))
@@ -71,6 +73,14 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 			status: req.method === "POST" ? 503 : 200,
 			title: tr("Inhoud toewijzen"),
 			body: tr("Toewijzen is nog niet ingericht op deze server."),
+			active: "/bibliotheek",
+		};
+	// breinhap#80: practice packs need the practice tables; "packs" would otherwise match the object id
+	if (!practice && (path === "/bibliotheek/packs" || path.startsWith("/bibliotheek/packs/")))
+		return {
+			status: req.method === "POST" ? 503 : 200,
+			title: tr("Oefenpakketten"),
+			body: tr("Oefenpakketten zijn nog niet ingericht op deze server."),
 			active: "/bibliotheek",
 		};
 	const principal = await identity.principal(req);
@@ -335,6 +345,9 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 		});
 	}
 
+	if (path === "/bibliotheek/packs" || path.startsWith("/bibliotheek/packs/"))
+		return handlePacks(req, url, { principal, practice, csrf, form, refused });
+
 	// a new learning object
 	if (path === "/bibliotheek/nieuw") {
 		if (req.method !== "POST")
@@ -539,4 +552,143 @@ async function preview(content, principal, id, url) {
 		body: previewPage(payload, url.searchParams, { base: `${back}/voorbeeld`, back, label }),
 		headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
 	};
+}
+
+// ── breinhap#80: practice packs, under /bibliotheek/packs ─────────────────────────────────────────
+const PACK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+const formValues = (form) => {
+	const values = {};
+	for (const key of new Set(form.keys())) {
+		const all = form.getAll(key);
+		values[key] = key === "vraag" ? all : all[0];
+	}
+	return values;
+};
+
+async function handlePacks(req, url, { principal, practice, csrf, form, refused }) {
+	const notFound = { status: 404, title: tr("Niet gevonden"), body: ui`Dit oefenpakket bestaat niet of is niet van jou. <a href="/bibliotheek/packs">Naar je oefenpakketten</a>` };
+	const wrong = (allow) => ({ status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: allow } });
+	const problem = (error) => {
+		if (error?.code === "forbidden") return refused;
+		if (error?.code === "not_found") return notFound;
+		if (error?.code === "limit")
+			return { status: 422, title: tr("Te veel oefenpakketten"), body: ui`Je hebt het maximum van 100 oefenpakketten bereikt. Archiveer er eerst een. <a href="/bibliotheek/packs">Terug</a>` };
+		if (error?.code === "unavailable" || error?.code === "unsupported_version")
+			return { status: 422, title: tr("Voorbeeld niet mogelijk"), body: ui`Een bron van dit pakket is niet meer beschikbaar of gebruikt een onbekende schemaversie. Kies de missies opnieuw. <a href="/bibliotheek/packs">Terug</a>` };
+		throw error;
+	};
+	const guard = async (work) => {
+		try {
+			return await work();
+		} catch (error) {
+			return problem(error);
+		}
+	};
+	const path = url.pathname.replace(/\/+$/, "");
+	const page = async (title, built) => ({ status: built.status ?? 200, title, body: built.body, active: "/bibliotheek", headers: built.headers });
+	const editor = async (extra) => {
+		const sources = await practice.sources(principal);
+		return packEditorPage({ csrf, sources, ...extra });
+	};
+
+	if (path === "/bibliotheek/packs") {
+		if (req.method === "POST") return wrong("GET");
+		return guard(async () => {
+			const q = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
+			const subject = SUBJECTS.some(([v]) => v === url.searchParams.get("vak")) ? url.searchParams.get("vak") : "";
+			const grade = /^[1-6]$/.test(url.searchParams.get("jaar") ?? "") ? url.searchParams.get("jaar") : "";
+			const rows = await practice.list(principal, { q, subject, grade });
+			const archived = url.searchParams.get("gearchiveerd") ? notice(tr("Het oefenpakket is gearchiveerd.")) : "";
+			return page(tr("Oefenpakketten"), { body: packsListPage(rows, { q, subject, grade, notice: archived, csrf }) });
+		});
+	}
+
+	if (path === "/bibliotheek/packs/nieuw") {
+		if (req.method === "POST")
+			return guard(async () => {
+				const values = formValues(form);
+				const composed = await practice.compose(principal, values);
+				if (composed.errors)
+					return { status: 422, title: tr("Nieuw oefenpakket"), active: "/bibliotheek", body: await editor({ values, errors: composed.errors }) };
+				const { id } = await practice.create(principal, composed.draft);
+				return redirect(`/bibliotheek/packs/${id}?opgeslagen=1`);
+			});
+		return guard(async () => {
+			return page(tr("Nieuw oefenpakket"), { body: await editor({ values: { jaar: "3", taal: "nl", modus: "practice", verloopDagen: "7" } }) });
+		});
+	}
+
+	const match = /^\/bibliotheek\/packs\/([^/]+)(?:\/(dupliceren|archiveren|voorbeeld))?$/.exec(path);
+	if (!match || !PACK_ID.test(match[1])) return notFound;
+	const [, id, action] = match;
+
+	if (action === "voorbeeld") {
+		if (req.method === "POST") return wrong("GET");
+		return guard(async () => {
+			const { draft, payload } = await practice.previewObject(principal, id);
+			void draft;
+			const base = `/bibliotheek/packs/${id}/voorbeeld`;
+			return {
+				status: 200,
+				title: tr`Voorbeeld: ${payload.title}`,
+				body: previewPage(payload, url.searchParams, { base, back: `/bibliotheek/packs/${id}`, label: tr("het oefenpakket"), backText: tr("Terug naar het oefenpakket") }),
+				active: "/bibliotheek",
+				headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
+			};
+		});
+	}
+	if (action && req.method !== "POST") return wrong("POST");
+
+	if (action === "dupliceren")
+		return guard(async () => {
+			const copy = await practice.duplicate(principal, id);
+			return redirect(`/bibliotheek/packs/${copy.id}?gedupliceerd=1`);
+		});
+	if (action === "archiveren")
+		return guard(async () => {
+			await practice.archive(principal, id);
+			return redirect("/bibliotheek/packs?gearchiveerd=1");
+		});
+
+	if (req.method === "POST")
+		return guard(async () => {
+			const values = formValues(form);
+			const expected = Number(values.expectedVersion);
+			const current = await practice.get(principal, id);
+			const redisplay = async (status, message) => ({
+				status,
+				title: current.draft.title,
+				active: "/bibliotheek",
+				body: await editor({ values, errors: message.errors ?? {}, notice: message.notice ?? "", id, version: current.version, readiness: await practice.readiness(principal, current.draft) }),
+			});
+			const composed = await practice.compose(principal, values);
+			if (composed.errors) return redisplay(422, { errors: composed.errors });
+			try {
+				await practice.update(principal, id, Number.isSafeInteger(expected) ? expected : -1, composed.draft);
+			} catch (error) {
+				if (error?.code !== "stale") throw error;
+				// never overwrite silently: keep what they typed and let a second Save be the explicit choice
+				return redisplay(409, {
+					notice: notice(
+						ui`Iemand anders (of een ander tabblad) heeft dit oefenpakket intussen opgeslagen (nu versie ${current.version}). <strong>Je wijzigingen zijn niet opgeslagen</strong>; ze staan hieronder nog. <a href="/bibliotheek/packs/${id}" target="_blank" rel="noopener">Open de nieuwste versie</a> om te vergelijken. Klik daarna op Opslaan om jouw versie over de nieuwste te bewaren.`,
+						"alert",
+					),
+				});
+			}
+			return redirect(`/bibliotheek/packs/${id}?opgeslagen=1`);
+		});
+
+	return guard(async () => {
+		const current = await practice.get(principal, id);
+		const saved = url.searchParams.get("opgeslagen")
+			? notice(tr`Opgeslagen (versie ${current.version}).`)
+			: url.searchParams.get("gedupliceerd")
+				? notice(tr("Dit is een kopie. Er zijn geen links, pogingen of publicaties meegekomen."))
+				: "";
+		const readiness = await practice.readiness(principal, current.draft);
+		return page(current.draft.title, {
+			body: await editor({ values: PackAuthoring.values(current.draft), notice: saved, id, version: current.version, readiness }),
+		});
+	});
 }

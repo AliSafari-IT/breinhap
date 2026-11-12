@@ -85,7 +85,7 @@ const feedback = (question, answer) => {
  * The preview page. `object` is the student payload (already validated); `params` the query string.
  * `base` is the preview URL of this object; `back` the editor.
  */
-export function previewPage(object, params, { base, back, label }) {
+export function previewPage(object, params, { base, back, label, backText = tr("Terug naar het leerobject") }) {
 	const keep = (extra) => {
 		const query = new URLSearchParams();
 		if (params.get("revisie")) query.set("revisie", params.get("revisie"));
@@ -93,7 +93,7 @@ export function previewPage(object, params, { base, back, label }) {
 		const text = query.toString();
 		return `${base}${text ? `?${text}` : ""}`;
 	};
-	const banner = ui`<div class="notice preview" role="note"><p><strong>Voorbeeld van ${esc(label)}.</strong> Zo ziet een leerling deze missie. Er wordt niets gepubliceerd, toegewezen of bewaard, en er ontstaat geen voortgang. Antwoorden blijven alleen in dit adres staan.</p><p><a href="${esc(back)}">Terug naar het leerobject</a></p></div>`;
+	const banner = ui`<div class="notice preview" role="note"><p><strong>Voorbeeld van ${esc(label)}.</strong> Zo ziet een leerling deze missie. Er wordt niets gepubliceerd, toegewezen of bewaard, en er ontstaat geen voortgang. Antwoorden blijven alleen in dit adres staan.</p><p><a href="${esc(back)}">${esc(backText)}</a></p></div>`;
 
 	const chosenMission = params.get("missie");
 	if (object.missions.length > 1 && chosenMission === null)

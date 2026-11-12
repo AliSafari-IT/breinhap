@@ -30,6 +30,8 @@ import { ImportStore } from "./imports/store.mjs";
 import { handleLibrary } from "./library-routes.mjs";
 import { PublishingStore } from "./publishing.mjs";
 import { AssignmentStore } from "./assignments.mjs";
+import { PracticeStore } from "./practice/store.mjs";
+import { PackAuthoring } from "./practice/authoring.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
 import { S3Client } from "./uploads/s3.mjs";
@@ -110,6 +112,10 @@ export function createHandler({
 	// breinhap#34: assigning active publications to linked learners and groups
 	assignments = directory && identity?.store
 		? new AssignmentStore({ directory, membership: (sub) => identity.store.membership(sub) })
+		: undefined,
+	// breinhap#80: practice-pack authoring on the closed practice storage (no links or learner routes yet)
+	practice = directory && content
+		? new PackAuthoring({ practice: new PracticeStore({ directory, publishedContent: publishing }), content })
 		: undefined,
 	// breinhap#30: imports, on the same content store
 	imports = content ? new ImportStore({ content }) : undefined,
@@ -495,7 +501,7 @@ export function createHandler({
 				(await handleUploads(req, url, { identity, uploads, extractions })) ??
 				(await handleImports(req, url, { identity, imports })) ??
 				(await handleExtractions(req, url, { identity, extractions })) ??
-				(await handleLibrary(req, url, { identity, content, publishing, assignments, extractions }));
+				(await handleLibrary(req, url, { identity, content, publishing, assignments, practice, extractions }));
 			if (result.raw) return send(result.status, result.body, result.type, result.headers);
 			if (result.status === 303)
 				return send(303, "", undefined, result.headers);
