@@ -43,7 +43,7 @@ test("every learner response carries the privacy headers, and no page asks a thi
 	for (const res of responses) {
 		const h = res.headers;
 		assert.match(h["x-content-type-options"], /nosniff/);
-		assert.equal(h["referrer-policy"], "no-referrer");
+		assert.equal(h["referrer-policy"], "same-origin");
 		assert.match(h["x-robots-tag"], /noindex/);
 		assert.match(h["content-security-policy"], /default-src 'none'/);
 		assert.doesNotMatch(h["content-security-policy"], /unsafe-inline|unsafe-eval|https?:|\*/);

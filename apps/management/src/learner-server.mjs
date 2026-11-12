@@ -43,7 +43,9 @@ const HEADERS = {
 		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
 	"X-Content-Type-Options": "nosniff",
 	"X-Frame-Options": "DENY",
-	"Referrer-Policy": "no-referrer",
+	// not "no-referrer": a browser then sends `Origin: null` on same-origin form posts, which the Origin check must refuse.
+	// same-origin sends nothing cross-site, and the only same-origin referrer is a /p path that never holds a secret.
+	"Referrer-Policy": "same-origin",
 	"X-Robots-Tag": "noindex, nofollow",
 	"Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };

@@ -18,7 +18,7 @@ test("a clean browser completes a practice pack with no identity; the verdicts c
 	assert.match(boot.headers["set-cookie"][0], /^__Secure-bh-flow=[\w-]{43}; Path=\/p; Secure; HttpOnly; SameSite=Lax/);
 	assert.match(boot.headers["content-security-policy"], /script-src 'self'/);
 	assert.doesNotMatch(boot.headers["content-security-policy"], /unsafe-inline/);
-	assert.equal(boot.headers["referrer-policy"], "no-referrer");
+	assert.equal(boot.headers["referrer-policy"], "same-origin");
 	assert.match(boot.headers["cache-control"], /no-store/);
 	assert.doesNotMatch(boot.body, /bibliotheek|Afmelden|session\.js|editor\.js/);
 	const resolved = await b.post("/p/resolve", { csrf: hiddenOf(boot.body).csrf, token: w.secret });

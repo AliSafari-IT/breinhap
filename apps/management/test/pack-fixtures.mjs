@@ -136,7 +136,7 @@ export async function stack({ withDirectory = true, uploadsOf, extractionsOf, lo
 			req.on("error", reject);
 			req.end(body);
 		});
-	return { login, call, workspace: store.workspace, directory, uploads, extractions };
+	return { login, call, port: server.address().port, workspace: store.workspace, directory, uploads, extractions };
 }
 
 // ── fixtures ────────────────────────────────────────────────────────────────────────────────────
