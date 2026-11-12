@@ -12,6 +12,7 @@ import {
 	toValues,
 } from "./library.mjs";
 import { previewPage } from "./preview.mjs";
+import { publicationPage } from "./publishing-page.mjs";
 import { issueText, reviewPage, reviewQueuePage } from "./review.mjs";
 import { assertSupported, studentPayload, SUPPORTED_SCHEMA_VERSIONS } from "./vendor/content-mission.mjs";
 
@@ -32,7 +33,7 @@ const notice = (text, role = "status") =>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export async function handleLibrary(req, url, { identity, content, extractions }) {
+export async function handleLibrary(req, url, { identity, content, publishing, extractions }) {
 	const path = url.pathname;
 	if (path !== "/bibliotheek" && !path.startsWith("/bibliotheek/")) return null;
 	if (!["GET", "HEAD", "POST"].includes(req.method))
@@ -45,11 +46,21 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 			body: tr("De bibliotheek is nog niet ingericht op deze server. Er is nog geen inhoudsbibliotheek beschikbaar."),
 			active: "/bibliotheek",
 		};
+	// breinhap#33: publishing needs the content store's database and schema
+	if (!publishing && (path === "/bibliotheek/publicaties" || path.startsWith("/bibliotheek/publicaties/")))
+		return {
+			status: req.method === "POST" ? 503 : 200,
+			title: tr("Publicaties"),
+			body: tr("Publicaties zijn nog niet ingericht op deze server."),
+			active: "/bibliotheek",
+		};
 	const principal = await identity.principal(req);
 	if (!principal) return { status: 403, title: tr("Geen toegang"), body: tr("Je hebt geen toegang tot de bibliotheek.") };
 	const csrf = req.managementSession.csrf;
 	const refused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang.") };
 	const reviewRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen nakijkers kunnen inhoud nakijken.") };
+	const publishRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen uitgevers kunnen inhoud publiceren.") };
+	const canPublish = await content.directory.can(principal, "content.publish");
 
 	let form;
 	if (req.method === "POST") {
@@ -83,8 +94,69 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 			const archived = url.searchParams.get("gearchiveerd") === "1" ? notice(tr("Het leerobject is gearchiveerd.")) : "";
 			const canReview = await content.directory.can(principal, "content.review");
 			const pending = canReview ? (await content.reviewQueue(principal)).length : 0;
-			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived, canReview, pending }), active: "/bibliotheek" };
+			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived, canReview, canPublish, pending }), active: "/bibliotheek" };
 		});
+	}
+
+	// breinhap#33: the publisher's page, before the object matcher takes "publicaties" for an id
+	if (path === "/bibliotheek/publicaties") {
+		if (req.method === "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
+		return guard(async () => {
+			const rows = await publishing.candidates(principal);
+			const published = /^[1-9]\d{0,5}$/.test(url.searchParams.get("gepubliceerd") ?? "") ? Number(url.searchParams.get("gepubliceerd")) : null;
+			const restored = /^[1-9]\d{0,5}$/.test(url.searchParams.get("hersteld") ?? "") ? Number(url.searchParams.get("hersteld")) : null;
+			const feedback = published
+				? notice(tr`Revisie ${published} is gepubliceerd.`)
+				: restored
+					? notice(tr`Revisie ${restored} is opnieuw gepubliceerd.`)
+					: url.searchParams.get("ingetrokken") === "1"
+						? notice(tr("De publicatie is ingetrokken."))
+						: "";
+			return { status: 200, title: tr("Publicaties"), body: publicationPage(rows, { csrf, notice: feedback }), active: "/bibliotheek" };
+		}, publishRefused);
+	}
+	const publicationMatch = /^\/bibliotheek\/publicaties\/([a-z0-9-]{1,80})\/(publiceren|intrekken|herstellen)$/.exec(path);
+	if (publicationMatch) {
+		if (req.method !== "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "POST" } };
+		const [, publicationObject, publicationAction] = publicationMatch;
+		if (!ID.test(publicationObject)) return { status: 404, title: tr("Niet gevonden"), body: ui`<a href="/bibliotheek/publicaties">${tr("Terug naar de publicaties")}</a>` };
+		return guard(async () => {
+			const back = ui`<p><a href="/bibliotheek/publicaties">${tr("Terug naar de publicaties")}</a></p>`;
+			try {
+				if (publicationAction === "intrekken") {
+					await publishing.withdraw(principal, publicationObject);
+					return redirect("/bibliotheek/publicaties?ingetrokken=1");
+				}
+				const revision = Number(form.get("revision"));
+				if (publicationAction === "publiceren") await publishing.publish(principal, publicationObject, revision);
+				else await publishing.restore(principal, publicationObject, revision);
+				return redirect(`/bibliotheek/publicaties?${publicationAction === "publiceren" ? "gepubliceerd" : "hersteld"}=${revision}`);
+			} catch (error) {
+				if (error?.code === "not_found")
+					return { status: 404, title: tr("Niet gevonden"), body: ui`${tr("Dit leerobject of deze revisie bestaat niet.")}${back}` };
+				if (error?.code === "not_approved")
+					return { status: 409, title: tr("Niet gepubliceerd"), body: ui`${tr("Deze revisie is nog niet goedgekeurd.")}${back}` };
+				if (error?.code === "self_approved")
+					return { status: 409, title: tr("Niet gepubliceerd"), body: ui`${tr("Deze revisie is niet onafhankelijk nagekeken.")}${back}` };
+				if (error?.code === "already_published")
+					return { status: 409, title: tr("Niet gepubliceerd"), body: ui`${tr("Deze revisie is al gepubliceerd.")}${back}` };
+				if (error?.code === "not_published")
+					return { status: 409, title: tr("Niet ingetrokken"), body: ui`${tr("Er is nog geen actieve publicatie om in te trekken.")}${back}` };
+				if (error?.code === "unsupported_version")
+					return { status: 422, title: tr("Niet gepubliceerd"), body: ui`${tr("Deze inhoud gebruikt een schemaversie die publicatie niet ondersteunt.")}${back}` };
+				if (error?.code === "not_ready")
+					return {
+						status: 409,
+						title: tr("Niet gepubliceerd"),
+						body: ui`${tr("Deze revisie is niet klaar om te publiceren:")}<ul>${(error.issues ?? []).map((issue) => ui`<li>${esc(issueText(issue))}</li>`).join("")}</ul>${back}`,
+					};
+				if (error?.code === "conflict")
+					return { status: 409, title: tr("Niet gepubliceerd"), body: ui`${tr("De publicatie is intussen gewijzigd. Probeer opnieuw.")}${back}` };
+				if (error?.code === "invalid")
+					return { status: 422, title: tr("Niet gepubliceerd"), body: ui`${tr("Deze inhoud kan niet als pakket worden gepubliceerd.")}${back}` };
+				throw error;
+			}
+		}, publishRefused);
 	}
 
 	// breinhap#32: the review queue and one submitted revision, before the object matcher takes "nakijken" for an id
@@ -187,6 +259,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 					id,
 					version: draft.version,
 					revisions: draft.revisions,
+					publications: draft.publications,
+					canPublish,
 					draftChanged: draft.draftChanged,
 					notice: saved ? notice(tr`Opgeslagen (versie ${draft.version}).`) : revised ? notice(tr`Revisie ${Number(revised)} vastgelegd.`) : offered ? notice(tr`Revisie ${Number(offered)} ter nakijking aangeboden.`) : "",
 				}),
@@ -214,6 +288,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 							id,
 							version: current.version,
 							revisions: current.revisions,
+							publications: current.publications,
+							canPublish,
 							notice: notice(
 								ui`Iemand anders (of een ander tabblad) heeft dit leerobject intussen opgeslagen (nu versie ${current.version}). <strong>Je wijzigingen zijn niet opgeslagen</strong>; ze staan hieronder nog. <a href="/bibliotheek/${id}" target="_blank" rel="noopener">Open de nieuwste versie</a> in een nieuw tabblad om te vergelijken. Klik daarna op Opslaan om jouw versie over de nieuwste te bewaren.`,
 								"alert",
@@ -223,7 +299,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				return {
 					status: 422,
 					title: current.content.title,
-					body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf, id, version, revisions: current.revisions }),
+					body: editorPage({ values: parsed.values, errors: errorsOf(error, parsed.paths), csrf, id, version, revisions: current.revisions, publications: current.publications, canPublish }),
 				};
 			}
 		});

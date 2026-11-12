@@ -1,11 +1,11 @@
 {
 	"name": "@breinhap/management",
-	"version": "0.2.28",
+	"version": "0.2.29",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"start": "node src/server.mjs",
-		"typecheck": "node --check src/server.mjs && node --check src/practice/model.mjs && node --check src/practice/store.mjs && node --check src/practice/learner.mjs",
+		"typecheck": "node --check src/server.mjs && node --check src/publishing.mjs && node --check src/publishing-page.mjs && node --check src/practice/model.mjs && node --check src/practice/store.mjs && node --check src/practice/learner.mjs",
 		"test": "node test/run.mjs",
 		"build:selector": "node scripts/build-locale-selector.mjs"
 	},

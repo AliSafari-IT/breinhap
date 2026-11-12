@@ -1286,3 +1286,131 @@ test("review refusals: not ready, stale draft, self-review, forged CSRF, and a n
 	assert.equal(twice.status, 409);
 	assert.match(twice.body, /Deze revisie is al nagekeken/);
 });
+
+test("publishing (breinhap#33): an explicitly granted publisher releases an approved revision, withdraws it and restores it", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const reviewer = await s.login("parent");
+	const admin = { sub: "admin", role: "breinhap.admin" };
+	const parent = { sub: "parent", role: "breinhap.parent" };
+	const author = { sub: "teacher", role: "breinhap.teacher" };
+
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() });
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	await s.call("/bibliotheek/prikkel-reactie/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	await s.directory.grantCapability(admin, parent, "content.review");
+	await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: reviewer, method: "POST", form: { decision: "approved" } });
+
+	// the grant is explicit: an author or administrator without it has no page and no action
+	assert.doesNotMatch((await s.call("/bibliotheek", { who: teacher })).body, /href="\/bibliotheek\/publicaties"/);
+	const refused = await s.call("/bibliotheek/publicaties", { who: teacher });
+	assert.equal(refused.status, 403);
+	assert.match(refused.body, /Alleen aangewezen uitgevers kunnen inhoud publiceren/);
+	assert.equal(
+		(await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", { who: teacher, method: "POST", form: { revision: "1" } })).status,
+		403,
+	);
+	assert.equal((await s.call("/bibliotheek/publicaties", { who: await s.login("admin") })).status, 403);
+
+	await s.directory.grantCapability(admin, author, "content.publish");
+	const library = await s.call("/bibliotheek", { who: teacher });
+	assert.match(library.body, /href="\/bibliotheek\/publicaties"/);
+	assert.match(library.body, /Publicaties beheren/);
+
+	const page = await s.call("/bibliotheek/publicaties", { who: teacher });
+	assert.equal(page.status, 200);
+	assert.match(page.body, /Goedgekeurde revisies/);
+	assert.match(page.body, /Prikkel en reactie/);
+	assert.match(page.body, /href="\/bibliotheek\/prikkel-reactie"/);
+	assert.match(page.body, />Publiceren<\/button>/);
+	assert.doesNotMatch(page.body, /Biologie voor jou 3/); // no sources on the publisher page
+
+	// CSRF is required for every publication mutation
+	const forged = await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "1", csrf: "forged" },
+	});
+	assert.equal(forged.status, 403);
+	assert.match(forged.body, /Aanvraag geweigerd|Laad de pagina opnieuw/);
+
+	const published = await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "1" },
+	});
+	assert.equal(published.status, 303);
+	assert.equal(published.headers.location, "/bibliotheek/publicaties?gepubliceerd=1");
+	const afterPublish = await s.call(published.headers.location, { who: teacher });
+	assert.match(afterPublish.body, /Revisie 1 is gepubliceerd\./);
+	assert.match(afterPublish.body, /Gepubliceerd \(packversie 1\)/);
+	assert.match(afterPublish.body, />Intrekken<\/button>/);
+	assert.doesNotMatch(afterPublish.body, />Publiceren<\/button>/);
+
+	const editor = await s.call("/bibliotheek/prikkel-reactie", { who: teacher });
+	assert.match(editor.body, /Gepubliceerd: revisie 1 \(packversie 1\)\./);
+	assert.match(editor.body, /gepubliceerd \(packversie 1\)/);
+	assert.match(editor.body, />Intrekken<\/button>/);
+	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /Gepubliceerd · revisie 1/);
+
+	// the same revision is not published twice
+	const twice = await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "1" },
+	});
+	assert.equal(twice.status, 409);
+	assert.match(twice.body, /Deze revisie is al gepubliceerd/);
+
+	// a revision that is not approved is refused, and so is an unknown one
+	await s.call("/bibliotheek/prikkel-reactie", {
+		who: teacher,
+		method: "POST",
+		form: { ...validFields(), title: "Nieuwe titel", expectedVersion: "1" },
+	});
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "2" } });
+	const unapproved = await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "2" },
+	});
+	assert.equal(unapproved.status, 409);
+	assert.match(unapproved.body, /Deze revisie is nog niet goedgekeurd/);
+	const missing = await s.call("/bibliotheek/publicaties/onbekend/publiceren", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "1" },
+	});
+	assert.equal(missing.status, 404);
+
+	// withdrawal stops access, leaves the history and offers a new release
+	const withdrawn = await s.call("/bibliotheek/publicaties/prikkel-reactie/intrekken", { who: teacher, method: "POST", form: {} });
+	assert.equal(withdrawn.status, 303, withdrawn.body);
+	assert.equal(withdrawn.headers.location, "/bibliotheek/publicaties?ingetrokken=1");
+	const afterWithdraw = await s.call(withdrawn.headers.location, { who: teacher });
+	assert.match(afterWithdraw.body, /De publicatie is ingetrokken\./);
+	assert.match(afterWithdraw.body, /Ingetrokken/);
+	assert.match(afterWithdraw.body, /Opnieuw publiceren/);
+	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /Publicatie ingetrokken · revisie 1/);
+	const withdrawnEditor = await s.call("/bibliotheek/prikkel-reactie", { who: teacher });
+	assert.match(withdrawnEditor.body, /Nog geen actieve publicatie\./);
+	assert.match(withdrawnEditor.body, /publicatie ingetrokken/);
+	assert.equal((await s.call("/bibliotheek/publicaties/prikkel-reactie/intrekken", { who: teacher, method: "POST", form: {} })).status, 409);
+
+	// restoring the approved revision publishes it as a new release
+	const restored = await s.call("/bibliotheek/publicaties/prikkel-reactie/herstellen", {
+		who: teacher,
+		method: "POST",
+		form: { revision: "1" },
+	});
+	assert.equal(restored.status, 303);
+	assert.equal(restored.headers.location, "/bibliotheek/publicaties?hersteld=1");
+	const afterRestore = await s.call(restored.headers.location, { who: teacher });
+	assert.match(afterRestore.body, /Revisie 1 is opnieuw gepubliceerd\./);
+	assert.match(afterRestore.body, /Gepubliceerd \(packversie 2\)/);
+
+	// a non-publisher can never act, even with a valid form and CSRF
+	const denied = await s.call("/bibliotheek/publicaties/prikkel-reactie/intrekken", { who: reviewer, method: "POST", form: {} });
+	assert.equal(denied.status, 403);
+	assert.match(denied.body, /Alleen aangewezen uitgevers kunnen inhoud publiceren/);
+});
