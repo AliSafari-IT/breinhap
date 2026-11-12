@@ -1,0 +1,36 @@
+/* breinhap#82: the learner pages. Self-only, no inline style. Colours come from the shared ASafariM theme tokens. */
+body.learner { margin: 0; background: var(--bg); color: var(--ink); font: 1.125rem/1.55 system-ui, sans-serif; }
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 8px; top: 8px; background: var(--card); padding: 8px 12px; z-index: 2; }
+.learner-top { background: var(--top-bg); color: var(--top-ink); padding: 12px 16px; font-weight: 600; }
+body.learner main { max-width: 42rem; margin: 0 auto; padding: 16px; }
+body.learner main:focus { outline: none; }
+h1 { font-size: 1.6rem; line-height: 1.25; overflow-wrap: anywhere; }
+h2 { font-size: 1.25rem; margin: 0 0 .5rem; overflow-wrap: anywhere; }
+h3 { font-size: 1.05rem; margin: .25rem 0; overflow-wrap: anywhere; }
+p, li, label, legend { overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.card, .notice { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+.notice { background: var(--accent-soft); }
+fieldset { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
+legend { padding: 0; }
+.option, .field { display: block; margin: 8px 0; }
+.option { padding: 10px 12px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-2); }
+.field input, .field select { display: block; width: 100%; box-sizing: border-box; min-height: 44px; font: inherit; margin-top: 4px; }
+button { min-height: 44px; padding: 8px 20px; font: inherit; font-weight: 600; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+button:hover { background: var(--accent-hover); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0 0 8px; }
+.steps li { padding: 4px 10px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); font-size: .95rem; }
+.steps li[aria-current="step"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.feedback { margin: 12px 0; padding: 10px 14px; border-radius: 8px; border-left: 6px solid var(--good); background: var(--card-2); }
+.feedback.not-yet { border-left-color: var(--warn); }
+.error { color: var(--bad-ink); background: var(--warn-bg); padding: 8px 12px; border-radius: 6px; }
+.options { list-style: none; padding: 0; }
+.options li { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; }
+.options li.chosen { border-color: var(--accent); }
+.review { list-style: none; padding: 0; }
+.review-item { margin: 12px 0; }
+.score { font-size: 1.3rem; font-weight: 600; }
+.learner-foot { max-width: 42rem; margin: 24px auto; padding: 0 16px; color: var(--muted); font-size: .9rem; }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color .15s; } }

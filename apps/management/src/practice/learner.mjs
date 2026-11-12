@@ -60,6 +60,7 @@ const metadata = (e) => ({
 	grade: e.grade,
 	language: e.language,
 	mode: e.mode,
+	minutes: e.missions.reduce((sum, m) => sum + (Number.isFinite(m.minutes) ? m.minutes : 0), 0),
 	missionCount: e.missions.length,
 	questionCount: pages(e).filter((p) => p.kind === "question").length,
 });
@@ -112,6 +113,49 @@ export class PracticeLearner {
 				],
 			);
 			return { seed, csrf, startNonce };
+		});
+	}
+	/** What the metadata-only Start screen may show for a resolved flow. Creates nothing and consumes
+	 * nothing; the CSRF and start values are derived from the flow secret, never stored. */
+	async flowInfo(seed) {
+		const csrf = derived(seed, "csrf");
+		return this.store.tx(async (db) => {
+			const first = await this.flow(db, seed, csrf, false);
+			if (!first.link_id) fail("not_found");
+			const { envelope } = await this.store.context(db, first.link_id);
+			const f = await this.flow(db, seed, csrf, false);
+			return {
+				...metadata(envelope),
+				state: f.state,
+				csrf,
+				startNonce: derived(seed, "start", 16),
+			};
+		});
+	}
+	/** The learner's own finished attempt: every question with their answer, the server verdict and
+	 * the explanation. Only after submission, so a test never shows these before. */
+	async review(credential) {
+		return this.store.tx(async (db) => {
+			const { a, pp, answers, envelope } = await this.attempt(db, credential);
+			if (!a.completed_at) fail("unfinished");
+			const items = pp
+				.map((page, i) => ({ page, i }))
+				.filter(({ page }) => page.kind === "question")
+				.map(({ page, i }) => {
+					const q = page.question,
+						saved = answers.find((r) => r.page_key === page.key);
+					return {
+						key: page.key,
+						step: page.step,
+						kind: q.kind,
+						prompt: q.prompt,
+						...(q.kind === "choice" ? { options: q.options, answerIndex: q.answerIndex } : { items: q.items }),
+						answer: saved?.answer ?? null,
+						correct: saved?.server_correct ?? false,
+						explanation: q.explanation,
+					};
+				});
+			return { ...metadata(envelope), score: a.server_score, questionCount: a.question_count, items };
 		});
 	}
 	async resolve(seed, input) {
@@ -276,6 +320,8 @@ export class PracticeLearner {
 				state: a.state,
 				currentPageKey: a.current_page_key,
 				csrf: derived(credential, "answer-csrf"),
+				position: Math.min(current, pp.length - 1) + 1,
+				total: pp.length,
 			};
 			if (a.completed_at) result.score = a.server_score;
 			if (index === pp.length) return result;
