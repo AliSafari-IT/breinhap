@@ -1,0 +1,114 @@
+import { tr, ui, formatLocale } from "./workspace-i18n.mjs";
+import { esc } from "./directory-pages.mjs";
+import { SUBJECTS } from "./library.mjs";
+
+/**
+ * Pages of the practice-pack editor (breinhap#80). Server-rendered forms that work without
+ * JavaScript. Every typed value is escaped; typed values survive validation and stale-save errors.
+ * The adult workspace copy is Dutch like the library; the learner language is a pack declaration.
+ */
+
+const LANGUAGES = [
+	["nl", "Nederlands"],
+	["en", "English"],
+	["fr", "Français"],
+	["de", "Deutsch"],
+];
+const SUBJECT_NAME = Object.fromEntries(SUBJECTS);
+const STATE = {
+	published: ["Gepubliceerd", "ok"],
+	approved: ["Goedgekeurd, nog niet gepubliceerd", "pending"],
+	pending: ["Ter nakijking", "pending"],
+	changes: ["Aanpassen gevraagd", "pending"],
+	snapshot: ["Vastgelegd, nog niet aangeboden", "draft"],
+	draft: ["Nog geen revisie", "draft"],
+	missing: ["Niet beschikbaar", "draft"],
+};
+export const stateText = (key) => STATE[key] ?? STATE.missing;
+const stateChip = (key) => {
+	const [label, tone] = stateText(key);
+	return ui`<span class="state ${tone}">${tr(label)}</span>`;
+};
+const date = (value) => new Date(value).toLocaleDateString(formatLocale(), { timeZone: "Europe/Brussels" });
+
+export function packsListPage(rows, { q = "", subject = "", grade = "", notice = "", csrf }) {
+	const list = rows.length
+		? ui`<table class="library"><caption>Jouw oefenpakketten</caption><thead><tr><th scope="col">Titel</th><th scope="col">Vak</th><th scope="col">Jaar</th><th scope="col">Soort</th><th scope="col">Gewijzigd</th></tr></thead><tbody>${rows
+				.map(
+					(row) =>
+						ui`<tr><td><a href="/bibliotheek/packs/${esc(row.id)}">${esc(row.title)}</a></td><td>${esc(tr(SUBJECT_NAME[row.subject] ?? row.subject))}</td><td>${esc(row.grade)}</td><td>${row.mode === "test" ? tr("Toets") : tr("Oefenen")}</td><td>${esc(date(row.updatedAt))}</td></tr>`,
+				)
+				.join("")}</tbody></table>`
+		: ui`<p>Geen oefenpakketten gevonden.</p>`;
+	void csrf;
+	return ui`${notice}<form method="get" action="/bibliotheek/packs" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${y}</option>`).join("")}</select></label><button>Filteren</button></form><p><a class="action" href="/bibliotheek/packs/nieuw">Nieuw oefenpakket</a> <a href="/bibliotheek">Terug naar de bibliotheek</a></p>${list}`;
+}
+
+const fieldError = (errors, name) =>
+	errors[name] ? ui`<p class="error" id="fout-${name}" role="alert">${esc(errors[name])}</p>` : "";
+const invalid = (errors, name) => (errors[name] ? ` aria-invalid="true" aria-describedby="fout-${name}"` : "");
+
+function missionOptions(sources, selected) {
+	return sources
+		.filter((s) => s.revision && s.valid)
+		.map(
+			(s) =>
+				ui`<optgroup label="${esc(s.title)} (revisie ${s.revision})">${s.missions
+					.map((m) => {
+						const value = `${s.id}|${m.id}`;
+						return ui`<option value="${esc(value)}"${selected === value ? " selected" : ""}>${esc(m.title)}</option>`;
+					})
+					.join("")}</optgroup>`,
+		)
+		.join("");
+}
+
+function questionChoices(sources, values, errors) {
+	const chosen = new Set([].concat(values.vraag ?? []));
+	const objects = new Set(["missie1", "missie2", "missie3"].map((k) => String(values[k] ?? "").split("|")[0]).filter(Boolean));
+	const rows = [];
+	for (const s of sources.filter((x) => objects.has(x.id))) {
+		for (const m of s.missions)
+			for (const [stage, list] of [["practice", m.practice], ["check", m.check]])
+				list.forEach((prompt, index) => {
+					const value = `${s.id}|${m.id}|${stage}|${index}`;
+					rows.push(
+						ui`<label class="option"><input type="checkbox" name="vraag" value="${esc(value)}"${chosen.has(value) ? " checked" : ""}> ${esc(s.title)} · ${esc(m.title)} · ${stage === "practice" ? tr("Doen") : tr("Check")} ${index + 1}: ${esc(prompt)}</label>`,
+					);
+				});
+	}
+	if (!rows.length)
+		return ui`<p class="muted">Kies eerst een missie en sla op; daarna kun je hier vragen uit dezelfde leerobjecten toevoegen.</p>`;
+	return ui`<fieldset><legend>Extra vragen (hoogstens 6)</legend>${rows.join("")}${fieldError(errors, "vraag")}</fieldset>`;
+}
+
+export function packEditorPage({ values, errors = {}, notice = "", csrf, id, version, sources = [], readiness, backups = "" }) {
+	const v = (name) => esc(values[name] ?? "");
+	const action = id ? `/bibliotheek/packs/${esc(id)}` : "/bibliotheek/packs/nieuw";
+	const field = (name, label, control, hint = "") =>
+		ui`<div class="field${errors[name] ? " invalid" : ""}"><label for="f-${name}">${label}</label>${control}${hint}${fieldError(errors, name)}</div>`;
+	const select = (name, items, selected) =>
+		ui`<select id="f-${name}" name="${name}"${invalid(errors, name)}>${items.map(([val, label]) => ui`<option value="${esc(val)}"${String(selected) === String(val) ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
+	const missionSelect = (n) =>
+		field(
+			`missie${n}`,
+			n === 1 ? tr("Missie 1 (verplicht)") : tr("Missie {0} (optioneel)", n),
+			ui`<select id="f-missie${n}" name="missie${n}"${invalid(errors, `missie${n}`)}><option value="">${tr("— geen —")}</option>${missionOptions(sources, values[`missie${n}`])}</select>`,
+		);
+	const status = readiness
+		? ui`<section class="card" aria-labelledby="bronnen"><h2 id="bronnen">Bronnen en delen</h2><ul>${readiness.items
+				.map(
+					(item) =>
+						ui`<li>${esc(item.title)}: ${stateChip(item.state.key)}${item.newer ? ui` <em>Er is een nieuwere revisie (${item.revision}); sla het pakket op om die te gebruiken.</em>` : ""}</li>`,
+				)
+				.join("")}</ul>${
+				readiness.shareable
+					? ui`<p>Alle bronnen zijn gepubliceerd. Een pakket vastleggen en delen komt in een volgende stap.</p>`
+					: ui`<p class="notice" role="note">Delen is uitgeschakeld tot elke bron onafhankelijk is nagekeken én gepubliceerd. Je kunt het pakket wel bewerken en bekijken als voorbeeld.</p>`
+			}</section>`
+		: "";
+	const extra = id
+		? ui`<p><a class="action" href="/bibliotheek/packs/${esc(id)}/voorbeeld">Voorbeeld bekijken</a></p><div class="row-actions"><form method="post" action="/bibliotheek/packs/${esc(id)}/dupliceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form></div>`
+		: "";
+	return ui`${notice}<form method="post" action="${action}" novalidate><input type="hidden" name="csrf" value="${esc(csrf)}">${id ? ui`<input type="hidden" name="expectedVersion" value="${version}">` : ""}${field("titel", tr("Titel"), ui`<input id="f-titel" name="titel" value="${v("titel")}" maxlength="120" required${invalid(errors, "titel")}>`)}${field("beschrijving", tr("Beschrijving"), ui`<textarea id="f-beschrijving" name="beschrijving" rows="2" maxlength="500"${invalid(errors, "beschrijving")}>${v("beschrijving")}</textarea>`)}${field("instructies", tr("Instructies voor de leerling"), ui`<textarea id="f-instructies" name="instructies" rows="3" maxlength="500"${invalid(errors, "instructies")}>${v("instructies")}</textarea>`, ui`<p class="muted">Gewone tekst, hoogstens 500 tekens.</p>`)}${field("vak", tr("Vak"), select("vak", SUBJECTS.map(([val, label]) => [val, tr(label)]), values.vak ?? SUBJECTS[0][0]))}${field("jaar", tr("Jaar"), select("jaar", [1, 2, 3, 4, 5, 6].map((y) => [y, y]), values.jaar ?? "3"))}${field("taal", tr("Taal van de inhoud"), select("taal", LANGUAGES, values.taal ?? "nl"), ui`<p class="muted">De taal waarin de leerling de inhoud leest. Er wordt niets automatisch vertaald.</p>`)}${field("modus", tr("Soort"), select("modus", [["practice", tr("Oefenen: meteen feedback")], ["test", tr("Toets: feedback na afloop")]], values.modus ?? "practice"))}${missionSelect(1)}${missionSelect(2)}${missionSelect(3)}${questionChoices(sources, values, errors)}${field("verloopDagen", tr("Standaard geldigheid van een link (dagen)"), ui`<input id="f-verloopDagen" name="verloopDagen" type="number" min="1" max="30" value="${v("verloopDagen") || "7"}"${invalid(errors, "verloopDagen")}>`, ui`<p class="muted">Geldt alleen voor links die je later maakt. Eén poging per link.</p>`)}<p><button type="submit">Opslaan</button></p></form>${status}${extra}${backups}`;
+}
