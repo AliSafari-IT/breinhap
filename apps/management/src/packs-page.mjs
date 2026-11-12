@@ -108,7 +108,59 @@ export function packEditorPage({ values, errors = {}, notice = "", csrf, id, ver
 			}</section>`
 		: "";
 	const extra = id
-		? ui`<p><a class="action" href="/bibliotheek/packs/${esc(id)}/voorbeeld">Voorbeeld bekijken</a></p><div class="row-actions"><form method="post" action="/bibliotheek/packs/${esc(id)}/dupliceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form></div>`
+		? ui`<p><a class="action" href="/bibliotheek/packs/${esc(id)}/voorbeeld">Voorbeeld bekijken</a> <a class="action" href="/bibliotheek/packs/${esc(id)}/links">Delen en links</a></p><div class="row-actions"><form method="post" action="/bibliotheek/packs/${esc(id)}/dupliceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form></div>`
 		: "";
 	return ui`${notice}<form method="post" action="${action}" novalidate><input type="hidden" name="csrf" value="${esc(csrf)}">${id ? ui`<input type="hidden" name="expectedVersion" value="${version}">` : ""}${field("titel", tr("Titel"), ui`<input id="f-titel" name="titel" value="${v("titel")}" maxlength="120" required${invalid(errors, "titel")}>`)}${field("beschrijving", tr("Beschrijving"), ui`<textarea id="f-beschrijving" name="beschrijving" rows="2" maxlength="500"${invalid(errors, "beschrijving")}>${v("beschrijving")}</textarea>`)}${field("instructies", tr("Instructies voor de leerling"), ui`<textarea id="f-instructies" name="instructies" rows="3" maxlength="500"${invalid(errors, "instructies")}>${v("instructies")}</textarea>`, ui`<p class="muted">Gewone tekst, hoogstens 500 tekens.</p>`)}${field("vak", tr("Vak"), select("vak", SUBJECTS.map(([val, label]) => [val, tr(label)]), values.vak ?? SUBJECTS[0][0]))}${field("jaar", tr("Jaar"), select("jaar", [1, 2, 3, 4, 5, 6].map((y) => [y, y]), values.jaar ?? "3"))}${field("taal", tr("Taal van de inhoud"), select("taal", LANGUAGES, values.taal ?? "nl"), ui`<p class="muted">De taal waarin de leerling de inhoud leest. Er wordt niets automatisch vertaald.</p>`)}${field("modus", tr("Soort"), select("modus", [["practice", tr("Oefenen: meteen feedback")], ["test", tr("Toets: feedback na afloop")]], values.modus ?? "practice"))}${missionSelect(1)}${missionSelect(2)}${missionSelect(3)}${questionChoices(sources, values, errors)}${field("verloopDagen", tr("Standaard geldigheid van een link (dagen)"), ui`<input id="f-verloopDagen" name="verloopDagen" type="number" min="1" max="30" value="${v("verloopDagen") || "7"}"${invalid(errors, "verloopDagen")}>`, ui`<p class="muted">Geldt alleen voor links die je later maakt. Eén poging per link.</p>`)}<p><button type="submit">Opslaan</button></p></form>${status}${extra}${backups}`;
+}
+
+// ── sharing (breinhap#81) ────────────────────────────────────────────────────────────────────────
+
+const LINK_STATUS = {
+	active: ["Actief", "ok"],
+	scheduled: ["Gepland", "pending"],
+	used: ["Gebruikt (poging gestart)", "pending"],
+	expired: ["Verlopen", "draft"],
+	revoked: ["Ingetrokken", "draft"],
+};
+const dateTime = (value) =>
+	new Date(value).toLocaleString(formatLocale(), { timeZone: "Europe/Brussels", dateStyle: "short", timeStyle: "short" });
+const hiddenCsrf = (csrf) => ui`<input type="hidden" name="csrf" value="${esc(csrf)}">`;
+
+/** The public learner URL. The token sits in the fragment only: it is never sent in an HTTP request line. */
+export const learnerUrl = (secret) => `https://breinhap.com/p/#${secret}`;
+
+export function packLinksPage({ id, pack, versions, links, readiness, csrf, nonce, notice = "" }) {
+	const active = links.find((l) => l.active);
+	const latest = versions[0];
+	const freeze = readiness.shareable
+		? ui`<form method="post" action="/bibliotheek/packs/${esc(id)}/vastleggen">${hiddenCsrf(csrf)}<input type="hidden" name="expectedVersion" value="${pack.version}"><p>Leg de huidige inhoud van dit pakket vast als een nieuwe, onveranderlijke versie. Latere wijzigingen aan het pakket of de bronnen veranderen een vastgelegde versie nooit.</p><p><button>Nieuwe versie vastleggen</button></p></form>`
+		: ui`<p class="notice" role="note">Vastleggen en delen kan pas als elke bron onafhankelijk is nagekeken én gepubliceerd. <a href="/bibliotheek/packs/${esc(id)}">Bekijk de status van de bronnen</a>.</p>`;
+	const versionList = versions.length
+		? ui`<table class="library"><caption>Vastgelegde versies</caption><thead><tr><th scope="col">Versie</th><th scope="col">Vastgelegd</th></tr></thead><tbody>${versions
+				.map((v) => ui`<tr><td>${v.version}</td><td>${esc(dateTime(v.createdAt))}</td></tr>`)
+				.join("")}</tbody></table>`
+		: ui`<p>Er is nog geen versie vastgelegd.</p>`;
+	const mint =
+		latest && !active
+			? ui`<form method="post" action="/bibliotheek/packs/${esc(id)}/links/nieuw">${hiddenCsrf(csrf)}<input type="hidden" name="nonce" value="${esc(nonce)}"><input type="hidden" name="version" value="${latest.version}"><div class="field"><label for="f-dagen">Geldig voor (dagen)</label><input id="f-dagen" name="expiryDays" type="number" min="1" max="30" value="${esc(pack.draft.shareDefaults?.expiryDays ?? 7)}"></div><div class="field"><label for="f-vanaf">Pas beschikbaar vanaf (optioneel)</label><input id="f-vanaf" name="notBefore" type="date"></div><p>De link werkt voor één leerling en één poging. De link wordt maar één keer getoond.</p><p><button>Link maken voor versie ${latest.version}</button></p></form>`
+			: latest
+				? ui`<p>Er is al een actieve link. Maak een nieuwe link met “Nieuwe link maken” bij die link; de oude link stopt dan meteen.</p>`
+				: "";
+	const linkRows = links.length
+		? ui`<table class="library"><caption>Links (zonder de link zelf; die is niet terug te halen)</caption><thead><tr><th scope="col">Versie</th><th scope="col">Status</th><th scope="col">Geldig tot</th><th scope="col">Pogingen</th><th scope="col">Laatst gebruikt</th><th scope="col">Acties</th></tr></thead><tbody>${links
+				.map((l) => {
+					const [label, tone] = LINK_STATUS[l.status] ?? LINK_STATUS.expired;
+					const actions = l.active
+						? ui`<form method="post" action="/bibliotheek/packs/${esc(id)}/links/${esc(l.id)}/roteren">${hiddenCsrf(csrf)}<input type="hidden" name="nonce" value="${esc(`${nonce}-${l.id.slice(0, 8)}`.slice(0, 190))}"><button>Nieuwe link maken</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/links/${esc(l.id)}/intrekken">${hiddenCsrf(csrf)}<button>Intrekken</button></form>`
+						: "";
+					return ui`<tr><td>${l.version}</td><td><span class="state ${tone}">${tr(label)}</span></td><td>${esc(dateTime(l.expiresAt))}</td><td>${l.attemptsStarted} van ${l.maxAttempts}</td><td>${l.lastUsedAt ? esc(dateTime(l.lastUsedAt)) : "—"}</td><td>${actions}</td></tr>`;
+				})
+				.join("")}</tbody></table>`
+		: ui`<p>Er zijn nog geen links.</p>`;
+	return ui`${notice}<p><a href="/bibliotheek/packs/${esc(id)}">Terug naar het oefenpakket</a></p><section class="card" aria-labelledby="vastleggen"><h2 id="vastleggen">Versie vastleggen</h2>${freeze}${versionList}</section><section class="card" aria-labelledby="link"><h2 id="link">Link voor de leerling</h2>${mint}${linkRows}</section>`;
+}
+
+/** The one and only display of a raw link. Plain selectable text first; the copy button is an enhancement. */
+export function mintedPage({ id, url, expiresAt }) {
+	return ui`<div class="notice" role="status"><p><strong>De link is gemaakt.</strong> Kopieer hem nu: hij wordt hier maar één keer getoond en is daarna niet meer terug te vinden. Verlies je hem, maak dan een nieuwe link; de oude stopt dan.</p></div><div class="field"><label for="f-link">Link voor de leerling</label><input id="f-link" class="pack-link" readonly value="${esc(url)}" size="60" data-select></div><p><button type="button" data-copy="f-link" data-copied="${esc(tr("Gekopieerd."))}" data-failed="${esc(tr("Kopiëren lukt niet. Selecteer de link en kopieer hem met je toetsenbord."))}" hidden>Kopieer de link</button> <span id="kopieerstatus" role="status"></span></p><p>Geldig tot ${esc(dateTime(expiresAt))}. Eén leerling, één poging. Deel de link alleen met die leerling of zijn ouder; wie de link heeft, kan beginnen.</p><p><a href="/bibliotheek/packs/${esc(id)}/links">Naar de links</a></p>`;
 }

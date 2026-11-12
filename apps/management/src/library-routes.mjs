@@ -14,7 +14,8 @@ import {
 import { previewPage } from "./preview.mjs";
 import { publicationPage } from "./publishing-page.mjs";
 import { assignmentsPage } from "./assignments-page.mjs";
-import { packEditorPage, packsListPage } from "./packs-page.mjs";
+import { learnerUrl, mintedPage, packEditorPage, packLinksPage, packsListPage } from "./packs-page.mjs";
+import { randomBytes } from "node:crypto";
 import { PackAuthoring } from "./practice/authoring.mjs";
 import { LINK_TARGETS } from "./directory.mjs";
 import { issueText, reviewPage, reviewQueuePage } from "./review.mjs";
@@ -574,6 +575,14 @@ async function handlePacks(req, url, { principal, practice, csrf, form, refused 
 		if (error?.code === "not_found") return notFound;
 		if (error?.code === "limit")
 			return { status: 422, title: tr("Te veel oefenpakketten"), body: ui`Je hebt het maximum van 100 oefenpakketten bereikt. Archiveer er eerst een. <a href="/bibliotheek/packs">Terug</a>` };
+		if (error?.code === "exists")
+			return { status: 409, title: tr("Er is al een link"), body: ui`Dit pakket heeft al een actieve link. Gebruik “Nieuwe link maken” bij die link als je een nieuwe wilt. <a href="${linksBase}">Naar de links</a>` };
+		if (error?.code === "gone")
+			return { status: 409, title: tr("Niet meer beschikbaar"), body: ui`Je toegang of een bron van dit pakket is niet meer geldig (ingetrokken, vervangen of niet meer gepubliceerd). Er is niets gedeeld. <a href="${linksBase}">Terug</a>` };
+		if (error?.code === "stale")
+			return { status: 409, title: tr("Verouderd"), body: ui`Het pakket is intussen gewijzigd. Open het opnieuw en probeer nog eens. <a href="${linksBase}">Terug</a>` };
+		if (error?.code === "invalid")
+			return { status: 422, title: tr("Ongeldig"), body: ui`Deze aanvraag klopt niet (bijvoorbeeld de geldigheid of de startdatum). <a href="${linksBase}">Terug</a>` };
 		if (error?.code === "unavailable" || error?.code === "unsupported_version")
 			return { status: 422, title: tr("Voorbeeld niet mogelijk"), body: ui`Een bron van dit pakket is niet meer beschikbaar of gebruikt een onbekende schemaversie. Kies de missies opnieuw. <a href="/bibliotheek/packs">Terug</a>` };
 		throw error;
@@ -586,6 +595,7 @@ async function handlePacks(req, url, { principal, practice, csrf, form, refused 
 		}
 	};
 	const path = url.pathname.replace(/\/+$/, "");
+	const linksBase = `${path.split("/").slice(0, 4).join("/")}/links`;
 	const page = async (title, built) => ({ status: built.status ?? 200, title, body: built.body, active: "/bibliotheek", headers: built.headers });
 	const editor = async (extra) => {
 		const sources = await practice.sources(principal);
@@ -619,9 +629,63 @@ async function handlePacks(req, url, { principal, practice, csrf, form, refused 
 		});
 	}
 
-	const match = /^\/bibliotheek\/packs\/([^/]+)(?:\/(dupliceren|archiveren|voorbeeld))?$/.exec(path);
+	const match = /^\/bibliotheek\/packs\/([^/]+)(?:\/(dupliceren|archiveren|voorbeeld|vastleggen|links|links\/nieuw|links\/[^/]+\/(?:intrekken|roteren)))?$/.exec(path);
 	if (!match || !PACK_ID.test(match[1])) return notFound;
 	const [, id, action] = match;
+
+	// breinhap#81: sharing. Freeze a version, then mint, rotate or revoke its single link.
+	if (action === "vastleggen" || action === "links" || action?.startsWith("links/")) {
+		if (action === "links") {
+			if (req.method === "POST") return wrong("GET");
+			return guard(async () => {
+				const pack = await practice.get(principal, id);
+				const [versions, links, readiness] = await Promise.all([practice.versions(principal, id), practice.links(principal, id), practice.readiness(principal, pack.draft)]);
+				const feedback = url.searchParams.get("vastgelegd")
+					? notice(tr`Versie ${Number(url.searchParams.get("vastgelegd"))} is vastgelegd.`)
+					: url.searchParams.get("ingetrokken")
+						? notice(tr("De link is ingetrokken."))
+						: "";
+				return {
+					status: 200,
+					title: tr`Delen: ${pack.draft.title}`,
+					active: "/bibliotheek",
+					body: packLinksPage({ id, pack, versions, links, readiness, csrf, nonce: randomBytes(16).toString("base64url"), notice: feedback }),
+					headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
+				};
+			});
+		}
+		if (req.method !== "POST") return wrong("POST");
+		return guard(async () => {
+			if (action === "vastleggen") {
+				const { version } = await practice.freeze(principal, id, Number(form.get("expectedVersion")));
+				return redirect(`/bibliotheek/packs/${id}/links?vastgelegd=${version}`);
+			}
+			const parts = action.split("/");
+			if (parts[1] === "nieuw" || parts[2] === "roteren") {
+				const nonce = String(form.get("nonce") ?? "");
+				if (!nonce || nonce.length > 200) throw Object.assign(new Error("invalid"), { code: "invalid" });
+				const days = form.get("expiryDays");
+				const from = form.get("notBefore");
+				const options = { nonce };
+				if (days) options.expiryDays = Number(days);
+				if (from) {
+					const date = new Date(`${from}T00:00:00.000Z`);
+					if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || Number.isNaN(+date)) throw Object.assign(new Error("invalid"), { code: "invalid" });
+					if (date > new Date()) options.notBefore = date;
+				}
+				const minted = parts[2] === "roteren"
+					? await practice.rotate(principal, id, parts[1], options)
+					: await practice.mint(principal, id, Number(form.get("version")), options);
+				// shown once, in this response only: never in a redirect, URL, flash or log
+				const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex" };
+				if (!minted.token)
+					return { status: 200, title: tr("Link al gemaakt"), active: "/bibliotheek", headers, body: ui`<div class="notice" role="note"><p>Deze aanvraag was al verwerkt. Om veiligheidsredenen is de link niet terug te halen. Maak een nieuwe link als je hem kwijt bent. <a href="${linksBase}">Naar de links</a></p></div>` };
+				return { status: 200, title: tr("Link gemaakt"), active: "/bibliotheek", headers, body: mintedPage({ id, url: learnerUrl(minted.token), expiresAt: minted.expiresAt }) };
+			}
+			await practice.revoke(principal, id, parts[1]);
+			return redirect(`/bibliotheek/packs/${id}/links?ingetrokken=1`);
+		});
+	}
 
 	if (action === "voorbeeld") {
 		if (req.method === "POST") return wrong("GET");

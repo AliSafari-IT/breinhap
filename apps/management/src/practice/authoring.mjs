@@ -240,6 +240,59 @@ export class PackAuthoring {
 		};
 	}
 
+	// ── sharing (breinhap#81): freeze a version, then mint or revoke its single link ───────────────
+
+	/** Frozen versions of an owned pack, newest first. No envelope content. */
+	async versions(p, id) {
+		await this.practice.assign(p);
+		await this.practice.owned(this.pool, p, id, false, true);
+		return (
+			await this.pool.query(
+				"SELECT version, content_hash AS hash, created_at AS \"createdAt\" FROM practice_pack_versions WHERE workspace_id=$1 AND pack_id=$2 ORDER BY version DESC LIMIT 50",
+				[this.workspace, id],
+			)
+		).rows;
+	}
+	/** Link metadata only: lifecycle, counts and last use. Never a token, hash or learner data. */
+	async links(p, id) {
+		await this.practice.assign(p);
+		await this.practice.owned(this.pool, p, id, false, true);
+		const { rows } = await this.pool.query(
+			"SELECT l.id, l.pack_version AS version, l.not_before, l.expires_at, l.revoked_at, l.max_attempts, l.attempts_started, l.active_slot AS \"active\", l.created_at AS \"createdAt\", l.last_used_at AS \"lastUsedAt\", now() AS now FROM practice_share_links l WHERE l.workspace_id=$1 AND l.pack_id=$2 ORDER BY l.created_at DESC, l.id LIMIT 50",
+			[this.workspace, id],
+		);
+		return rows.map((r) => ({
+			id: r.id,
+			version: r.version,
+			notBefore: r.not_before,
+			expiresAt: r.expires_at,
+			revokedAt: r.revoked_at,
+			attemptsStarted: r.attempts_started,
+			maxAttempts: r.max_attempts,
+			active: r.active,
+			createdAt: r.createdAt,
+			lastUsedAt: r.lastUsedAt,
+			status: linkStatus(r, new Date(r.now)),
+		}));
+	}
+	async freeze(p, id, expectedVersion) {
+		await this.practice.assign(p);
+		return this.practice.freeze(p, id, expectedVersion);
+	}
+	async mint(p, id, version, options) {
+		return this.practice.mint(p, id, version, options);
+	}
+	async revoke(p, id, linkId) {
+		return this.practice.revoke(p, id, linkId);
+	}
+	/** Replaces the active link by a new one for the version the old one served. */
+	async rotate(p, id, linkId, options) {
+		await this.practice.assign(p);
+		const link = (await this.links(p, id)).find((l) => l.id === linkId && l.active);
+		if (!link) fail("not_found");
+		return this.practice.mint(p, id, link.version, { ...options, rotate: true });
+	}
+
 	async create(p, draft) {
 		return this.practice.create(p, draft);
 	}
@@ -317,3 +370,12 @@ export class PackAuthoring {
 }
 
 export { PracticeError };
+
+/** The state of a share link as the owner sees it. */
+export function linkStatus(row, now) {
+	if (row.revoked_at) return "revoked";
+	if (new Date(row.expires_at) <= now) return "expired";
+	if (new Date(row.not_before) > now) return "scheduled";
+	if (row.attempts_started >= row.max_attempts) return "used";
+	return "active";
+}
