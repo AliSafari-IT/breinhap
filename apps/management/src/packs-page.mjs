@@ -108,7 +108,7 @@ export function packEditorPage({ values, errors = {}, notice = "", csrf, id, ver
 			}</section>`
 		: "";
 	const extra = id
-		? ui`<p><a class="action" href="/bibliotheek/packs/${esc(id)}/voorbeeld">Voorbeeld bekijken</a> <a class="action" href="/bibliotheek/packs/${esc(id)}/links">Delen en links</a></p><div class="row-actions"><form method="post" action="/bibliotheek/packs/${esc(id)}/dupliceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form></div>`
+		? ui`<p><a class="action" href="/bibliotheek/packs/${esc(id)}/voorbeeld">Voorbeeld bekijken</a> <a class="action" href="/bibliotheek/packs/${esc(id)}/links">Delen en links</a> <a class="action" href="/bibliotheek/packs/${esc(id)}/resultaten">Resultaten</a></p><div class="row-actions"><form method="post" action="/bibliotheek/packs/${esc(id)}/dupliceren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Dupliceren</button></form><form method="post" action="/bibliotheek/packs/${esc(id)}/archiveren"><input type="hidden" name="csrf" value="${esc(csrf)}"><button>Archiveren</button></form></div>`
 		: "";
 	return ui`${notice}<form method="post" action="${action}" novalidate><input type="hidden" name="csrf" value="${esc(csrf)}">${id ? ui`<input type="hidden" name="expectedVersion" value="${version}">` : ""}${field("titel", tr("Titel"), ui`<input id="f-titel" name="titel" value="${v("titel")}" maxlength="120" required${invalid(errors, "titel")}>`)}${field("beschrijving", tr("Beschrijving"), ui`<textarea id="f-beschrijving" name="beschrijving" rows="2" maxlength="500"${invalid(errors, "beschrijving")}>${v("beschrijving")}</textarea>`)}${field("instructies", tr("Instructies voor de leerling"), ui`<textarea id="f-instructies" name="instructies" rows="3" maxlength="500"${invalid(errors, "instructies")}>${v("instructies")}</textarea>`, ui`<p class="muted">Gewone tekst, hoogstens 500 tekens.</p>`)}${field("vak", tr("Vak"), select("vak", SUBJECTS.map(([val, label]) => [val, tr(label)]), values.vak ?? SUBJECTS[0][0]))}${field("jaar", tr("Jaar"), select("jaar", [1, 2, 3, 4, 5, 6].map((y) => [y, y]), values.jaar ?? "3"))}${field("taal", tr("Taal van de inhoud"), select("taal", LANGUAGES, values.taal ?? "nl"), ui`<p class="muted">De taal waarin de leerling de inhoud leest. Er wordt niets automatisch vertaald.</p>`)}${field("modus", tr("Soort"), select("modus", [["practice", tr("Oefenen: meteen feedback")], ["test", tr("Toets: feedback na afloop")]], values.modus ?? "practice"))}${missionSelect(1)}${missionSelect(2)}${missionSelect(3)}${questionChoices(sources, values, errors)}${field("verloopDagen", tr("Standaard geldigheid van een link (dagen)"), ui`<input id="f-verloopDagen" name="verloopDagen" type="number" min="1" max="30" value="${v("verloopDagen") || "7"}"${invalid(errors, "verloopDagen")}>`, ui`<p class="muted">Geldt alleen voor links die je later maakt. Eén poging per link.</p>`)}<p><button type="submit">Opslaan</button></p></form>${status}${extra}${backups}`;
 }
@@ -163,4 +163,48 @@ export function packLinksPage({ id, pack, versions, links, readiness, csrf, nonc
 /** The one and only display of a raw link. Plain selectable text first; the copy button is an enhancement. */
 export function mintedPage({ id, url, expiresAt }) {
 	return ui`<div class="notice" role="status"><p><strong>De link is gemaakt.</strong> Kopieer hem nu: hij wordt hier maar één keer getoond en is daarna niet meer terug te vinden. Verlies je hem, maak dan een nieuwe link; de oude stopt dan.</p></div><div class="field"><label for="f-link">Link voor de leerling</label><input id="f-link" class="pack-link" readonly value="${esc(url)}" size="60" data-select></div><p><button type="button" data-copy="f-link" data-copied="${esc(tr("Gekopieerd."))}" data-failed="${esc(tr("Kopiëren lukt niet. Selecteer de link en kopieer hem met je toetsenbord."))}" hidden>Kopieer de link</button> <span id="kopieerstatus" role="status"></span></p><p>Geldig tot ${esc(dateTime(expiresAt))}. Eén leerling, één poging. Deel de link alleen met die leerling of zijn ouder; wie de link heeft, kan beginnen.</p><p><a href="/bibliotheek/packs/${esc(id)}/links">Naar de links</a></p>`;
+}
+
+// ── results (breinhap#83) ────────────────────────────────────────────────────────────────────────
+
+const ATTEMPT_STATUS = {
+	active: ["Bezig", "pending"],
+	submitted: ["Ingeleverd", "ok"],
+	submitted_done: ["Ingeleverd en afgesloten", "ok"],
+	abandoned: ["Afgesloten zonder inleveren", "draft"],
+};
+const duration = (minutes) => (minutes === null || minutes === undefined ? "—" : `${minutes} min`);
+
+export function packResultsPage({ id, links, filter, results, csrf, notice = "" }) {
+	const rows = results.attempts.length
+		? ui`<table class="library"><caption>Pogingen</caption><thead><tr><th scope="col">Gestart</th><th scope="col">Status</th><th scope="col">Score</th><th scope="col">Duur</th><th scope="col">Versie</th><th scope="col">Bewaard tot</th></tr></thead><tbody>${results.attempts
+				.map((a) => {
+					const [label, tone] = ATTEMPT_STATUS[a.status] ?? ATTEMPT_STATUS.active;
+					return ui`<tr><td><a href="/bibliotheek/packs/${esc(id)}/resultaten/${esc(a.id)}">${esc(dateTime(a.startedAt))}</a></td><td><span class="state ${tone}">${tr(label)}</span></td><td>${a.completedAt ? ui`${a.score} van ${a.questionCount}` : "—"}</td><td>${esc(duration(a.minutes))}</td><td>${a.version}</td><td>${esc(date(a.deleteAfter))}</td></tr>`;
+				})
+				.join("")}</tbody></table>`
+		: ui`<p>Er zijn nog geen pogingen.</p>`;
+	const filterForm = links.length > 1
+		? ui`<form method="get" action="/bibliotheek/packs/${esc(id)}/resultaten" class="filters"><label>Link <select name="link"><option value="">Alle links</option>${links
+				.map((l) => ui`<option value="${esc(l.id)}"${filter === l.id ? " selected" : ""}>${esc(dateTime(l.createdAt))} · versie ${l.version}</option>`)
+				.join("")}</select></label><button>Filteren</button></form>`
+		: "";
+	const remove = results.attempts.length
+		? ui`<form method="post" action="/bibliotheek/packs/${esc(id)}/resultaten/verwijderen"><input type="hidden" name="csrf" value="${esc(csrf)}"><label><input type="checkbox" name="bevestig" value="1" required> Ik wil alle antwoorden en pogingen van dit pakket verwijderen. Dit kan niet ongedaan worden gemaakt.</label><p><button>Alles verwijderen</button></p></form>`
+		: "";
+	return ui`${notice}<p><a href="/bibliotheek/packs/${esc(id)}">Terug naar het oefenpakket</a></p><p>${results.started} poging${results.started === 1 ? "" : "en"} gestart, ${results.completed} ingeleverd. De pogingen zijn anoniem: er is geen naam of e-mailadres bij. Antwoorden worden automatisch verwijderd 30 dagen nadat de poging begon. Verwijderen geeft de poging van een link niet terug: een link blijft één poging tellen.</p>${filterForm}${rows}${remove}`;
+}
+
+export function packAttemptPage({ id, attempt, csrf }) {
+	const [label, tone] = ATTEMPT_STATUS[attempt.status] ?? ATTEMPT_STATUS.active;
+	const items = attempt.items
+		? ui`<ol class="review">${attempt.items
+				.map((item) => {
+					const mine = item.kind === "choice" ? item.options[item.chosen] : (item.placed ?? []).join(" → ");
+					const right = item.kind === "choice" ? item.correctAnswer : item.correctAnswer.join(" → ");
+					return ui`<li class="review-item"><h3>${esc(item.prompt)}</h3><p>Antwoord van de leerling: ${esc(mine ?? "—")}</p><p><span class="state ${item.correct ? "ok" : "pending"}">${item.correct ? tr("Klopt.") : tr("Nog niet.")}</span> Juist antwoord: ${esc(right)}</p><p class="muted">${esc(item.explanation)}</p></li>`;
+				})
+				.join("")}</ol>`
+		: ui`<p class="notice" role="note">Deze poging is nog niet ingeleverd. Tot dan zie je alleen de status: geen antwoorden en geen tussentijds resultaat.</p>`;
+	return ui`<p><a href="/bibliotheek/packs/${esc(id)}/resultaten">Terug naar de pogingen</a></p><p><span class="state ${tone}">${tr(label)}</span> Gestart ${esc(dateTime(attempt.startedAt))}${attempt.completedAt ? ui` · ingeleverd ${esc(dateTime(attempt.completedAt))} · score ${attempt.score} van ${attempt.questionCount} · duur ${esc(duration(attempt.minutes))}` : ""} · versie ${attempt.version} · bewaard tot ${esc(date(attempt.deleteAfter))}</p>${items}<form method="post" action="/bibliotheek/packs/${esc(id)}/resultaten/${esc(attempt.id)}/verwijderen"><input type="hidden" name="csrf" value="${esc(csrf)}"><label><input type="checkbox" name="bevestig" value="1" required> Ik wil deze poging en haar antwoorden verwijderen. Dit kan niet ongedaan worden gemaakt.</label><p><button>Poging verwijderen</button></p></form>`;
 }
