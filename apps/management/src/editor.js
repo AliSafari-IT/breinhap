@@ -24,3 +24,24 @@
 		if (button) button.textContent = document.documentElement.dataset.saving;
 	});
 })();
+
+// breinhap#81: the practice-pack link is shown once; this adds a copy button on top of the selectable field.
+(() => {
+	for (const input of document.querySelectorAll?.("input[data-select]") ?? []) input.addEventListener("focus", () => input.select());
+	const button = document.querySelector("button[data-copy]");
+	if (!button) return;
+	const field = document.getElementById(button.dataset.copy);
+	const status = document.getElementById("kopieerstatus");
+	if (!field || typeof navigator === "undefined" || !navigator.clipboard) return;
+	button.hidden = false;
+	button.addEventListener("click", async () => {
+		try {
+			await navigator.clipboard.writeText(field.value);
+			if (status) status.textContent = button.dataset.copied;
+		} catch {
+			field.focus();
+			field.select();
+			if (status) status.textContent = button.dataset.failed;
+		}
+	});
+})();

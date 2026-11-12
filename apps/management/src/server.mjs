@@ -115,7 +115,23 @@ export function createHandler({
 		: undefined,
 	// breinhap#80: practice-pack authoring on the closed practice storage (no links or learner routes yet)
 	practice = directory && content
-		? new PackAuthoring({ practice: new PracticeStore({ directory, publishedContent: publishing }), content })
+		? new PackAuthoring({ practice: new PracticeStore({
+				directory,
+				publishedContent: publishing,
+				// the owner must still be an active parent/tutor/teacher on the membership version the link was minted on
+				ownerEligibility: identity?.store
+					? {
+							checkForPractice: async ({ ownerSub, membershipVersion }) => {
+								const member = await identity.store.membership(ownerSub);
+								return member?.active &&
+									member.version === membershipVersion &&
+									["breinhap.parent", "breinhap.tutor", "breinhap.teacher"].includes(member.role)
+									? "eligible"
+									: "denied";
+							},
+						}
+					: undefined,
+			}), content })
 		: undefined,
 	// breinhap#30: imports, on the same content store
 	imports = content ? new ImportStore({ content }) : undefined,

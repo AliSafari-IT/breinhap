@@ -700,7 +700,7 @@ export function createIdentity({
 		const value = await current(req);
 		if (!value?.allowed) return null;
 		if (value.membership.role === "breinhap.admin" && !value.admin) return null;
-		return { sub: value.saved.sub, role: value.membership.role };
+		return { sub: value.saved.sub, role: value.membership.role, membershipVersion: String(value.membership.version ?? "") };
 	}
 	return {
 		access,
