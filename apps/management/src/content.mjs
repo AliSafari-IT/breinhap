@@ -93,6 +93,68 @@ const hashOf = (object) =>
 
 const missionIds = (object) => object.missions.map((mission) => mission.id);
 
+/**
+ * What must be true before a revision may be offered for review or approved (breinhap#32). The shared
+ * schema already enforces goals, explanations and answer keys; these checks repeat the essentials
+ * because approval is the last server-side gate before publishing (#33), and add the provenance rules
+ * the schema cannot express: at least one source, and an https link for a website source.
+ */
+export function reviewReadiness(object, sources) {
+	let parsed;
+	try {
+		({ object: parsed } = validate(object, sources));
+	} catch (error) {
+		if (error instanceof ContentError) return error.issues;
+		throw error;
+	}
+	const issues = [];
+	const list = Array.isArray(sources) ? sources : [];
+	if (list.length === 0)
+		issues.push({ path: "sources", code: "source_missing", message: "at least one source is required" });
+	list.forEach((source, i) => {
+		if (source?.kind === "website" && !source.url)
+			issues.push({
+				path: `sources.${i}.url`,
+				code: "source_permission",
+				message: "a website source needs an https link",
+			});
+	});
+	parsed.missions.forEach((mission, mi) => {
+		for (const [kind, questions] of [
+			["practice", mission.practice],
+			["check", mission.check],
+		])
+			questions.forEach((question, qi) => {
+				const at = `missions.${mi}.${kind}.${qi}`;
+				if (!question.explanation?.trim())
+					issues.push({
+						path: `${at}.explanation`,
+						code: "explanation_missing",
+						message: "an explanation is required",
+					});
+				if (
+					question.kind === "choice" &&
+					!(question.answerIndex >= 0 && question.answerIndex < question.options.length)
+				)
+					issues.push({
+						path: `${at}.answerIndex`,
+						code: "answer_key_invalid",
+						message: "the answer key must point at an option",
+					});
+				if (
+					question.kind === "order" &&
+					(question.items.length < 2 || new Set(question.items).size !== question.items.length)
+				)
+					issues.push({
+						path: `${at}.items`,
+						code: "answer_key_invalid",
+						message: "order items must be unique",
+					});
+			});
+	});
+	return issues;
+}
+
 export class ContentStore {
 	constructor({ directory }) {
 		this.directory = directory;
@@ -192,19 +254,34 @@ export class ContentStore {
 		await this.author(principal, "content.read");
 		const draft = await this.owned(this.pool, principal, id);
 		const { rows } = await this.pool.query(
-			`SELECT r.revision, r.created_at AS "createdAt", r.content_hash AS "hash", v.decision
-			 FROM learning_object_revisions r LEFT JOIN revision_reviews v
+			`SELECT r.revision, r.source_version AS "sourceVersion", r.created_at AS "createdAt", r.content_hash AS "hash",
+			   v.decision, v.reviewer_sub AS "reviewer", v.comment,
+			   s.submitted_at AS "submittedAt", s.submitted_by AS "submittedBy"
+			 FROM learning_object_revisions r
+			 LEFT JOIN revision_reviews v
 			   ON v.workspace_id = r.workspace_id AND v.learning_object_id = r.learning_object_id AND v.revision = r.revision
+			 LEFT JOIN revision_submissions s
+			   ON s.workspace_id = r.workspace_id AND s.learning_object_id = r.learning_object_id AND s.revision = r.revision
 			 WHERE r.workspace_id = $1 AND r.learning_object_id = $2 ORDER BY r.revision DESC`,
 			[this.workspace, id],
 		);
+		const revisions = rows.map((row) => ({
+			...row,
+			decision: row.decision ?? null,
+			reviewer: row.reviewer ?? null,
+			comment: row.comment ?? "",
+			submittedAt: row.submittedAt ?? null,
+			submittedBy: row.submittedBy ?? null,
+		}));
+		const latest = revisions[0];
 		return {
 			id,
 			version: draft.version,
 			content: draft.content,
 			sources: draft.sources,
 			updatedAt: draft.updatedAt,
-			revisions: rows.map((row) => ({ ...row, decision: row.decision ?? null })),
+			revisions,
+			draftChanged: Boolean(latest && (latest.sourceVersion == null || latest.sourceVersion !== draft.version)),
 		};
 	}
 
@@ -227,18 +304,29 @@ export class ContentStore {
 		}
 		const { rows } = await this.pool.query(
 			`SELECT lo.id, lo.subject, lo.grade, lo.title, d.version, d.updated_at AS "updatedAt",
-			   latest.revision AS "latestRevision", latest.decision AS "latestDecision"
+			   latest.revision AS "latestRevision", latest.decision AS "latestDecision",
+			   latest.submitted_at AS "latestSubmittedAt", latest.source_version AS "latestSourceVersion"
 			 FROM learning_objects lo JOIN learning_object_drafts d ON d.workspace_id = lo.workspace_id AND d.learning_object_id = lo.id
 			 LEFT JOIN LATERAL (
-			   SELECT r.revision, v.decision FROM learning_object_revisions r
+			   SELECT r.revision, r.source_version, v.decision, s.submitted_at
+			   FROM learning_object_revisions r
 			   LEFT JOIN revision_reviews v ON v.workspace_id = r.workspace_id AND v.learning_object_id = r.learning_object_id AND v.revision = r.revision
+			   LEFT JOIN revision_submissions s ON s.workspace_id = r.workspace_id AND s.learning_object_id = r.learning_object_id AND s.revision = r.revision
 			   WHERE r.workspace_id = lo.workspace_id AND r.learning_object_id = lo.id ORDER BY r.revision DESC LIMIT 1
 			 ) latest ON TRUE
 			 WHERE lo.workspace_id = $1 AND lo.owner_sub = $2 AND lo.archived_at IS NULL${filter}
 			 ORDER BY d.updated_at DESC, lo.id`,
 			params,
 		);
-		return rows;
+		return rows.map((row) => ({
+			...row,
+			latestDecision: row.latestDecision ?? null,
+			latestSubmittedAt: row.latestSubmittedAt ?? null,
+			draftChanged: Boolean(
+				row.latestRevision &&
+					(row.latestSourceVersion == null || row.latestSourceVersion !== row.version),
+			),
+		}));
 	}
 
 	/**
@@ -253,11 +341,11 @@ export class ContentStore {
 			// revalidate: the draft was stored by an older schema version or code, it must still be valid
 			const { object, sources } = validate(draft.content, draft.sources);
 			const { rows } = await db.query(
-				`INSERT INTO learning_object_revisions (workspace_id, learning_object_id, revision, schema_version, content, sources, content_hash, created_by)
-				 SELECT $1, $2, coalesce(max(revision), 0) + 1, $3, $4, $5, $6, $7
+				`INSERT INTO learning_object_revisions (workspace_id, learning_object_id, revision, schema_version, content, sources, content_hash, source_version, created_by)
+				 SELECT $1, $2, coalesce(max(revision), 0) + 1, $3, $4, $5, $6, $7, $8
 				 FROM learning_object_revisions WHERE workspace_id = $1 AND learning_object_id = $2
 				 RETURNING revision`,
-				[this.workspace, id, SCHEMA_VERSION, object, JSON.stringify(sources), hashOf(object), principal.sub],
+				[this.workspace, id, SCHEMA_VERSION, object, JSON.stringify(sources), hashOf(object), draft.version, principal.sub],
 			);
 			await this.directory.audit(principal.sub, "content.snapshot", `${id}:${rows[0].revision}`, "done", db);
 			return { id, revision: rows[0].revision };
@@ -269,11 +357,174 @@ export class ContentStore {
 		await this.author(principal, "content.read");
 		await this.owned(this.pool, principal, id);
 		const { rows } = await this.pool.query(
-			`SELECT revision, schema_version AS "schemaVersion", content, sources, content_hash AS "hash", created_at AS "createdAt"
+			`SELECT revision, schema_version AS "schemaVersion", content, sources, content_hash AS "hash",
+			   source_version AS "sourceVersion", created_at AS "createdAt"
 			 FROM learning_object_revisions WHERE workspace_id = $1 AND learning_object_id = $2 AND revision = $3`,
 			[this.workspace, id, Number.isInteger(revision) ? revision : -1],
 		);
 		return rows[0] ?? fail("not_found");
+	}
+
+	/**
+	 * Offers one revision for independent review (breinhap#32). Only its owner may do this, only the
+	 * latest revision, only while it still matches the current draft, and only once. Readiness is
+	 * checked here so a reviewer never receives content that could not be approved.
+	 */
+	async submit(principal, id, revision) {
+		await this.author(principal, "content.submit");
+		if (!Number.isInteger(revision) || revision < 1) fail("invalid");
+		return this.directory.transaction(async (db) => {
+			const draft = await this.owned(db, principal, id, true);
+			const latest = await db.query(
+				"SELECT coalesce(max(revision), 0)::int AS revision FROM learning_object_revisions WHERE workspace_id = $1 AND learning_object_id = $2",
+				[this.workspace, id],
+			);
+			if (latest.rows[0].revision !== revision) fail("not_latest");
+			const { rows } = await db.query(
+				`SELECT r.content, r.sources, r.source_version AS "sourceVersion", v.decision
+				 FROM learning_object_revisions r
+				 LEFT JOIN revision_reviews v
+				   ON v.workspace_id = r.workspace_id AND v.learning_object_id = r.learning_object_id AND v.revision = r.revision
+				 WHERE r.workspace_id = $1 AND r.learning_object_id = $2 AND r.revision = $3`,
+				[this.workspace, id, revision],
+			);
+			const stored = rows[0] ?? fail("not_found");
+			if (stored.decision) fail("already_reviewed");
+			if (stored.sourceVersion == null || stored.sourceVersion !== draft.version) fail("stale_draft");
+			const issues = reviewReadiness(stored.content, stored.sources);
+			if (issues.length) fail("not_ready", issues);
+			try {
+				await db.query(
+					"INSERT INTO revision_submissions (workspace_id, learning_object_id, revision, submitted_by) VALUES ($1, $2, $3, $4)",
+					[this.workspace, id, revision, principal.sub],
+				);
+			} catch (error) {
+				if (error.code === "23505") fail("already_submitted");
+				throw error;
+			}
+			await this.directory.audit(principal.sub, "content.submit", `${id}:${revision}`, "done", db);
+			return { id, revision };
+		});
+	}
+
+	/** Revisions waiting for an independent reviewer, oldest first. Never the reviewer's own content. */
+	async reviewQueue(principal) {
+		await this.directory.require(principal, "content.review", "content.review.queue");
+		const { rows } = await this.pool.query(
+			`SELECT s.learning_object_id AS id, s.revision, s.submitted_at AS "submittedAt",
+			   s.submitted_by AS "submittedBy", lo.title, lo.subject, lo.grade,
+			   r.content_hash AS "hash", r.created_at AS "revisionCreatedAt"
+			 FROM revision_submissions s
+			 JOIN learning_objects lo
+			   ON lo.workspace_id = s.workspace_id AND lo.id = s.learning_object_id AND lo.archived_at IS NULL
+			 JOIN learning_object_revisions r
+			   ON r.workspace_id = s.workspace_id AND r.learning_object_id = s.learning_object_id AND r.revision = s.revision
+			 LEFT JOIN revision_reviews v
+			   ON v.workspace_id = s.workspace_id AND v.learning_object_id = s.learning_object_id AND v.revision = s.revision
+			 WHERE s.workspace_id = $1 AND v.decision IS NULL AND lo.owner_sub <> $2
+			 ORDER BY s.submitted_at, s.learning_object_id, s.revision`,
+			[this.workspace, principal.sub],
+		);
+		return rows;
+	}
+
+	/**
+	 * One submitted revision for a reviewer, with its sources and readiness issues. A reviewer never
+	 * sees their own object here, nor a revision that is already decided or whose object is archived.
+	 */
+	async reviewRevision(principal, id, revision) {
+		await this.directory.require(principal, "content.review", "content.review.read");
+		if (typeof id !== "string" || !ID.test(id) || !Number.isInteger(revision) || revision < 1)
+			fail("not_found");
+		const { rows } = await this.pool.query(
+			`SELECT s.learning_object_id AS id, r.revision, r.schema_version AS "schemaVersion", r.content, r.sources,
+			   r.content_hash AS "hash", r.created_at AS "createdAt",
+			   s.submitted_at AS "submittedAt", s.submitted_by AS "submittedBy",
+			   lo.owner_sub AS "owner", lo.title, lo.subject, lo.grade
+			 FROM revision_submissions s
+			 JOIN learning_objects lo
+			   ON lo.workspace_id = s.workspace_id AND lo.id = s.learning_object_id AND lo.archived_at IS NULL
+			 JOIN learning_object_revisions r
+			   ON r.workspace_id = s.workspace_id AND r.learning_object_id = s.learning_object_id AND r.revision = s.revision
+			 LEFT JOIN revision_reviews v
+			   ON v.workspace_id = s.workspace_id AND v.learning_object_id = s.learning_object_id AND v.revision = s.revision
+			 WHERE s.workspace_id = $1 AND s.learning_object_id = $2 AND s.revision = $3
+			   AND v.decision IS NULL AND lo.owner_sub <> $4`,
+			[this.workspace, id, revision, principal.sub],
+		);
+		const row = rows[0] ?? fail("not_found");
+		return { ...row, issues: reviewReadiness(row.content, row.sources) };
+	}
+
+	/**
+	 * Records a reviewer's decision on a submitted revision. Only an adult with the explicit
+	 * `content.review` grant may decide, never the owner, and never twice. Approval re-checks
+	 * readiness; changes requested must say what to change.
+	 */
+	async review(principal, id, revision, decision, comment = "") {
+		await this.directory.require(principal, "content.review", "content.review.decide");
+		if (!["approved", "changes_requested"].includes(decision)) fail("invalid");
+		if (typeof id !== "string" || !ID.test(id) || !Number.isInteger(revision) || revision < 1)
+			fail("not_found");
+		const text = String(comment ?? "").trim();
+		if (text.length > 2000) fail("invalid");
+		if (decision === "changes_requested" && !text) fail("comment_required");
+		try {
+			return await this.directory.transaction(async (db) => {
+				const submission = await db.query(
+					`SELECT s.submitted_by FROM revision_submissions s
+					 JOIN learning_objects lo
+					   ON lo.workspace_id = s.workspace_id AND lo.id = s.learning_object_id AND lo.archived_at IS NULL
+					 WHERE s.workspace_id = $1 AND s.learning_object_id = $2 AND s.revision = $3
+					 FOR UPDATE OF s`,
+					[this.workspace, id, revision],
+				);
+				if (!submission.rowCount) fail("not_found");
+				const object = await db.query(
+					"SELECT owner_sub FROM learning_objects WHERE workspace_id = $1 AND id = $2 AND archived_at IS NULL FOR UPDATE",
+					[this.workspace, id],
+				);
+				if (!object.rowCount) fail("not_found");
+				if (object.rows[0].owner_sub === principal.sub) fail("self_review");
+				const existing = await db.query(
+					"SELECT 1 FROM revision_reviews WHERE workspace_id = $1 AND learning_object_id = $2 AND revision = $3 FOR UPDATE",
+					[this.workspace, id, revision],
+				);
+				if (existing.rowCount) fail("already_reviewed");
+				const { rows } = await db.query(
+					"SELECT content, sources FROM learning_object_revisions WHERE workspace_id = $1 AND learning_object_id = $2 AND revision = $3",
+					[this.workspace, id, revision],
+				);
+				if (!rows[0]) fail("not_found");
+				if (decision === "approved") {
+					const issues = reviewReadiness(rows[0].content, rows[0].sources);
+					if (issues.length) fail("not_ready", issues);
+				}
+				try {
+					await db.query(
+						"INSERT INTO revision_reviews (workspace_id, learning_object_id, revision, decision, reviewer_sub, comment) VALUES ($1, $2, $3, $4, $5, $6)",
+						[this.workspace, id, revision, decision, principal.sub, text],
+					);
+				} catch (error) {
+					if (error.code === "23505") fail("already_reviewed");
+					throw error;
+				}
+				await this.directory.audit(
+					principal.sub,
+					decision === "approved" ? "content.review.approve" : "content.review.changes",
+					`${id}:${revision}`,
+					"done",
+					db,
+				);
+				return { id, revision, decision };
+			});
+		} catch (error) {
+			if (["self_review", "not_ready", "already_reviewed", "comment_required"].includes(error?.code))
+				await this.directory
+					.audit(principal.sub, "content.review.decide", `${id}:${revision}`, "refused")
+					.catch(() => {});
+			throw error;
+		}
 	}
 
 	/**
