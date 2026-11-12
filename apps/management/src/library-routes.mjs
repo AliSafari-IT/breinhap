@@ -13,6 +13,8 @@ import {
 } from "./library.mjs";
 import { previewPage } from "./preview.mjs";
 import { publicationPage } from "./publishing-page.mjs";
+import { assignmentsPage } from "./assignments-page.mjs";
+import { LINK_TARGETS } from "./directory.mjs";
 import { issueText, reviewPage, reviewQueuePage } from "./review.mjs";
 import { assertSupported, studentPayload, SUPPORTED_SCHEMA_VERSIONS } from "./vendor/content-mission.mjs";
 
@@ -33,7 +35,16 @@ const notice = (text, role = "status") =>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export async function handleLibrary(req, url, { identity, content, publishing, extractions }) {
+/** A plain day boundary in UTC; the assignment service rejects anything malformed or out of range. */
+const dayValue = (value, end) => {
+	if (!value) return null;
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+	const parsed = new Date(`${value}T00:00:00.000Z`);
+	if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return "invalid";
+	return `${value}T${end ? "23:59:59.999" : "00:00:00.000"}Z`;
+};
+
+export async function handleLibrary(req, url, { identity, content, publishing, assignments, extractions }) {
 	const path = url.pathname;
 	if (path !== "/bibliotheek" && !path.startsWith("/bibliotheek/")) return null;
 	if (!["GET", "HEAD", "POST"].includes(req.method))
@@ -54,13 +65,23 @@ export async function handleLibrary(req, url, { identity, content, publishing, e
 			body: tr("Publicaties zijn nog niet ingericht op deze server."),
 			active: "/bibliotheek",
 		};
+	// breinhap#34: assigning needs the directory (links) and the publications
+	if (!assignments && (path === "/bibliotheek/toewijzen" || path.startsWith("/bibliotheek/toewijzen/")))
+		return {
+			status: req.method === "POST" ? 503 : 200,
+			title: tr("Inhoud toewijzen"),
+			body: tr("Toewijzen is nog niet ingericht op deze server."),
+			active: "/bibliotheek",
+		};
 	const principal = await identity.principal(req);
 	if (!principal) return { status: 403, title: tr("Geen toegang"), body: tr("Je hebt geen toegang tot de bibliotheek.") };
 	const csrf = req.managementSession.csrf;
 	const refused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang.") };
 	const reviewRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen nakijkers kunnen inhoud nakijken.") };
 	const publishRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen uitgevers kunnen inhoud publiceren.") };
+	const assignmentRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten wijzen inhoud toe aan hun eigen leerlingen of groepen.") };
 	const canPublish = await content.directory.can(principal, "content.publish");
+	const canAssign = await content.directory.can(principal, "content.assign");
 
 	let form;
 	if (req.method === "POST") {
@@ -94,7 +115,7 @@ export async function handleLibrary(req, url, { identity, content, publishing, e
 			const archived = url.searchParams.get("gearchiveerd") === "1" ? notice(tr("Het leerobject is gearchiveerd.")) : "";
 			const canReview = await content.directory.can(principal, "content.review");
 			const pending = canReview ? (await content.reviewQueue(principal)).length : 0;
-			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived, canReview, canPublish, pending }), active: "/bibliotheek" };
+			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived, canReview, canPublish, canAssign, pending }), active: "/bibliotheek" };
 		});
 	}
 
@@ -207,6 +228,111 @@ export async function handleLibrary(req, url, { identity, content, publishing, e
 				throw error;
 			}
 		}, reviewRefused);
+	}
+
+	// breinhap#34: assign active publications to the adult's linked learners and groups, before the
+	// object matcher takes "toewijzen" for an id
+	const assignmentBack = ui`<p><a href="/bibliotheek/toewijzen">${tr("Terug naar toewijzen")}</a></p>`;
+	const assignmentProblem = (error) => {
+		if (error?.code === "forbidden") return assignmentRefused;
+		if (error?.code === "not_found")
+			return {
+				status: 404,
+				title: tr("Niet gevonden"),
+				body: ui`${tr("Deze publicatie, leerling of groep bestaat niet of is niet van jou.")}${assignmentBack}`,
+			};
+		if (error?.code === "exists")
+			return {
+				status: 409,
+				title: tr("Al toegewezen"),
+				body: ui`${tr("Deze publicatie is al aan dit doel toegewezen.")}${assignmentBack}`,
+			};
+		if (error?.code === "stale")
+			return {
+				status: 409,
+				title: tr("Intussen gewijzigd"),
+				body: ui`${tr("De toewijzing is intussen gewijzigd. Probeer opnieuw.")}${assignmentBack}`,
+			};
+		if (error?.code === "invalid")
+			return {
+				status: 422,
+				title: tr("Niet toegewezen"),
+				body: ui`${tr("Controleer de publicatie, het doel en de datums. Een periode duurt hoogstens één jaar.")}${assignmentBack}`,
+			};
+		if (error?.code === "unavailable")
+			return {
+				status: 503,
+				title: tr("Tijdelijk niet beschikbaar"),
+				body: ui`${tr("De toewijzing kan nu niet worden gecontroleerd. Probeer later opnieuw.")}${assignmentBack}`,
+			};
+		throw error;
+	};
+	const assignmentGuard = async (work) => {
+		try {
+			return await work();
+		} catch (error) {
+			return assignmentProblem(error);
+		}
+	};
+	if (path === "/bibliotheek/toewijzen") {
+		if (req.method === "POST")
+			return assignmentGuard(async () => {
+				const audience = (form.get("audience") ?? "").split(":");
+				const audienceKind = audience[0];
+				const audienceId = audience.slice(1).join(":");
+				await assignments.assign(principal, {
+					publicationId: form.get("publicationId") ?? "",
+					audienceKind,
+					audienceId,
+					notBefore: dayValue(form.get("notBefore"), false),
+					availableUntil: dayValue(form.get("availableUntil"), true),
+				});
+				return redirect("/bibliotheek/toewijzen?toegewezen=1");
+			});
+		if (req.method !== "GET" && req.method !== "HEAD")
+			return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET, POST" } };
+		return assignmentGuard(async () => {
+			const targets = LINK_TARGETS[principal.role] ?? [];
+			const [publications, learners, groups, list] = await Promise.all([
+				assignments.publications(principal),
+				targets.includes("learner")
+					? content.directory.learners(principal)
+					: [],
+				targets.includes("group") ? content.directory.groups(principal) : [],
+				assignments.list(principal),
+			]);
+			const feedback = url.searchParams.get("toegewezen")
+				? notice(tr("De inhoud is toegewezen."))
+				: url.searchParams.get("gewijzigd")
+					? notice(tr("De periode is gewijzigd."))
+					: url.searchParams.get("ingetrokken")
+						? notice(tr("De toewijzing is ingetrokken."))
+						: "";
+			return {
+				status: 200,
+				title: tr("Inhoud toewijzen"),
+				body: assignmentsPage({ publications, learners, groups, assignments: list, csrf, notice: feedback }),
+				active: "/bibliotheek",
+			};
+		});
+	}
+	const assignmentMatch = /^\/bibliotheek\/toewijzen\/([0-9a-fA-F-]{36})(?:\/(intrekken))?$/.exec(path);
+	if (assignmentMatch) {
+		if (req.method !== "POST")
+			return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "POST" } };
+		const [, assignmentId, assignmentAction] = assignmentMatch;
+		return assignmentGuard(async () => {
+			if (assignmentAction === "intrekken") {
+				await assignments.revoke(principal, assignmentId);
+				return redirect("/bibliotheek/toewijzen?ingetrokken=1");
+			}
+			const expectedVersion = Number(form.get("expectedVersion"));
+			await assignments.update(principal, assignmentId, expectedVersion, {
+				notBefore: dayValue(form.get("notBefore"), false),
+				availableUntil: dayValue(form.get("availableUntil"), true),
+			});
+			return redirect("/bibliotheek/toewijzen?gewijzigd=1");
+		});
 	}
 
 	// a new learning object

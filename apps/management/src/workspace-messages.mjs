@@ -3683,5 +3683,233 @@ export const MESSAGES = {
 		"en": "Not published",
 		"fr": "Non publiée",
 		"de": "Nicht veröffentlicht"
+	},
+	"Al toegewezen": {
+		"nl": "Al toegewezen",
+		"en": "Already assigned",
+		"fr": "Déjà attribué",
+		"de": "Bereits zugewiesen"
+	},
+	"Alleen ouders, begeleiders en leerkrachten wijzen inhoud toe aan hun eigen leerlingen of groepen.": {
+		"nl": "Alleen ouders, begeleiders en leerkrachten wijzen inhoud toe aan hun eigen leerlingen of groepen.",
+		"en": "Only parents, tutors and teachers assign content to their own learners or groups.",
+		"fr": "Seuls les parents, les accompagnateurs et les enseignants attribuent du contenu à leurs propres élèves ou groupes.",
+		"de": "Nur Eltern, Begleitpersonen und Lehrkräfte weisen ihren eigenen Lernenden oder Gruppen Inhalte zu."
+	},
+	"Beschikbaar": {
+		"nl": "Beschikbaar",
+		"en": "Available",
+		"fr": "Disponible",
+		"de": "Verfügbar"
+	},
+	"Controleer de publicatie, het doel en de datums. Een periode duurt hoogstens één jaar.": {
+		"nl": "Controleer de publicatie, het doel en de datums. Een periode duurt hoogstens één jaar.",
+		"en": "Check the publication, the target and the dates. A period lasts at most one year.",
+		"fr": "Vérifiez la publication, la cible et les dates. Une période dure au maximum un an.",
+		"de": "Prüfen Sie die Veröffentlichung, das Ziel und die Daten. Ein Zeitraum dauert höchstens ein Jahr."
+	},
+	"Datums zijn in UTC.": {
+		"nl": "Datums zijn in UTC.",
+		"en": "Dates are in UTC.",
+		"fr": "Les dates sont en UTC.",
+		"de": "Datums sind in UTC."
+	},
+	"De inhoud is toegewezen.": {
+		"nl": "De inhoud is toegewezen.",
+		"en": "The content has been assigned.",
+		"fr": "Le contenu a été attribué.",
+		"de": "Der Inhalt wurde zugewiesen."
+	},
+	"De periode is gewijzigd.": {
+		"nl": "De periode is gewijzigd.",
+		"en": "The period has been changed.",
+		"fr": "La période a été modifiée.",
+		"de": "Der Zeitraum wurde geändert."
+	},
+	"De toewijzing is ingetrokken.": {
+		"nl": "De toewijzing is ingetrokken.",
+		"en": "The assignment has been revoked.",
+		"fr": "L’attribution a été retirée.",
+		"de": "Die Zuweisung wurde zurückgezogen."
+	},
+	"De toewijzing is intussen gewijzigd. Probeer opnieuw.": {
+		"nl": "De toewijzing is intussen gewijzigd. Probeer opnieuw.",
+		"en": "The assignment has changed in the meantime. Try again.",
+		"fr": "L’attribution a changé entre-temps. Réessayez.",
+		"de": "Die Zuweisung hat sich inzwischen geändert. Versuchen Sie es erneut."
+	},
+	"De toewijzing kan nu niet worden gecontroleerd. Probeer later opnieuw.": {
+		"nl": "De toewijzing kan nu niet worden gecontroleerd. Probeer later opnieuw.",
+		"en": "The assignment cannot be checked right now. Try again later.",
+		"fr": "L’attribution ne peut pas être vérifiée pour le moment. Réessayez plus tard.",
+		"de": "Die Zuweisung kann derzeit nicht geprüft werden. Versuchen Sie es später erneut."
+	},
+	"Deze publicatie is al aan dit doel toegewezen.": {
+		"nl": "Deze publicatie is al aan dit doel toegewezen.",
+		"en": "This publication is already assigned to this target.",
+		"fr": "Cette publication est déjà attribuée à cette cible.",
+		"de": "Diese Veröffentlichung ist diesem Ziel bereits zugewiesen."
+	},
+	"Deze publicatie, leerling of groep bestaat niet of is niet van jou.": {
+		"nl": "Deze publicatie, leerling of groep bestaat niet of is niet van jou.",
+		"en": "This publication, learner or group does not exist or is not yours.",
+		"fr": "Cette publication, cet élève ou ce groupe n’existe pas ou ne vous appartient pas.",
+		"de": "Diese Veröffentlichung, dieser Lernende oder diese Gruppe existiert nicht oder gehört nicht zu Ihnen."
+	},
+	"Deze toewijzing kan niet meer worden gewijzigd.": {
+		"nl": "Deze toewijzing kan niet meer worden gewijzigd.",
+		"en": "This assignment can no longer be changed.",
+		"fr": "Cette attribution ne peut plus être modifiée.",
+		"de": "Diese Zuweisung kann nicht mehr geändert werden."
+	},
+	"Er is nog geen actieve publicatie om toe te wijzen. Publiceer eerst een nagekeken revisie.": {
+		"nl": "Er is nog geen actieve publicatie om toe te wijzen. Publiceer eerst een nagekeken revisie.",
+		"en": "There is no active publication to assign yet. Publish a reviewed revision first.",
+		"fr": "Il n’y a pas encore de publication active à attribuer. Publiez d’abord une révision relue.",
+		"de": "Es gibt noch keine aktive Veröffentlichung zum Zuweisen. Veröffentlichen Sie zuerst eine geprüfte Revision."
+	},
+	"Gepland": {
+		"nl": "Gepland",
+		"en": "Scheduled",
+		"fr": "Planifié",
+		"de": "Geplant"
+	},
+	"Inhoud toewijzen": {
+		"nl": "Inhoud toewijzen",
+		"en": "Assign content",
+		"fr": "Attribuer du contenu",
+		"de": "Inhalte zuweisen"
+	},
+	"Intussen gewijzigd": {
+		"nl": "Intussen gewijzigd",
+		"en": "Changed in the meantime",
+		"fr": "Modifié entre-temps",
+		"de": "Inzwischen geändert"
+	},
+	"Je hebt nog geen inhoud toegewezen.": {
+		"nl": "Je hebt nog geen inhoud toegewezen.",
+		"en": "You have not assigned any content yet.",
+		"fr": "Vous n’avez encore attribué aucun contenu.",
+		"de": "Sie haben noch keine Inhalte zugewiesen."
+	},
+	"Je hebt nog geen leerling of groep waaraan je inhoud kunt toewijzen.": {
+		"nl": "Je hebt nog geen leerling of groep waaraan je inhoud kunt toewijzen.",
+		"en": "You do not yet have a learner or group to assign content to.",
+		"fr": "Vous n’avez pas encore d’élève ou de groupe à qui attribuer du contenu.",
+		"de": "Sie haben noch keinen Lernenden oder keine Gruppe, denen Sie Inhalte zuweisen können."
+	},
+	"Jouw toewijzingen": {
+		"nl": "Jouw toewijzingen",
+		"en": "Your assignments",
+		"fr": "Vos attributions",
+		"de": "Ihre Zuweisungen"
+	},
+	"Niet toegewezen": {
+		"nl": "Niet toegewezen",
+		"en": "Not assigned",
+		"fr": "Non attribué",
+		"de": "Nicht zugewiesen"
+	},
+	"Onbekend": {
+		"nl": "Onbekend",
+		"en": "Unknown",
+		"fr": "Inconnu",
+		"de": "Unbekannt"
+	},
+	"Onbekende groep": {
+		"nl": "Onbekende groep",
+		"en": "Unknown group",
+		"fr": "Groupe inconnu",
+		"de": "Unbekannte Gruppe"
+	},
+	"Onbekende leerling": {
+		"nl": "Onbekende leerling",
+		"en": "Unknown learner",
+		"fr": "Élève inconnu",
+		"de": "Unbekannter Lernender"
+	},
+	"Periode": {
+		"nl": "Periode",
+		"en": "Period",
+		"fr": "Période",
+		"de": "Zeitraum"
+	},
+	"Publicatie": {
+		"nl": "Publicatie",
+		"en": "Publication",
+		"fr": "Publication",
+		"de": "Veröffentlichung"
+	},
+	"Publicatie ingetrokken": {
+		"nl": "Publicatie ingetrokken",
+		"en": "Publication withdrawn",
+		"fr": "Publication retirée",
+		"de": "Veröffentlichung zurückgezogen"
+	},
+	"Publicatie vervangen": {
+		"nl": "Publicatie vervangen",
+		"en": "Publication superseded",
+		"fr": "Publication remplacée",
+		"de": "Veröffentlichung ersetzt"
+	},
+	"Terug naar toewijzen": {
+		"nl": "Terug naar toewijzen",
+		"en": "Back to assigning",
+		"fr": "Retour à l’attribution",
+		"de": "Zurück zum Zuweisen"
+	},
+	"Toewijzen": {
+		"nl": "Toewijzen",
+		"en": "Assign",
+		"fr": "Attribuer",
+		"de": "Zuweisen"
+	},
+	"Toewijzen is nog niet ingericht op deze server.": {
+		"nl": "Toewijzen is nog niet ingericht op deze server.",
+		"en": "Assigning is not set up on this server yet.",
+		"fr": "L’attribution n’est pas encore configurée sur ce serveur.",
+		"de": "Das Zuweisen ist auf diesem Server noch nicht eingerichtet."
+	},
+	"Tot en met": {
+		"nl": "Tot en met",
+		"en": "Through",
+		"fr": "Jusqu’au",
+		"de": "Bis einschließlich"
+	},
+	"Vanaf": {
+		"nl": "Vanaf",
+		"en": "From",
+		"fr": "À partir du",
+		"de": "Ab"
+	},
+	"Verlopen": {
+		"nl": "Verlopen",
+		"en": "Expired",
+		"fr": "Expiré",
+		"de": "Abgelaufen"
+	},
+	"Voor": {
+		"nl": "Voor",
+		"en": "For",
+		"fr": "Pour",
+		"de": "Für"
+	},
+	"Wijs alleen gepubliceerde, onafhankelijk nagekeken inhoud toe. Leerlingen zien enkel wat aan hen of aan hun groep is toegewezen, zolang de publicatie actief is en de periode loopt.": {
+		"nl": "Wijs alleen gepubliceerde, onafhankelijk nagekeken inhoud toe. Leerlingen zien enkel wat aan hen of aan hun groep is toegewezen, zolang de publicatie actief is en de periode loopt.",
+		"en": "Assign only published content that has been independently reviewed. Learners see only what is assigned to them or to their group, while the publication is active and the period is running.",
+		"fr": "N’attribuez que du contenu publié et relu de manière indépendante. Les élèves ne voient que ce qui leur est attribué ou attribué à leur groupe, tant que la publication est active et que la période est en cours.",
+		"de": "Weisen Sie nur veröffentlichte, unabhängig geprüfte Inhalte zu. Lernende sehen nur, was ihnen oder ihrer Gruppe zugewiesen ist, solange die Veröffentlichung aktiv ist und der Zeitraum läuft."
+	},
+	"Wijzigen": {
+		"nl": "Wijzigen",
+		"en": "Change",
+		"fr": "Modifier",
+		"de": "Ändern"
+	},
+	"zonder einddatum": {
+		"nl": "zonder einddatum",
+		"en": "without an end date",
+		"fr": "sans date de fin",
+		"de": "ohne Enddatum"
 	}
 };

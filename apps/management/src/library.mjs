@@ -443,7 +443,7 @@ ${history}<p>`;
 }
 
 /** The library: filters, then one row per object with its subject, year and state. */
-export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "", canReview = false, canPublish = false, pending = 0 } = {}) {
+export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "", canReview = false, canPublish = false, canAssign = false, pending = 0 } = {}) {
 	const list = rows.length
 		? ui`<table class="library"><caption>Jouw leerobjecten</caption><thead><tr><th scope="col">Titel</th><th scope="col">Vak</th><th scope="col">Jaar</th><th scope="col">Status</th><th scope="col">Gewijzigd</th></tr></thead><tbody>${rows
 				.map((row) => {
@@ -452,7 +452,7 @@ export function libraryPage(rows, { q = "", subject = "", grade = "", notice = "
 				})
 				.join("")}</tbody></table>`
 		: ui`<p>Geen leerobjecten gevonden.</p>`;
-	return ui`${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p>${canReview ? ui`<p><a class="action" href="/bibliotheek/nakijken">${tr("Inhoud nakijken")}${pending ? ui` (${pending})` : ""}</a></p>` : ""}${canPublish ? ui`<p><a class="action" href="/bibliotheek/publicaties">${tr("Publicaties beheren")}</a></p>` : ""}<form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
+	return ui`${notice}</p><p><a href="/bibliotheek/bestanden">Bestanden</a>: lesmateriaal en afbeeldingen die je hebt opgeladen. <a href="/bibliotheek/importeren">Importeren</a>: leerobjecten uit een inhoudspakket of CSV-bestand.</p>${canReview ? ui`<p><a class="action" href="/bibliotheek/nakijken">${tr("Inhoud nakijken")}${pending ? ui` (${pending})` : ""}</a></p>` : ""}${canPublish ? ui`<p><a class="action" href="/bibliotheek/publicaties">${tr("Publicaties beheren")}</a></p>` : ""}${canAssign ? ui`<p><a class="action" href="/bibliotheek/toewijzen">${tr("Inhoud toewijzen")}</a></p>` : ""}<form method="get" action="/bibliotheek" class="filters" role="search"><label>Zoeken in titels <input name="q" value="${esc(q)}" maxlength="100"></label><label>Vak <select name="vak"><option value="">Alle vakken</option>${SUBJECTS.map(([v, t]) => ui`<option value="${v}"${subject === v ? " selected" : ""}>${tr(t)}</option>`).join("")}</select></label><label>Jaar <select name="jaar"><option value="">Alle jaren</option>${[1, 2, 3, 4, 5, 6].map((y) => ui`<option value="${y}"${String(grade) === String(y) ? " selected" : ""}>${YEAR(y)}</option>`).join("")}</select></label><button>Filteren</button></form>
 <p><a class="action" href="/bibliotheek/nieuw">Nieuw leerobject</a></p>${list}<p>`;
 }
 
