@@ -203,7 +203,7 @@ async function stack({ withDirectory = true, uploadsOf, extractionsOf, locale = 
 			req.on("error", reject);
 			req.end(body);
 		});
-	return { login, call, workspace: store.workspace, uploads, extractions };
+	return { login, call, workspace: store.workspace, directory, uploads, extractions };
 }
 
 test("an author creates, finds, edits and snapshots a learning object; the library shows its state", async () => {
@@ -1165,4 +1165,124 @@ test("workspace language query persists across GET filters, failed POSTs and red
 	const after = await s.call("/bibliotheek/prikkel-reactie", { who, cookie });
 	assert.match(after.body, /<html lang="fr"/);
 	assert.match(after.body, />Enregistrer<\/button>/);
+});
+
+test("review (breinhap#32): a granted reviewer sees the queue, decides a submitted revision, and the author sees the outcome", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const reviewer = await s.login("parent");
+	const admin = { sub: "admin", role: "breinhap.admin" };
+	const parent = { sub: "parent", role: "breinhap.parent" };
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() });
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+
+	// without the explicit grant there is no queue, no link, and no detail
+	const refused = await s.call("/bibliotheek/nakijken", { who: teacher });
+	assert.equal(refused.status, 403);
+	assert.match(refused.body, /Alleen aangewezen nakijkers kunnen inhoud nakijken/);
+	assert.doesNotMatch((await s.call("/bibliotheek", { who: teacher })).body, /href="\/bibliotheek\/nakijken"/);
+
+	// the author offers the immutable revision; the library says so
+	const offered = await s.call("/bibliotheek/prikkel-reactie/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	assert.equal(offered.status, 303);
+	assert.equal(offered.headers.location, "/bibliotheek/prikkel-reactie?aangeboden=1");
+	assert.match((await s.call("/bibliotheek/prikkel-reactie?aangeboden=1", { who: teacher })).body, /Revisie 1 ter nakijking aangeboden/);
+	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /Revisie 1 ter nakijking/);
+
+	// a granted reviewer sees the queue, the revision with its sources, explanations and answer key
+	await s.directory.grantCapability(admin, parent, "content.review");
+	const library = await s.call("/bibliotheek", { who: reviewer });
+	assert.match(library.body, /href="\/bibliotheek\/nakijken"/);
+	assert.match(library.body, /Inhoud nakijken \(1\)/);
+	const queue = await s.call("/bibliotheek/nakijken", { who: reviewer });
+	assert.equal(queue.status, 200);
+	assert.match(queue.body, /Prikkel en reactie/);
+	assert.match(queue.body, /href="\/bibliotheek\/nakijken\/prikkel-reactie\/1"/);
+	const detail = await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: reviewer });
+	assert.equal(detail.status, 200);
+	assert.match(detail.body, /Goedkeuren/);
+	assert.match(detail.body, /Aanpassingen vragen/);
+	assert.match(detail.body, /Biologie voor jou 3/);
+	assert.match(detail.body, /Een prikkel is een verandering in de omgeving/);
+
+	const approved = await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: reviewer, method: "POST", form: { decision: "approved" } });
+	assert.equal(approved.status, 303);
+	assert.equal(approved.headers.location, "/bibliotheek/nakijken?beoordeeld=approved");
+	assert.match((await s.call("/bibliotheek/nakijken?beoordeeld=approved", { who: reviewer })).body, /Goedgekeurd\./);
+	assert.doesNotMatch((await s.call("/bibliotheek/nakijken", { who: reviewer })).body, /Prikkel en reactie/);
+	assert.equal((await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: reviewer })).status, 404);
+
+	const editor = await s.call("/bibliotheek/prikkel-reactie", { who: teacher });
+	assert.match(editor.body, /goedgekeurd/);
+	assert.match(editor.body, /Goedgekeurd door parent\./);
+});
+
+test("review refusals: not ready, stale draft, self-review, forged CSRF, and a non-owner cannot offer", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const reviewer = await s.login("parent");
+	const admin = { sub: "admin", role: "breinhap.admin" };
+	const parent = { sub: "parent", role: "breinhap.parent" };
+	const self = { sub: "teacher", role: "breinhap.teacher" };
+	await s.directory.grantCapability(admin, parent, "content.review");
+
+	// not ready: a website source without its https link
+	const website = {
+		...validFields("website-zonder-link"),
+		"sources.0.kind": "website",
+		"sources.0.title": "Zonder link",
+		"sources.0.url": "",
+	};
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: website });
+	await s.call("/bibliotheek/website-zonder-link/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	const notReady = await s.call("/bibliotheek/website-zonder-link/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	assert.equal(notReady.status, 409);
+	assert.match(notReady.body, /nog niet klaar om na te kijken/);
+	assert.match(notReady.body, /https-link/);
+
+	// stale draft: the revision no longer matches the editable draft
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields("stale-draft") });
+	await s.call("/bibliotheek/stale-draft/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	await s.call("/bibliotheek/stale-draft", { who: teacher, method: "POST", form: { ...validFields("stale-draft"), title: "Nieuwer", expectedVersion: "1" } });
+	const stale = await s.call("/bibliotheek/stale-draft/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	assert.equal(stale.status, 409);
+	assert.match(stale.body, /Je concept heeft wijzigingen die nog niet in een revisie staan/);
+
+	// someone else's revision is not found, exactly like an unknown object
+	assert.equal((await s.call("/bibliotheek/stale-draft/aanbieden", { who: reviewer, method: "POST", form: { revision: "1" } })).status, 404);
+
+	// a fresh revision can be offered, but not read or decided without the grant
+	await s.call("/bibliotheek/stale-draft/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "2" } });
+	await s.call("/bibliotheek/stale-draft/aanbieden", { who: teacher, method: "POST", form: { revision: "2" } });
+	assert.equal((await s.call("/bibliotheek/nakijken/stale-draft/2", { who: teacher })).status, 403);
+	assert.equal(
+		(await s.call("/bibliotheek/nakijken/stale-draft/2", { who: reviewer, method: "POST", form: { decision: "approved", csrf: "forged" } })).status,
+		403,
+	);
+
+	// an owner with the grant still never sees or decides their own content
+	await s.directory.grantCapability(admin, self, "content.review");
+	assert.doesNotMatch((await s.call("/bibliotheek/nakijken", { who: teacher })).body, /href="\/bibliotheek\/nakijken\/stale-draft\/2"/);
+	assert.equal((await s.call("/bibliotheek/nakijken/stale-draft/2", { who: teacher })).status, 404);
+	const own = await s.call("/bibliotheek/nakijken/stale-draft/2", { who: teacher, method: "POST", form: { decision: "approved" } });
+	assert.equal(own.status, 409);
+	assert.match(own.body, /Je kunt je eigen inhoud niet nakijken/);
+
+	// changes requested needs a note; with one, the author sees the decision and the comment
+	const noNote = await s.call("/bibliotheek/nakijken/stale-draft/2", { who: reviewer, method: "POST", form: { decision: "changes_requested" } });
+	assert.equal(noNote.status, 422);
+	assert.match(noNote.body, /opmerking voor de auteur/);
+	const changed = await s.call("/bibliotheek/nakijken/stale-draft/2", {
+		who: reviewer,
+		method: "POST",
+		form: { decision: "changes_requested", comment: "Korter graag." },
+	});
+	assert.equal(changed.status, 303);
+	const editor = await s.call("/bibliotheek/stale-draft", { who: teacher });
+	assert.match(editor.body, /Aanpassingen gevraagd door parent\./);
+	assert.match(editor.body, /Korter graag\./);
+	// a decided revision is never decided twice
+	const twice = await s.call("/bibliotheek/nakijken/stale-draft/2", { who: reviewer, method: "POST", form: { decision: "approved" } });
+	assert.equal(twice.status, 409);
+	assert.match(twice.body, /Deze revisie is al nagekeken/);
 });

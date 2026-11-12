@@ -3191,5 +3191,269 @@ export const MESSAGES = {
 		"en": "· {0} minutes",
 		"fr": "· {0} minutes",
 		"de": "· {0} Minuten"
+	},
+	"Voeg minstens één bron toe.": {
+		"nl": "Voeg minstens één bron toe.",
+		"en": "Add at least one source.",
+		"fr": "Ajoutez au moins une source.",
+		"de": "Fügen Sie mindestens eine Quelle hinzu."
+	},
+	"Een websitebron heeft een https-link nodig.": {
+		"nl": "Een websitebron heeft een https-link nodig.",
+		"en": "A website source needs an https link.",
+		"fr": "Une source web nécessite un lien https.",
+		"de": "Eine Website-Quelle benötigt einen https-Link."
+	},
+	"Elke oefen- en checkvraag heeft een uitleg nodig.": {
+		"nl": "Elke oefen- en checkvraag heeft een uitleg nodig.",
+		"en": "Every practice and check question needs an explanation.",
+		"fr": "Chaque question d’exercice et de contrôle doit avoir une explication.",
+		"de": "Jede Übungs- und Prüfungsfrage braucht eine Erklärung."
+	},
+	"Controleer het juiste antwoord of de volgorde.": {
+		"nl": "Controleer het juiste antwoord of de volgorde.",
+		"en": "Check the correct answer or the order.",
+		"fr": "Vérifiez la bonne réponse ou l’ordre.",
+		"de": "Prüfen Sie die richtige Antwort oder die Reihenfolge."
+	},
+	"Revisies die op nakijken wachten": {
+		"nl": "Revisies die op nakijken wachten",
+		"en": "Revisions waiting for review",
+		"fr": "Révisions en attente de relecture",
+		"de": "Revisionen, die auf Prüfung warten"
+	},
+	"Revisie": {
+		"nl": "Revisie",
+		"en": "Revision",
+		"fr": "Révision",
+		"de": "Revision"
+	},
+	"Ingediend": {
+		"nl": "Ingediend",
+		"en": "Submitted",
+		"fr": "Soumis",
+		"de": "Eingereicht"
+	},
+	"Terug naar de bibliotheek": {
+		"nl": "Terug naar de bibliotheek",
+		"en": "Back to the library",
+		"fr": "Retour à la bibliothèque",
+		"de": "Zurück zur Bibliothek"
+	},
+	"Juiste volgorde": {
+		"nl": "Juiste volgorde",
+		"en": "Correct order",
+		"fr": "Bon ordre",
+		"de": "Richtige Reihenfolge"
+	},
+	"Oefenvragen": {
+		"nl": "Oefenvragen",
+		"en": "Practice questions",
+		"fr": "Questions d’exercice",
+		"de": "Übungsfragen"
+	},
+	"Checkvragen": {
+		"nl": "Checkvragen",
+		"en": "Check questions",
+		"fr": "Questions de contrôle",
+		"de": "Prüfungsfragen"
+	},
+	"Geen bronnen opgegeven.": {
+		"nl": "Geen bronnen opgegeven.",
+		"en": "No sources provided.",
+		"fr": "Aucune source indiquée.",
+		"de": "Keine Quellen angegeben."
+	},
+	"Deze revisie is nog niet klaar om na te kijken:": {
+		"nl": "Deze revisie is nog niet klaar om na te kijken:",
+		"en": "This revision is not ready for review yet:",
+		"fr": "Cette révision n’est pas encore prête à être relue :",
+		"de": "Diese Revision ist noch nicht bereit zur Prüfung:"
+	},
+	"Terug naar de wachtrij": {
+		"nl": "Terug naar de wachtrij",
+		"en": "Back to the queue",
+		"fr": "Retour à la file d’attente",
+		"de": "Zurück zur Warteschlange"
+	},
+	"Opmerking voor de auteur": {
+		"nl": "Opmerking voor de auteur",
+		"en": "Note for the author",
+		"fr": "Remarque pour l’auteur",
+		"de": "Anmerkung für die Autorin oder den Autor"
+	},
+	"Verplicht bij aanpassingen.": {
+		"nl": "Verplicht bij aanpassingen.",
+		"en": "Required when requesting changes.",
+		"fr": "Obligatoire en cas de demande de modification.",
+		"de": "Bei Änderungswünschen erforderlich."
+	},
+	"Aanpassingen vragen": {
+		"nl": "Aanpassingen vragen",
+		"en": "Request changes",
+		"fr": "Demander des modifications",
+		"de": "Änderungen anfordern"
+	},
+	"Los eerst de punten hierboven op, of vraag aanpassingen.": {
+		"nl": "Los eerst de punten hierboven op, of vraag aanpassingen.",
+		"en": "Resolve the points above first, or request changes.",
+		"fr": "Résolvez d’abord les points ci-dessus ou demandez des modifications.",
+		"de": "Lösen Sie zuerst die oben genannten Punkte oder fordern Sie Änderungen an."
+	},
+	"Bronnen": {
+		"nl": "Bronnen",
+		"en": "Sources",
+		"fr": "Sources",
+		"de": "Quellen"
+	},
+	"Revisie {0} goedgekeurd · concept gewijzigd": {
+		"nl": "Revisie {0} goedgekeurd · concept gewijzigd",
+		"en": "Revision {0} approved · draft changed",
+		"fr": "Révision {0} approuvée · brouillon modifié",
+		"de": "Revision {0} genehmigt · Entwurf geändert"
+	},
+	"Revisie {0} ter nakijking": {
+		"nl": "Revisie {0} ter nakijking",
+		"en": "Revision {0} awaiting review",
+		"fr": "Révision {0} en attente de relecture",
+		"de": "Revision {0} wartet auf Prüfung"
+	},
+	"Ter nakijking aanbieden": {
+		"nl": "Ter nakijking aanbieden",
+		"en": "Submit for review",
+		"fr": "Soumettre pour relecture",
+		"de": "Zur Prüfung einreichen"
+	},
+	"Ingediend op {0}.": {
+		"nl": "Ingediend op {0}.",
+		"en": "Submitted on {0}.",
+		"fr": "Soumis le {0}.",
+		"de": "Eingereicht am {0}."
+	},
+	"Goedgekeurd door {0}.": {
+		"nl": "Goedgekeurd door {0}.",
+		"en": "Approved by {0}.",
+		"fr": "Approuvée par {0}.",
+		"de": "Genehmigt von {0}."
+	},
+	"Aanpassingen gevraagd door {0}.": {
+		"nl": "Aanpassingen gevraagd door {0}.",
+		"en": "Changes requested by {0}.",
+		"fr": "Modifications demandées par {0}.",
+		"de": "Änderungen angefordert von {0}."
+	},
+	"Je concept is gewijzigd na de laatste revisie. Leg een nieuwe revisie vast en bied die aan ter nakijking.": {
+		"nl": "Je concept is gewijzigd na de laatste revisie. Leg een nieuwe revisie vast en bied die aan ter nakijking.",
+		"en": "Your draft has changed since the last revision. Record a new revision and submit it for review.",
+		"fr": "Votre brouillon a changé depuis la dernière révision. Enregistrez une nouvelle révision et soumettez-la pour relecture.",
+		"de": "Ihr Entwurf hat sich seit der letzten Revision geändert. Legen Sie eine neue Revision an und reichen Sie sie zur Prüfung ein."
+	},
+	"Alleen aangewezen nakijkers kunnen inhoud nakijken.": {
+		"nl": "Alleen aangewezen nakijkers kunnen inhoud nakijken.",
+		"en": "Only designated reviewers can review content.",
+		"fr": "Seuls les relecteurs désignés peuvent relire le contenu.",
+		"de": "Nur benannte Prüfende können Inhalte prüfen."
+	},
+	"Goedgekeurd.": {
+		"nl": "Goedgekeurd.",
+		"en": "Approved.",
+		"fr": "Approuvée.",
+		"de": "Genehmigt."
+	},
+	"Aanpassingen gevraagd.": {
+		"nl": "Aanpassingen gevraagd.",
+		"en": "Changes requested.",
+		"fr": "Modifications demandées.",
+		"de": "Änderungen angefordert."
+	},
+	"Deze revisie wacht niet (meer) op nakijken.": {
+		"nl": "Deze revisie wacht niet (meer) op nakijken.",
+		"en": "This revision is not (or no longer) awaiting review.",
+		"fr": "Cette révision n’attend plus de relecture.",
+		"de": "Diese Revision wartet nicht (mehr) auf Prüfung."
+	},
+	"Naar de wachtrij": {
+		"nl": "Naar de wachtrij",
+		"en": "To the queue",
+		"fr": "Vers la file d’attente",
+		"de": "Zur Warteschlange"
+	},
+	"Terug naar de revisie": {
+		"nl": "Terug naar de revisie",
+		"en": "Back to the revision",
+		"fr": "Retour à la révision",
+		"de": "Zurück zur Revision"
+	},
+	"Niet nagekeken": {
+		"nl": "Niet nagekeken",
+		"en": "Not reviewed",
+		"fr": "Non relue",
+		"de": "Nicht geprüft"
+	},
+	"Je kunt je eigen inhoud niet nakijken.": {
+		"nl": "Je kunt je eigen inhoud niet nakijken.",
+		"en": "You cannot review your own content.",
+		"fr": "Vous ne pouvez pas relire votre propre contenu.",
+		"de": "Sie können Ihre eigenen Inhalte nicht prüfen."
+	},
+	"Deze revisie is al nagekeken.": {
+		"nl": "Deze revisie is al nagekeken.",
+		"en": "This revision has already been reviewed.",
+		"fr": "Cette révision a déjà été relue.",
+		"de": "Diese Revision wurde bereits geprüft."
+	},
+	"Geef bij aanpassingen een opmerking voor de auteur.": {
+		"nl": "Geef bij aanpassingen een opmerking voor de auteur.",
+		"en": "Add a note for the author when requesting changes.",
+		"fr": "Ajoutez une remarque pour l’auteur lorsque vous demandez des modifications.",
+		"de": "Fügen Sie bei Änderungswünschen eine Anmerkung für die Autorin oder den Autor hinzu."
+	},
+	"Kies goedkeuren of aanpassingen vragen.": {
+		"nl": "Kies goedkeuren of aanpassingen vragen.",
+		"en": "Choose approve or request changes.",
+		"fr": "Choisissez approuver ou demander des modifications.",
+		"de": "Wählen Sie Genehmigen oder Änderungen anfordern."
+	},
+	"De inhoud is nog niet klaar voor goedkeuring.": {
+		"nl": "De inhoud is nog niet klaar voor goedkeuring.",
+		"en": "The content is not ready for approval yet.",
+		"fr": "Le contenu n’est pas encore prêt à être approuvé.",
+		"de": "Der Inhalt ist noch nicht zur Genehmigung bereit."
+	},
+	"Niet ingediend": {
+		"nl": "Niet ingediend",
+		"en": "Not submitted",
+		"fr": "Non soumis",
+		"de": "Nicht eingereicht"
+	},
+	"Je concept heeft wijzigingen die nog niet in een revisie staan. Leg eerst een nieuwe revisie vast.": {
+		"nl": "Je concept heeft wijzigingen die nog niet in een revisie staan. Leg eerst een nieuwe revisie vast.",
+		"en": "Your draft has changes that are not in a revision yet. Record a new revision first.",
+		"fr": "Votre brouillon contient des modifications qui ne figurent pas encore dans une révision. Enregistrez d’abord une nouvelle révision.",
+		"de": "Ihr Entwurf enthält Änderungen, die noch nicht in einer Revision sind. Legen Sie zuerst eine neue Revision an."
+	},
+	"Deze revisie is niet de nieuwste. Leg eerst een nieuwe revisie vast.": {
+		"nl": "Deze revisie is niet de nieuwste. Leg eerst een nieuwe revisie vast.",
+		"en": "This is not the latest revision. Record a new revision first.",
+		"fr": "Ce n’est pas la dernière révision. Enregistrez d’abord une nouvelle révision.",
+		"de": "Dies ist nicht die neueste Revision. Legen Sie zuerst eine neue Revision an."
+	},
+	"Deze revisie is al ingediend.": {
+		"nl": "Deze revisie is al ingediend.",
+		"en": "This revision has already been submitted.",
+		"fr": "Cette révision a déjà été soumise.",
+		"de": "Diese Revision wurde bereits eingereicht."
+	},
+	"Kies een bestaande revisie.": {
+		"nl": "Kies een bestaande revisie.",
+		"en": "Choose an existing revision.",
+		"fr": "Choisissez une révision existante.",
+		"de": "Wählen Sie eine vorhandene Revision."
+	},
+	"Revisie {0} ter nakijking aangeboden.": {
+		"nl": "Revisie {0} ter nakijking aangeboden.",
+		"en": "Revision {0} submitted for review.",
+		"fr": "Révision {0} soumise pour relecture.",
+		"de": "Revision {0} zur Prüfung eingereicht."
 	}
 };

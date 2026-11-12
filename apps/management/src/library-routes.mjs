@@ -1,5 +1,6 @@
 import { tr, ui } from "./workspace-i18n.mjs";
 import { validate } from "./content.mjs";
+import { esc } from "./directory-pages.mjs";
 import { ORIGIN, readForm } from "./identity.mjs";
 import {
 	ContentError,
@@ -11,6 +12,7 @@ import {
 	toValues,
 } from "./library.mjs";
 import { previewPage } from "./preview.mjs";
+import { issueText, reviewPage, reviewQueuePage } from "./review.mjs";
 import { assertSupported, studentPayload, SUPPORTED_SCHEMA_VERSIONS } from "./vendor/content-mission.mjs";
 
 /**
@@ -47,6 +49,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 	if (!principal) return { status: 403, title: tr("Geen toegang"), body: tr("Je hebt geen toegang tot de bibliotheek.") };
 	const csrf = req.managementSession.csrf;
 	const refused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang.") };
+	const reviewRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen nakijkers kunnen inhoud nakijken.") };
 
 	let form;
 	if (req.method === "POST") {
@@ -54,11 +57,11 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 		if (req.headers.origin !== ORIGIN || form.getAll("csrf").length !== 1 || form.get("csrf") !== csrf)
 			return { status: 403, title: tr("Aanvraag geweigerd"), body: tr("Laad de pagina opnieuw en probeer nog eens. Wat je typte, is niet opgeslagen.") };
 	}
-	const guard = async (work) => {
+	const guard = async (work, forbidden = refused) => {
 		try {
 			return await work();
 		} catch (error) {
-			if (error?.code === "forbidden") return refused;
+			if (error?.code === "forbidden") return forbidden;
 			if (error?.code === "not_found")
 				return { status: 404, title: tr("Niet gevonden"), body: ui`Dit leerobject bestaat niet of is niet van jou. <a href="/bibliotheek">Naar de bibliotheek</a>` };
 			throw error;
@@ -78,8 +81,60 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 				...(grade ? { grade: Number(grade) } : {}),
 			});
 			const archived = url.searchParams.get("gearchiveerd") === "1" ? notice(tr("Het leerobject is gearchiveerd.")) : "";
-			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived }), active: "/bibliotheek" };
+			const canReview = await content.directory.can(principal, "content.review");
+			const pending = canReview ? (await content.reviewQueue(principal)).length : 0;
+			return { status: 200, title: tr("Bibliotheek"), body: libraryPage(rows, { q, subject, grade, notice: archived, canReview, pending }), active: "/bibliotheek" };
 		});
+	}
+
+	// breinhap#32: the review queue and one submitted revision, before the object matcher takes "nakijken" for an id
+	if (path === "/bibliotheek/nakijken") {
+		if (req.method === "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
+		return guard(async () => {
+			const rows = await content.reviewQueue(principal);
+			const decided = url.searchParams.get("beoordeeld");
+			const feedback = decided === "approved" ? notice(tr("Goedgekeurd.")) : decided === "changes_requested" ? notice(tr("Aanpassingen gevraagd.")) : "";
+			return { status: 200, title: tr("Inhoud nakijken"), body: reviewQueuePage(rows, { notice: feedback }), active: "/bibliotheek" };
+		}, reviewRefused);
+	}
+	const reviewMatch = /^\/bibliotheek\/nakijken\/([a-z0-9-]{1,80})\/([1-9]\d{0,5})$/.exec(path);
+	if (reviewMatch) {
+		const [, reviewId, askedRevision] = reviewMatch;
+		if (!ID.test(reviewId)) return { status: 404, title: tr("Niet gevonden"), body: ui`<a href="/bibliotheek/nakijken">Naar de wachtrij</a>` };
+		const revision = Number(askedRevision);
+		const gone = { status: 404, title: tr("Niet gevonden"), body: ui`${tr("Deze revisie wacht niet (meer) op nakijken.")} <a href="/bibliotheek/nakijken">Naar de wachtrij</a>` };
+		if (req.method === "GET" || req.method === "HEAD")
+			return guard(async () => {
+				try {
+					const review = await content.reviewRevision(principal, reviewId, revision);
+					return { status: 200, title: tr`Revisie ${revision} ter nakijking`, body: reviewPage(review, { csrf }), active: "/bibliotheek" };
+				} catch (error) {
+					if (error?.code === "not_found") return gone;
+					throw error;
+				}
+			}, reviewRefused);
+		return guard(async () => {
+			const decision = form.get("decision");
+			const comment = form.get("comment") ?? "";
+			try {
+				await content.review(principal, reviewId, revision, decision, comment);
+				return redirect(`/bibliotheek/nakijken?beoordeeld=${decision}`);
+			} catch (error) {
+				const back = ui`<p><a href="/bibliotheek/nakijken/${esc(reviewId)}/${revision}">${tr("Terug naar de revisie")}</a></p>`;
+				if (error?.code === "not_found") return gone;
+				if (error?.code === "self_review")
+					return { status: 409, title: tr("Niet nagekeken"), body: ui`${tr("Je kunt je eigen inhoud niet nakijken.")}${back}` };
+				if (error?.code === "already_reviewed")
+					return { status: 409, title: tr("Niet nagekeken"), body: ui`${tr("Deze revisie is al nagekeken.")}${back}` };
+				if (error?.code === "comment_required")
+					return { status: 422, title: tr("Niet nagekeken"), body: ui`${tr("Geef bij aanpassingen een opmerking voor de auteur.")}${back}` };
+				if (error?.code === "invalid")
+					return { status: 422, title: tr("Niet nagekeken"), body: ui`${tr("Kies goedkeuren of aanpassingen vragen.")}${back}` };
+				if (error?.code === "not_ready")
+					return { status: 409, title: tr("Niet nagekeken"), body: ui`${tr("De inhoud is nog niet klaar voor goedkeuring.")}<ul>${(error.issues ?? []).map((issue) => ui`<li>${esc(issueText(issue))}</li>`).join("")}</ul>${back}` };
+				throw error;
+			}
+		}, reviewRefused);
 	}
 
 	// a new learning object
@@ -106,7 +161,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 		});
 	}
 
-	const match = /^\/bibliotheek\/([a-z0-9-]{1,80})(?:\/(vastleggen|dupliceren|archiveren|voorbeeld))?$/.exec(path);
+	const match = /^\/bibliotheek\/([a-z0-9-]{1,80})(?:\/(vastleggen|dupliceren|archiveren|voorbeeld|aanbieden))?$/.exec(path);
 	if (!match || !ID.test(match[1])) return { status: 404, title: tr("Niet gevonden"), body: ui`<a href="/bibliotheek">Naar de bibliotheek</a>` };
 	const [, id, action] = match;
 	// breinhap#28: the preview only reads; its state lives in the URL
@@ -122,6 +177,7 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 			const draft = await content.get(principal, id);
 			const saved = url.searchParams.get("opgeslagen");
 			const revised = url.searchParams.get("vastgelegd");
+			const offered = url.searchParams.get("aangeboden");
 			return {
 				status: 200,
 				title: draft.content.title,
@@ -131,7 +187,8 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 					id,
 					version: draft.version,
 					revisions: draft.revisions,
-					notice: saved ? notice(tr`Opgeslagen (versie ${draft.version}).`) : revised ? notice(tr`Revisie ${Number(revised)} vastgelegd.`) : "",
+					draftChanged: draft.draftChanged,
+					notice: saved ? notice(tr`Opgeslagen (versie ${draft.version}).`) : revised ? notice(tr`Revisie ${Number(revised)} vastgelegd.`) : offered ? notice(tr`Revisie ${Number(offered)} ter nakijking aangeboden.`) : "",
 				}),
 			};
 		});
@@ -184,6 +241,33 @@ export async function handleLibrary(req, url, { identity, content, extractions }
 					title: tr("Niet vastgelegd"),
 					body: ui`${error.code === "stale" ? tr("Het leerobject is intussen gewijzigd. Open het opnieuw en leg dan een revisie vast.") : tr("Het concept is niet geldig; sla het eerst correct op.")} <a href="/bibliotheek/${id}">Terug</a>`,
 				};
+			}
+		});
+	if (action === "aanbieden")
+		return guard(async () => {
+			const revision = Number(form.get("revision"));
+			const back = ui`<p><a href="/bibliotheek/${esc(id)}">${tr("Terug naar het leerobject")}</a></p>`;
+			try {
+				await content.submit(principal, id, revision);
+				return redirect(`/bibliotheek/${id}?aangeboden=${revision}`);
+			} catch (error) {
+				const problem = (text, issues = []) => ({
+					status: error?.code === "not_found" ? 404 : 409,
+					title: tr("Niet ingediend"),
+					body: ui`${text}${issues.length ? ui`<ul>${issues.map((issue) => ui`<li>${esc(issueText(issue))}</li>`).join("")}</ul>` : ""}${back}`,
+				});
+				if (error?.code === "not_found") throw error;
+				if (error?.code === "stale_draft")
+					return problem(tr("Je concept heeft wijzigingen die nog niet in een revisie staan. Leg eerst een nieuwe revisie vast."));
+				if (error?.code === "not_latest")
+					return problem(tr("Deze revisie is niet de nieuwste. Leg eerst een nieuwe revisie vast."));
+				if (error?.code === "already_submitted") return problem(tr("Deze revisie is al ingediend."));
+				if (error?.code === "already_reviewed") return problem(tr("Deze revisie is al nagekeken."));
+				if (error?.code === "not_ready")
+					return problem(tr("Deze revisie is nog niet klaar om na te kijken:"), error.issues ?? []);
+				if (error?.code === "invalid")
+					return problem(tr("Kies een bestaande revisie."));
+				throw error;
 			}
 		});
 	if (action === "dupliceren")
