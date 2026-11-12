@@ -33,6 +33,7 @@ import { AssignmentStore } from "./assignments.mjs";
 import { PracticeStore } from "./practice/store.mjs";
 import { PackAuthoring } from "./practice/authoring.mjs";
 import { PracticeLearner } from "./practice/learner.mjs";
+import { scheduleSweep } from "./practice/maintenance.mjs";
 import { createLearnerHandler, PUBLIC_HOST } from "./learner-server.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
@@ -145,7 +146,11 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
-	const learnerHandle = learner ? createLearnerHandler({ learner }) : undefined;
+	const learnerHandle = learner ? createLearnerHandler({
+		learner,
+		budget: identity?.store ? (kind, limit, seconds, requester) => identity.store.budget(kind, limit, seconds, requester) : undefined,
+		requesterOf: identity?.requesterOf,
+	}) : undefined;
 	const handle = async (req, res) => {
 		const send = (
 			status,
@@ -699,11 +704,14 @@ export function createHandler({
 			page(route[0], route[1], url.pathname, req.managementSession),
 		);
 	};
-	return (req, res) => {
+	const dispatch = (req, res) => {
 		let url;
 		try { url = new URL(req.url, origin); } catch { /* The handler rejects malformed requests. */ }
 		return withLocale(localeOf(req, url), () => handle(req, res));
 	};
+	// breinhap#84: the storage the hourly retention pass works on (absent without the practice tables)
+	dispatch.practiceStore = practiceStore;
+	return dispatch;
 }
 
 export function createManagementServer(options) {
@@ -729,6 +737,7 @@ export function createManagementServer(options) {
 		}));
 	});
 	// long enough for one upload on a slow connection (breinhap#29); headers still have to arrive quickly
+	server.practiceStore = handler.practiceStore;
 	server.requestTimeout = 120_000;
 	server.headersTimeout = 10_000;
 	server.maxHeadersCount = 50;
@@ -821,5 +830,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 			extractions = undefined;
 		}
 	}
-	createManagementServer({ identity, directory, uploads, extractions }).listen(8080, "0.0.0.0");
+	const server = createManagementServer({ identity, directory, uploads, extractions });
+	// breinhap#84: answers and attempts are erased 30 days after they began; hourly, bounded, idempotent
+	if (server.practiceStore) scheduleSweep(server.practiceStore);
+	server.listen(8080, "0.0.0.0");
 }

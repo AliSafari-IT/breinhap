@@ -95,7 +95,16 @@ function failure(error) {
 	return { status: 503, title: "errorTitle", text: "errorText" };
 }
 
-export function createLearnerHandler({ learner }) {
+/** A short, one-way label for a budget key: raw addresses, codes and cookies never reach Redis. */
+const label = (value) => createHash("sha256").update(String(value)).digest("base64url").slice(0, 22);
+
+/**
+ * `budget(kind, limit, seconds, who)` is the shared Redis counter (fixed window, self-expiring), so a
+ * burst only waits for the window to pass: there is no permanent lockout, and a guessing flood against
+ * one code cannot lock the real learner out of anything but that single code's resolve for a minute.
+ * `requesterOf(req)` is the trusted-proxy client address. Without a budget the player does not run.
+ */
+export function createLearnerHandler({ learner, budget, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
 	return async function handleLearner(req, res) {
 		let lang = languageOf(req.headers["accept-language"]);
 		const send = (status, body, type = "text/html; charset=utf-8", extra = {}) => {
@@ -108,6 +117,7 @@ export function createLearnerHandler({ learner }) {
 			const f = failure(error);
 			return send(f.status, messagePage(lang, f.title, f.text, { link: f.link ? `<p><a href="/p/run">${t(lang, "continue")}</a></p>` : "" }), "text/html; charset=utf-8", cookies.length ? { "Set-Cookie": cookies } : {});
 		};
+		const tooMany = () => send(429, messagePage(lang, "tooManyTitle", "tooManyText"), "text/html; charset=utf-8", { "Retry-After": "60" });
 		const method = req.method;
 		let url;
 		try {
@@ -132,10 +142,18 @@ export function createLearnerHandler({ learner }) {
 		if (method === "POST" && !POSTS.has(path)) return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
 		if (!isGet && method !== "POST") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD, POST" });
 
+		// fixed windows, per client / per code / per attempt / global; a refusal is a plain 429
+		const limited = async (rules) => {
+			for (const [kind, limit, seconds, who] of rules) if (!(await budget(`learner-${kind}`, limit, seconds, who))) return true;
+			return false;
+		};
+		const who = label(requesterOf(req));
 		try {
+			if (!budget) return send(503, messagePage(lang, "errorTitle", "errorText"));
 			if (isGet) {
 				if (url.search && path !== "/p/run") return redirect(path);
 				if (path === "/p" || path === "/p/") {
+					if (await limited([["boot", 30, 60, who], ["boot-all", 600, 60, "all"]])) return tooMany();
 					const boot = await learner.bootstrap();
 					return send(200, bootstrapPage(lang, boot.csrf), "text/html; charset=utf-8", { "Set-Cookie": cookie(FLOW, boot.seed, 300) });
 				}
@@ -149,6 +167,7 @@ export function createLearnerHandler({ learner }) {
 				}
 				const credential = readCookie(req, ATTEMPT);
 				if (!credential) return redirect("/p/");
+				if (await limited([["read", 240, 60, label(credential)], ["read-ip", 600, 60, who]])) return tooMany();
 				if (path === "/p/run") {
 					const page = url.searchParams.get("pagina") ?? undefined;
 					if (page !== undefined && !PAGE_KEY.test(page)) return redirect("/p/run");
@@ -172,6 +191,7 @@ export function createLearnerHandler({ learner }) {
 			if (path === "/p/resolve") {
 				const seed = readCookie(req, FLOW);
 				if (!seed) return redirect("/p/");
+				if (await limited([["resolve", 20, 60, who], ["resolve-code", 30, 60, label(form.token ?? "")], ["resolve-all", 1200, 60, "all"]])) return tooMany();
 				try {
 					await learner.resolve(seed, { token: form.token ?? "", csrf: form.csrf ?? "" });
 				} catch (error) {
@@ -184,11 +204,13 @@ export function createLearnerHandler({ learner }) {
 			if (path === "/p/start") {
 				const seed = readCookie(req, FLOW);
 				if (!seed) return redirect("/p/");
+				if (await limited([["start", 20, 60, who], ["start-all", 600, 60, "all"]])) return tooMany();
 				const started = await learner.start(seed, { csrf: form.csrf ?? "", startNonce: form.startNonce ?? "" });
 				return redirect("/p/run", [cookie(ATTEMPT, started.credential, 86400)]);
 			}
 			const credential = readCookie(req, ATTEMPT);
 			if (!credential) return redirect("/p/");
+			if (await limited([["write", 120, 60, label(credential)], ["write-ip", 240, 60, who], ["write-all", 3000, 60, "all"]])) return tooMany();
 			if (path === "/p/finish") {
 				await learner.finish(credential, { csrf: form.csrf ?? "", nonce: form.nonce ?? "" });
 				return send(200, donePage(lang), "text/html; charset=utf-8", { "Set-Cookie": [clear(ATTEMPT), clear(FLOW)] });
