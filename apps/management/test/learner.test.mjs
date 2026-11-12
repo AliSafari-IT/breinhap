@@ -145,7 +145,7 @@ test("a clean browser completes a practice pack with no identity; the verdicts c
 	await finish(b, true, seen);
 	const done = await b.get("/p/done");
 	assert.equal(done.status, 200);
-	assert.match(done.body, new RegExp(scoreSentence(3, 3).replace(".", "\\.")));
+	assert.ok(done.body.includes(scoreSentence(3, 3)));
 	assert.match(done.body, /Terugblik/);
 	const attempt = (await pool.query("SELECT state, server_score, question_count FROM practice_attempts WHERE pack_id=$1", [w.id])).rows[0];
 	assert.deepEqual([attempt.state, attempt.server_score, attempt.question_count], ["submitted", 3, 3]);
@@ -169,7 +169,7 @@ test("wrong answers are marked by the server and the numbers match the shared mi
 	const done = await b.get("/p/done");
 	const row = (await pool.query("SELECT server_score, question_count FROM practice_attempts WHERE pack_id=$1", [w.id])).rows[0];
 	assert.equal(row.server_score, 0);
-	assert.match(done.body, new RegExp(scoreSentence(0, row.question_count).replace(/\./g, "\\.")));
+	assert.ok(done.body.includes(scoreSentence(0, row.question_count)));
 	assert.match(done.body, /Nog niet\./);
 	assert.match(done.body, /De juiste volgorde: prikkel → receptor → reactie/);
 });
