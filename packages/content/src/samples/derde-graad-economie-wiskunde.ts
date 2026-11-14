@@ -264,10 +264,10 @@ export const aardrijkskundePlaatgrenzen = sample({
       items: [
         "Een oceanische en een continentale plaat bewegen naar elkaar",
         "De zwaardere oceanische plaat duikt onder de continentale",
-        "Diep in de mantel smelt gesteente",
+        "De dalende plaat geeft water af aan de mantel erboven, die daardoor gedeeltelijk smelt",
         "Magma stijgt op en vormt vulkanen",
       ],
-      why: "De zware oceanische plaat zakt weg, smelt gedeeltelijk, en dat magma voedt de vulkanen erboven.",
+      why: "De dalende oceanische plaat smelt zelf meestal niet. Ze geeft water af, en daardoor smelt de mantel erboven gedeeltelijk. Dat magma voedt de vulkanen.",
     },
   ],
 });
