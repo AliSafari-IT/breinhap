@@ -4,3 +4,4 @@ export * from "./mission";
 export { samplePack } from "./samples";
 export * from "./schools";
 export * from "./catalogue";
+export * from "./narration";

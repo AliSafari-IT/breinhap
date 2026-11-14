@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useColorScheme } from "react-native";
+import { NARRATORS, type Narrator } from "@breinhap/content";
 import type { Tempo } from "../speech/voices";
 import { palettes, type Palette } from "../theme/tokens";
 
@@ -13,11 +14,13 @@ export interface Settings {
   largeText: boolean;
   /** Read-aloud voice (a device voice identifier), or null for the best Dutch voice. */
   voiceId: string | null;
+  /** A recorded Breinhap voice, used where the build has a clip for the text; null for the device voice. */
+  narrator: Narrator | null;
   /** Read-aloud speed. */
   tempo: Tempo;
 }
 
-const DEFAULTS: Settings = { theme: "system", calm: false, largeText: false, voiceId: null, tempo: "rustig" };
+const DEFAULTS: Settings = { theme: "system", calm: false, largeText: false, voiceId: null, narrator: null, tempo: "rustig" };
 const STORAGE_KEY = "breinhap.settings.v1";
 
 interface SettingsValue {
@@ -45,6 +48,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (!raw) return;
         const saved = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>) };
         if (typeof saved.voiceId !== "string") saved.voiceId = null;
+        if (!NARRATORS.includes(saved.narrator as Narrator)) saved.narrator = null;
         if (saved.tempo !== "rustig" && saved.tempo !== "normaal") saved.tempo = DEFAULTS.tempo;
         setSettings(saved);
       })

@@ -8,12 +8,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "narrate": "tsx scripts/narrate.ts"
   },
   "dependencies": {
     "zod": "^4.6.0"
   },
   "devDependencies": {
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^4.1.0"
   }

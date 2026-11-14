@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"start": "node src/server.mjs",
-		"typecheck": "node --check src/server.mjs && node --check src/publishing.mjs && node --check src/publishing-page.mjs && node --check src/assignments.mjs && node --check src/assignments-page.mjs && node --check src/practice/model.mjs && node --check src/practice/store.mjs && node --check src/practice/learner.mjs && node --check src/practice/authoring.mjs && node --check src/packs-page.mjs && node --check src/learner-server.mjs && node --check src/learner/pages.mjs && node --check src/learner/messages.mjs && node --check src/practice/maintenance.mjs",
+		"typecheck": "node --check src/server.mjs && node --check src/publishing.mjs && node --check src/publishing-page.mjs && node --check src/assignments.mjs && node --check src/assignments-page.mjs && node --check src/practice/model.mjs && node --check src/practice/store.mjs && node --check src/practice/learner.mjs && node --check src/practice/authoring.mjs && node --check src/packs-page.mjs && node --check src/learner-server.mjs && node --check src/learner/pages.mjs && node --check src/learner/messages.mjs && node --check src/learner/narration.mjs && node --check src/learner/narration.js && node --check src/practice/maintenance.mjs",
 		"test": "node test/run.mjs",
 		"build:selector": "node scripts/build-locale-selector.mjs"
 	},

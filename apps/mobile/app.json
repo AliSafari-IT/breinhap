@@ -25,7 +25,15 @@
     },
     "scheme": "breinhap",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "extra": {
       "router": {

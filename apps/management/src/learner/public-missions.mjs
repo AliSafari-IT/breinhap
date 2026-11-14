@@ -5,6 +5,8 @@ import { SUBJECTS } from "../library.mjs";
 import { tr, withLocale } from "../workspace-i18n.mjs";
 import { esc, layout } from "./pages.mjs";
 import { t } from "./messages.mjs";
+import { narrationAttrs } from "./narration.mjs";
+import { narrationText } from "../vendor/content-narration.mjs";
 
 /**
  * breinhap#35: the public mission catalogue and player on breinhap.com (/p/missies). It shows only
@@ -107,7 +109,7 @@ function feedback(lang, question, answer) {
  * POST /p/missies/{id}: one step of a run. `form` is the bounded, duplicate-free form. Returns the
  * page HTML, or null when the posted mission does not exist (the caller answers 404).
  */
-export function runStep(lang, object, form) {
+export function runStep(lang, object, form, narration = null) {
 	const missionIndex = /^\d{1,2}$/.test(form.missie ?? "") ? Number(form.missie) : -1;
 	const mission = object.missions[missionIndex];
 	if (!mission) return null;
@@ -138,7 +140,8 @@ export function runStep(lang, object, form) {
 		return layout(
 			lang,
 			object.title,
-			`${head}<section class="card"><p>${esc(page.card.text)}</p>${page.card.example ? `<p class="muted">${esc(t(lang, "example", page.card.example))}</p>` : ""}${next()}</section>`,
+			`${head}<section class="card"${narrationAttrs(lang, narration, narrationText(page.card))}><p>${esc(page.card.text)}</p>${page.card.example ? `<p class="muted">${esc(t(lang, "example", page.card.example))}</p>` : ""}${next()}</section>`,
+			{ script: "/p/assets/narration.js" },
 		);
 
 	const question = page.question;
