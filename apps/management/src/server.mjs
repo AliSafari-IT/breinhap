@@ -146,8 +146,10 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
-	const learnerHandle = learner ? createLearnerHandler({
+	const learnerHandle = learner || publishing ? createLearnerHandler({
 		learner,
+		// breinhap#35: the public mission catalogue reads only listed, active publications
+		catalog: publishing,
 		budget: identity?.store ? (kind, limit, seconds, requester) => identity.store.budget(kind, limit, seconds, requester) : undefined,
 		requesterOf: identity?.requesterOf,
 	}) : undefined;
@@ -668,8 +670,8 @@ export function createHandler({
 				page(
 					tr("Overzicht"),
 					waiting
-						? ui`<strong>${waiting} ${waiting === 1 ? tr("aanvraag wacht") : tr("aanvragen wachten")} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a>`
-						: ui`Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a>`,
+						? ui`<strong>${waiting} ${waiting === 1 ? tr("aanvraag wacht") : tr("aanvragen wachten")} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a>`
+						: ui`Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a>`,
 					url.pathname,
 					req.managementSession,
 				),

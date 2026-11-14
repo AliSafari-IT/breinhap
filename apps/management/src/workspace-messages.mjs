@@ -3911,5 +3911,131 @@ export const MESSAGES = {
 		"en": "without an end date",
 		"fr": "sans date de fin",
 		"de": "ohne Enddatum"
+	},
+	"Gepubliceerd (packversie {0}), openbaar": {
+		"nl": "Gepubliceerd (packversie {0}), openbaar",
+		"en": "Published (pack version {0}), public",
+		"fr": "Publié (version du pack {0}), public",
+		"de": "Veröffentlicht (Paketversion {0}), öffentlich"
+	},
+	"Uit de openbare catalogus halen": {
+		"nl": "Uit de openbare catalogus halen",
+		"en": "Remove from the public catalogue",
+		"fr": "Retirer du catalogue public",
+		"de": "Aus dem öffentlichen Katalog nehmen"
+	},
+	"Openbaar maken op breinhap.com": {
+		"nl": "Openbaar maken op breinhap.com",
+		"en": "Make public on breinhap.com",
+		"fr": "Rendre public sur breinhap.com",
+		"de": "Auf breinhap.com öffentlich machen"
+	},
+	"Het leerobject staat nu in de openbare catalogus op breinhap.com.": {
+		"nl": "Het leerobject staat nu in de openbare catalogus op breinhap.com.",
+		"en": "The learning object is now in the public catalogue on breinhap.com.",
+		"fr": "L’objet d’apprentissage figure maintenant dans le catalogue public sur breinhap.com.",
+		"de": "Das Lernobjekt steht jetzt im öffentlichen Katalog auf breinhap.com."
+	},
+	"Het leerobject staat niet meer in de openbare catalogus.": {
+		"nl": "Het leerobject staat niet meer in de openbare catalogus.",
+		"en": "The learning object is no longer in the public catalogue.",
+		"fr": "L’objet d’apprentissage ne figure plus dans le catalogue public.",
+		"de": "Das Lernobjekt steht nicht mehr im öffentlichen Katalog."
+	},
+	"Niet openbaar gemaakt": {
+		"nl": "Niet openbaar gemaakt",
+		"en": "Not made public",
+		"fr": "Non rendu public",
+		"de": "Nicht öffentlich gemacht"
+	},
+	"Alleen een leerobject met een actieve publicatie kan openbaar worden.": {
+		"nl": "Alleen een leerobject met een actieve publicatie kan openbaar worden.",
+		"en": "Only a learning object with an active publication can be made public.",
+		"fr": "Seul un objet d’apprentissage avec une publication active peut devenir public.",
+		"de": "Nur ein Lernobjekt mit einer aktiven Veröffentlichung kann öffentlich werden."
+	},
+	"Dit leerobject staat al in de openbare catalogus.": {
+		"nl": "Dit leerobject staat al in de openbare catalogus.",
+		"en": "This learning object is already in the public catalogue.",
+		"fr": "Cet objet d’apprentissage figure déjà dans le catalogue public.",
+		"de": "Dieses Lernobjekt steht bereits im öffentlichen Katalog."
+	},
+	"Dit leerobject staat niet in de openbare catalogus.": {
+		"nl": "Dit leerobject staat niet in de openbare catalogus.",
+		"en": "This learning object is not in the public catalogue.",
+		"fr": "Cet objet d’apprentissage ne figure pas dans le catalogue public.",
+		"de": "Dieses Lernobjekt steht nicht im öffentlichen Katalog."
+	},
+	"Actieve publicaties": {
+		"nl": "Actieve publicaties",
+		"en": "Active publications",
+		"fr": "Publications actives",
+		"de": "Aktive Veröffentlichungen"
+	},
+	"Openbaar": {
+		"nl": "Openbaar",
+		"en": "Public",
+		"fr": "Public",
+		"de": "Öffentlich"
+	},
+	"Sinds {0}": {
+		"nl": "Sinds {0}",
+		"en": "Since {0}",
+		"fr": "Depuis {0}",
+		"de": "Seit {0}"
+	},
+	"Niet openbaar": {
+		"nl": "Niet openbaar",
+		"en": "Not public",
+		"fr": "Non public",
+		"de": "Nicht öffentlich"
+	},
+	"Er zijn nog geen actieve publicaties.": {
+		"nl": "Er zijn nog geen actieve publicaties.",
+		"en": "There are no active publications yet.",
+		"fr": "Il n’y a pas encore de publication active.",
+		"de": "Es gibt noch keine aktiven Veröffentlichungen."
+	},
+	"Openbare missies kan iedereen op breinhap.com zonder account bekijken en oefenen. Er wordt niets bewaard. Alleen nagekeken en gepubliceerde inhoud kan openbaar worden; intrekken haalt ze ook daar meteen weg.": {
+		"nl": "Openbare missies kan iedereen op breinhap.com zonder account bekijken en oefenen. Er wordt niets bewaard. Alleen nagekeken en gepubliceerde inhoud kan openbaar worden; intrekken haalt ze ook daar meteen weg.",
+		"en": "Anyone can view and practise public missions on breinhap.com without an account. Nothing is saved. Only reviewed, published content can become public; withdrawing removes it there at once too.",
+		"fr": "Tout le monde peut consulter et pratiquer les missions publiques sur breinhap.com sans compte. Rien n’est enregistré. Seul un contenu relu et publié peut devenir public ; le retrait le supprime aussi immédiatement là-bas.",
+		"de": "Öffentliche Missionen kann jede Person auf breinhap.com ohne Konto ansehen und üben. Es wird nichts gespeichert. Nur geprüfte, veröffentlichte Inhalte können öffentlich werden; Zurückziehen entfernt sie auch dort sofort."
+	},
+	"Openbare missies": {
+		"nl": "Openbare missies",
+		"en": "Public missions",
+		"fr": "Missions publiques",
+		"de": "Öffentliche Missionen"
+	},
+	"Openbare missies op breinhap.com": {
+		"nl": "Openbare missies op breinhap.com",
+		"en": "Public missions on breinhap.com",
+		"fr": "Missions publiques sur breinhap.com",
+		"de": "Öffentliche Missionen auf breinhap.com"
+	},
+	"Terug naar de openbare missies": {
+		"nl": "Terug naar de openbare missies",
+		"en": "Back to the public missions",
+		"fr": "Retour aux missions publiques",
+		"de": "Zurück zu den öffentlichen Missionen"
+	},
+	"Dit leerobject bestaat niet.": {
+		"nl": "Dit leerobject bestaat niet.",
+		"en": "This learning object does not exist.",
+		"fr": "Cet objet d’apprentissage n’existe pas.",
+		"de": "Dieses Lernobjekt existiert nicht."
+	},
+	"Alleen beheerders bepalen wat openbaar is op breinhap.com.": {
+		"nl": "Alleen beheerders bepalen wat openbaar is op breinhap.com.",
+		"en": "Only administrators decide what is public on breinhap.com.",
+		"fr": "Seuls les administrateurs décident de ce qui est public sur breinhap.com.",
+		"de": "Nur Administratoren entscheiden, was auf breinhap.com öffentlich ist."
+	},
+	"Een beheerder beslist wat openbaar is op breinhap.com. Intrekken haalt het ook daar meteen weg.": {
+		"nl": "Een beheerder beslist wat openbaar is op breinhap.com. Intrekken haalt het ook daar meteen weg.",
+		"en": "An administrator decides what is public on breinhap.com. Withdrawing removes it there at once too.",
+		"fr": "Un administrateur décide de ce qui est public sur breinhap.com. Le retrait le supprime aussi immédiatement là-bas.",
+		"de": "Ein Administrator entscheidet, was auf breinhap.com öffentlich ist. Zurückziehen entfernt es auch dort sofort."
 	}
 };
