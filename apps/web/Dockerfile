@@ -4,6 +4,7 @@ COPY site/src/theme.css site/src/theme.css
 COPY site/public/logo.svg site/public/favicon.svg site/public/theme.js site/public/locale-selector.js site/public/locale-selector.css site/public/
 COPY web/package.json web/package.json
 COPY web/src web/src
+COPY web/narration web/narration
 RUN node web/src/build.mjs
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine

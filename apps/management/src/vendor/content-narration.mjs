@@ -21,6 +21,14 @@ export const NARRATION_PREVIEW = "Hallo! Zo klink ik als ik een kaart voorlees."
 export function narrationText(card) {
     return [card.text, card.example].filter(Boolean).join(" ");
 }
+/**
+ * What gets read aloud for a question: the prompt, then each option (or each item of an ordering
+ * question) as its own sentence. Used by breinhap.com's try-out and the clip generator.
+ */
+export function questionNarrationText(question) {
+    const parts = "options" in question ? question.options : question.items;
+    return `${question.prompt} ${parts.join(". ")}.`;
+}
 /** The text as it is hashed: Unicode NFC, whitespace runs collapsed, trimmed. */
 export function normaliseNarration(text) {
     return text.normalize("NFC").replace(/\s+/g, " ").trim();

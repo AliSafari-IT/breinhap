@@ -31,7 +31,6 @@ test("every language has the try-out in its own words, with no inline script and
     const html = read(`${folder}index.html`);
     assert.match(html, /<section class="example" id="voorbeeld"/, folder);
     assert.ok(html.includes(`<h2 id="example-title">${titles[lang]}</h2>`), folder);
-    assert.match(html, /<script src="\/example-data\.js" defer><\/script><script src="\/example\.js" defer><\/script>/, folder);
     // The only inline script is the JSON text block, which the CSP (script-src 'self') does not execute
     const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].map((m) => m[1].trim());
     assert.deepEqual(inline, ['type="application/json" id="example-ui"'], folder);
@@ -188,3 +187,22 @@ test("the navbar's account state comes from management, and the CSP allows only 
   const css = read("styles.css");
   assert.match(css, /html\[data-account-state="checking"\] \.nav-actions \{ visibility: hidden; \}/);
 });
+
+test("recorded voices: the try-out loads the voice list, and the CSP lets it play clips from this site only", () => {
+  for (const [folder] of LANGUAGES) {
+    const html = read(`${folder}index.html`);
+    assert.match(html, /<script src="\/example-data\.js" defer><\/script><script src="\/narration\/voices\.js" defer><\/script><script src="\/example\.js" defer><\/script>/, folder);
+  }
+  const manifest = JSON.parse(readFileSync(new URL("../narration/manifest.json", import.meta.url), "utf8"));
+  const sandbox = {};
+  vm.runInNewContext(read("narration/voices.js"), sandbox);
+  assert.equal(sandbox.BreinhapVoices.keyVersion, 1);
+  // every listed clip is in the image, under the voice's folder
+  for (const voice of sandbox.BreinhapVoices.voices) {
+    assert.ok(manifest.narrators[voice.id], voice.id);
+    for (const key of voice.clips) assert.ok(existsSync(new URL(`../dist/narration/${voice.id}/${key}.mp3`, import.meta.url)), `${voice.id}/${key}`);
+  }
+  const nginx = readFileSync(new URL("../nginx.conf", import.meta.url), "utf8");
+  assert.match(nginx, /Content-Security-Policy "default-src 'none'; script-src 'self'; connect-src https:\/\/management\.breinhap\.com; style-src 'self'; img-src 'self'; media-src 'self';/);
+});
+

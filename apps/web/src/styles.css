@@ -102,3 +102,5 @@ footer nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .ex-search { width: 100%; min-height: 48px; margin: 0 0 12px; padding: 8px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; }
 .ex-button[aria-pressed="true"] { outline: 2px solid var(--accent-ink); outline-offset: -5px; }
 .ex-read { align-self: start; margin: 0 0 16px; }
+.ex-voice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
+.ex-voice { min-height: 44px; max-width: 100%; padding: 6px 10px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; }

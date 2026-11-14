@@ -25,6 +25,15 @@ export function narrationText(card: { text: string; example?: string }): string 
   return [card.text, card.example].filter(Boolean).join(" ");
 }
 
+/**
+ * What gets read aloud for a question: the prompt, then each option (or each item of an ordering
+ * question) as its own sentence. Used by breinhap.com's try-out and the clip generator.
+ */
+export function questionNarrationText(question: { prompt: string } & ({ options: readonly string[] } | { items: readonly string[] })): string {
+  const parts = "options" in question ? question.options : question.items;
+  return `${question.prompt} ${parts.join(". ")}.`;
+}
+
 /** The text as it is hashed: Unicode NFC, whitespace runs collapsed, trimmed. */
 export function normaliseNarration(text: string): string {
   return text.normalize("NFC").replace(/\s+/g, " ").trim();
