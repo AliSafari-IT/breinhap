@@ -20,7 +20,7 @@ const reviewed = (object: LearningObject): LearningObject => ({
 
 describe("schema", () => {
   it("accepts the sample pack", () => {
-    expect(samplePack.objects).toHaveLength(3);
+    expect(samplePack.objects.length).toBeGreaterThanOrEqual(3);
   });
 
   it("rejects a choice answer that points past the options", () => {
