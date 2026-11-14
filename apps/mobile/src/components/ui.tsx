@@ -2,6 +2,8 @@ import * as Speech from "expo-speech";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from "react-native";
 import { useSettings } from "../settings/SettingsContext";
+import { speechOptions } from "../speech/voices";
+import { useVoices } from "../speech/useVoices";
 import { fontSize, radius, spacing } from "../theme/tokens";
 
 export function Screen({ children }: { children: ReactNode }) {
@@ -104,8 +106,10 @@ export function Card({ children }: { children: ReactNode }) {
   );
 }
 
-/** Read a text aloud in Flemish Dutch. Pressing again stops it. */
+/** Read a text aloud with the student's chosen Dutch voice (Instellingen). Pressing again stops it. */
 export function ReadAloud({ text }: { text: string }) {
+  const { settings } = useSettings();
+  const { voices } = useVoices();
   return (
     <Button
       kind="secondary"
@@ -115,7 +119,7 @@ export function ReadAloud({ text }: { text: string }) {
         if (await Speech.isSpeakingAsync()) {
           Speech.stop();
         } else {
-          Speech.speak(text, { language: "nl-BE" });
+          Speech.speak(text, speechOptions(voices, settings));
         }
       }}
     />

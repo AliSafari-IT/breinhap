@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { Linking, Switch, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
 import { profileLabel } from "../components/SchoolPicker";
+import { VoicePicker } from "../components/VoicePicker";
 import { LEGAL } from "../links";
 import { useProfile } from "../settings/ProfileContext";
 import { useSettings, type ThemePreference } from "../settings/SettingsContext";
@@ -70,6 +71,7 @@ export default function SettingsScreen() {
           onChange={(largeText) => update({ largeText })}
         />
       </Card>
+      <VoicePicker />
       <Card>
         <AppText variant="title">Privacy en voorwaarden</AppText>
         <AppText variant="small" muted>
