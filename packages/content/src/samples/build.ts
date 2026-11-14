@@ -11,10 +11,11 @@ const question = (q: Q) =>
 
 /**
  * A one-mission sample object in the house shape (Opwarmen → Leren → Doen → Check).
- * Every sample built here is an AI-assisted DRAFT: it reaches students only after a
- * person reviews it and sets `review` to reviewed (CLAUDE.md, "AI never grades or decides").
+ * AI-assisted: `review` stays a draft unless a person reviewed it, in which case the caller
+ * passes who and when (CLAUDE.md, "AI never grades or decides").
  */
-export function draftSample(spec: {
+export function sample(spec: {
+  reviewed?: { by: string; at: string };
   id: string;
   subject: Subject;
   grade: number;
@@ -35,7 +36,7 @@ export function draftSample(spec: {
     title: spec.title,
     grade: spec.grade,
     curriculum: { leerdoel: spec.leerdoel, references: [] },
-    review: { status: "draft" },
+    review: spec.reviewed ? { status: "reviewed", reviewedBy: spec.reviewed.by, reviewedAt: spec.reviewed.at } : { status: "draft" },
     missions: [
       {
         id: `${spec.id}-1`,

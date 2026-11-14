@@ -1,9 +1,13 @@
-import { draftSample } from "./build";
+import { sample } from "./build";
+
+/** Reviewed by Ali Safari on 2026-11-14 (breinhap#109 follow-up). */
+const REVIEW = { by: "Ali Safari", at: "2026-11-14" };
 
 // AI-assisted samples for 5/6 Economie-wiskunde: one per vak with content, so every course in the
-// picker has an example. Drafts until a person reviews them (wiskunde 5 is wiskunde-samengestelde-intrest).
+// picker has an example. Reviewed by Ali Safari on 2026-11-14 (wiskunde 5 is wiskunde-samengestelde-intrest).
 
-export const economieVraagAanbod = draftSample({
+export const economieVraagAanbod = sample({
+  reviewed: REVIEW,
   id: "economie-vraag-en-aanbod",
   subject: "economie",
   grade: 5,
@@ -54,7 +58,8 @@ export const economieVraagAanbod = draftSample({
   ],
 });
 
-export const nederlandsDrogredenen = draftSample({
+export const nederlandsDrogredenen = sample({
+  reviewed: REVIEW,
   id: "nederlands-drogredenen",
   subject: "nederlands",
   grade: 5,
@@ -95,7 +100,8 @@ export const nederlandsDrogredenen = draftSample({
   ],
 });
 
-export const fransSubjonctif = draftSample({
+export const fransSubjonctif = sample({
+  reviewed: REVIEW,
   id: "frans-subjonctif-present",
   subject: "frans",
   grade: 5,
@@ -136,7 +142,8 @@ export const fransSubjonctif = draftSample({
   ],
 });
 
-export const engelsPresentPerfect = draftSample({
+export const engelsPresentPerfect = sample({
+  reviewed: REVIEW,
   id: "engels-present-perfect-past-simple",
   subject: "engels",
   grade: 5,
@@ -176,7 +183,8 @@ export const engelsPresentPerfect = draftSample({
   ],
 });
 
-export const geschiedenisFranseRevolutie = draftSample({
+export const geschiedenisFranseRevolutie = sample({
+  reviewed: REVIEW,
   id: "geschiedenis-franse-revolutie",
   subject: "geschiedenis",
   grade: 5,
@@ -218,7 +226,8 @@ export const geschiedenisFranseRevolutie = draftSample({
   ],
 });
 
-export const aardrijkskundePlaatgrenzen = draftSample({
+export const aardrijkskundePlaatgrenzen = sample({
+  reviewed: REVIEW,
   id: "aardrijkskunde-plaatgrenzen",
   subject: "aardrijkskunde",
   grade: 5,
@@ -255,15 +264,16 @@ export const aardrijkskundePlaatgrenzen = draftSample({
       items: [
         "Een oceanische en een continentale plaat bewegen naar elkaar",
         "De zwaardere oceanische plaat duikt onder de continentale",
-        "Diep in de mantel smelt gesteente",
+        "De dalende plaat geeft water af aan de mantel erboven, die daardoor gedeeltelijk smelt",
         "Magma stijgt op en vormt vulkanen",
       ],
-      why: "De zware oceanische plaat zakt weg, smelt gedeeltelijk, en dat magma voedt de vulkanen erboven.",
+      why: "De dalende oceanische plaat smelt zelf meestal niet. Ze geeft water af, en daardoor smelt de mantel erboven gedeeltelijk. Dat magma voedt de vulkanen.",
     },
   ],
 });
 
-export const wiskundeNormaleVerdeling = draftSample({
+export const wiskundeNormaleVerdeling = sample({
+  reviewed: REVIEW,
   id: "wiskunde-normale-verdeling",
   subject: "wiskunde",
   grade: 6,
@@ -304,7 +314,8 @@ export const wiskundeNormaleVerdeling = draftSample({
   ],
 });
 
-export const economieInflatie = draftSample({
+export const economieInflatie = sample({
+  reviewed: REVIEW,
   id: "economie-inflatie-koopkracht",
   subject: "economie",
   grade: 6,
@@ -345,7 +356,8 @@ export const economieInflatie = draftSample({
   ],
 });
 
-export const nederlandsCiterenParafraseren = draftSample({
+export const nederlandsCiterenParafraseren = sample({
+  reviewed: REVIEW,
   id: "nederlands-citeren-parafraseren",
   subject: "nederlands",
   grade: 6,
@@ -387,7 +399,8 @@ export const nederlandsCiterenParafraseren = draftSample({
   ],
 });
 
-export const fransPasseSimple = draftSample({
+export const fransPasseSimple = sample({
+  reviewed: REVIEW,
   id: "frans-passe-simple",
   subject: "frans",
   grade: 6,
@@ -425,7 +438,8 @@ export const fransPasseSimple = draftSample({
   ],
 });
 
-export const engelsConditionals = draftSample({
+export const engelsConditionals = sample({
+  reviewed: REVIEW,
   id: "engels-second-third-conditional",
   subject: "engels",
   grade: 6,
@@ -468,7 +482,8 @@ export const engelsConditionals = draftSample({
   ],
 });
 
-export const geschiedenisKoudeOorlog = draftSample({
+export const geschiedenisKoudeOorlog = sample({
+  reviewed: REVIEW,
   id: "geschiedenis-koude-oorlog",
   subject: "geschiedenis",
   grade: 6,
@@ -506,7 +521,8 @@ export const geschiedenisKoudeOorlog = draftSample({
   ],
 });
 
-export const aardrijkskundeDemografischeTransitie = draftSample({
+export const aardrijkskundeDemografischeTransitie = sample({
+  reviewed: REVIEW,
   id: "aardrijkskunde-demografische-transitie",
   subject: "aardrijkskunde",
   grade: 6,

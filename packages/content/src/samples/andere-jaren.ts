@@ -1,9 +1,13 @@
-import { draftSample } from "./build";
+import { sample } from "./build";
+
+/** Reviewed by Ali Safari on 2026-11-14 (breinhap#109 follow-up). */
+const REVIEW = { by: "Ali Safari", at: "2026-11-14" };
 
 // AI-assisted samples for years 1, 2 and 4, so a student in any year sees at least one example
-// (the picker has no richting for these years yet). Drafts until a person reviews them.
+// (the picker has no richting for these years yet). Reviewed by Ali Safari on 2026-11-14.
 
-export const wiskundeGeheleGetallen = draftSample({
+export const wiskundeGeheleGetallen = sample({
+  reviewed: REVIEW,
   id: "wiskunde-gehele-getallen",
   subject: "wiskunde",
   grade: 1,
@@ -28,7 +32,8 @@ export const wiskundeGeheleGetallen = draftSample({
   mistakes: [["−5 is groter dan −2, want 5 is groter dan 2.", "Bij negatieve getallen is het omgekeerd: −5 ligt verder links, dus −5 is kleiner."]],
 });
 
-export const wiskundeVergelijkingen = draftSample({
+export const wiskundeVergelijkingen = sample({
+  reviewed: REVIEW,
   id: "wiskunde-vergelijkingen-eerste-graad",
   subject: "wiskunde",
   grade: 2,
@@ -58,7 +63,8 @@ export const wiskundeVergelijkingen = draftSample({
   ],
 });
 
-export const fysicaEenparigeBeweging = draftSample({
+export const fysicaEenparigeBeweging = sample({
+  reviewed: REVIEW,
   id: "fysica-eenparige-beweging",
   subject: "fysica",
   grade: 4,
