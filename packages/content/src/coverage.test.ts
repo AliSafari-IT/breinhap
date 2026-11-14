@@ -25,10 +25,10 @@ describe("sample coverage", () => {
     }
   });
 
-  it("new samples are drafts with unique mission ids", () => {
+  it("the coverage samples carry their review, with unique mission ids", () => {
     const ids = samplePack.objects.flatMap((o) => o.missions.map((m) => m.id));
     expect(new Set(ids).size).toBe(ids.length);
     for (const object of [...Object.values(derdeGraad), ...Object.values(andereJaren)])
-      expect(object.review.status, object.id).toBe("draft");
+      expect(object.review, object.id).toEqual({ status: "reviewed", reviewedBy: "Ali Safari", reviewedAt: "2026-11-14" });
   });
 });
