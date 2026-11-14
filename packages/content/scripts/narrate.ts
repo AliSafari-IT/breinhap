@@ -174,7 +174,12 @@ async function main() {
         headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
         body: JSON.stringify({ text, model_id: values.model, voice_settings: { stability: 0.6, similarity_boost: 0.75, style: 0, use_speaker_boost: true } }),
       });
-      await writeFile(join(dir, file), Buffer.from(await res.arrayBuffer()));
+      // the file name is our own hash; the body is only written when it is really an MP3 of sane size
+      const audio = Buffer.from(await res.arrayBuffer());
+      const mp3 = audio.subarray(0, 3).toString("latin1") === "ID3" || (audio[0] === 0xff && ((audio[1] ?? 0) & 0xe0) === 0xe0);
+      if (!/^audio\/mpeg\b/.test(res.headers.get("content-type") ?? "") || !mp3 || audio.length > 5_000_000)
+        throw new Error(`ElevenLabs returned something other than an MP3 for ${key}; nothing written`);
+      await writeFile(join(dir, file), audio);
       keep[key] = file;
       made++;
       process.stdout.write(`\r${narrator}: ${made} new clips`);
