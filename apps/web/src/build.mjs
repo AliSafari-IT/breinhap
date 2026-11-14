@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const mission = JSON.parse(readFileSync(new URL("./example-mission.json", import.meta.url), "utf8"));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -31,13 +32,14 @@ const copy = {
     skip: "Naar de inhoud", theme: "Donker thema", mainNav: "Hoofdmenu", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Aanmelden", register: "Account aanmaken", account: "Account", manage: "Breinhap beheer", myAccount: "Mijn account", switchAccount: "Wissel van account", legalNav: "Juridisch",
     title: "Leren in kleine happen.", intro: "Een rustige plek om te beginnen, één kleine stap tegelijk.",
-    badge: "Binnenkort op het web", notice: "We bouwen Breinhap stap voor stap. Dit is onze eerste pagina; je kunt hier nog geen missies starten.",
+    badge: "Binnenkort op het web", notice: "We bouwen Breinhap stap voor stap. Je kunt hieronder één voorbeeldmissie proberen; de echte missies in je browser komen later.",
     text: "Breinhap helpt je om te starten met studeren. Korte missies, duidelijke stappen en ruimte om op je eigen tempo te leren.",
     next: "Wat je straks kunt verwachten", cards: [
       ["Eén korte missie", "Een behapbare stap die past bij de tijd en energie die je hebt."],
       ["Een vast ritme", "Opwarmen, leren, doen en checken. Je weet steeds wat er komt."],
       ["Zonder tijdsdruk", "Geen streaks of straf voor een pauze. Je begint wanneer jij er klaar voor bent."],
     ],
+    example: {"title": "Probeer een voorbeeld", "lead": "Zo werkt een missie in de Breinhap-app: opwarmen, leren, doen en checken, telkens één ding per scherm. Er is geen timer en niets wordt bewaard of verstuurd.", "noscript": "Het voorbeeld heeft JavaScript nodig. De Android-app werkt zonder.", "ui": {"introTitle": "Een korte voorbeeldmissie", "introNote": "Ongeveer 4 minuten. Je kunt altijd stoppen door de pagina te sluiten.", "start": "Start het voorbeeld", "next": "Verder", "finish": "Klaar", "right": "Klopt.", "notYet": "Nog niet.", "stepsLabel": "Stappen", "steps": {"Opwarmen": "Opwarmen", "Leren": "Leren", "Doen": "Doen", "Check": "Check"}, "count": "{n} van {total}", "lastQuestion": "Laatste vraag.", "example": "Voorbeeld:", "options": "Antwoorden", "items": "Kies in volgorde", "yourOrder": "Jouw volgorde", "orderHelp": "Tik de onderdelen aan in de juiste volgorde.", "check": "Controleer", "clear": "Opnieuw kiezen", "done": "Missie klaar.", "score": "Je had {n} van de {total} vragen juist.", "scoreNone": "Je hebt {total} vragen geoefend. Lees de uitleg nog eens rustig na.", "mistake": "Veelgemaakte fout", "outro": "Dit was een voorbeeld. Voor de echte missies kun je de Android-app gebruiken.", "again": "Nog eens proberen", "lang": "nl"}},
     android: "Begonnen als Android-app", androidText: "De Android-app is het vertrekpunt. Nu maken we stap voor stap ook ruimte voor leren in je browser.",
     link: "Meer over Breinhap en Android", privacy: "Privacy", terms: "Voorwaarden", cookies: "Cookies", deletion: "Je gegevens verwijderen",
     footer: "Kleine stappen. Op jouw tempo.", missing: "Deze pagina bestaat nog niet.", back: "Terug naar Breinhap",
@@ -46,13 +48,14 @@ const copy = {
     skip: "Skip to content", theme: "Dark theme", mainNav: "Main", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Sign in", register: "Create account", account: "Account", manage: "Breinhap management", myAccount: "My account", switchAccount: "Switch account", legalNav: "Legal",
     title: "Learning in small bites.", intro: "A calm place to start, one small step at a time.",
-    badge: "Coming soon to the web", notice: "We are building Breinhap step by step. This is our first page; you cannot start missions here yet.",
+    badge: "Coming soon to the web", notice: "We are building Breinhap step by step. You can try one example mission below; the real missions in your browser come later.",
     text: "Breinhap helps you get started with studying. Short missions, clear steps and room to learn at your own pace.",
     next: "What to look forward to", cards: [
       ["One short mission", "A manageable step that fits the time and energy you have."],
       ["A familiar rhythm", "Warm up, learn, practise and check. You always know what comes next."],
       ["Without time pressure", "No streaks or penalties for taking a break. Start when you are ready."],
     ],
+    example: {"title": "Try an example", "lead": "This is how a mission works in the Breinhap app: warm up, learn, practise and check, one thing per screen. There is no timer, and nothing is saved or sent. The mission itself is in Dutch.", "noscript": "The example needs JavaScript. The Android app works without it.", "ui": {"introTitle": "A short example mission", "introNote": "About 4 minutes. You can stop at any time by closing the page. The mission text is in Dutch.", "start": "Start the example", "next": "Continue", "finish": "Finish", "right": "Correct.", "notYet": "Not yet.", "stepsLabel": "Steps", "steps": {"Opwarmen": "Warm up", "Leren": "Learn", "Doen": "Practise", "Check": "Check"}, "count": "{n} of {total}", "lastQuestion": "Last question.", "example": "Example:", "options": "Answers", "items": "Choose in order", "yourOrder": "Your order", "orderHelp": "Tap the items in the right order.", "check": "Check", "clear": "Choose again", "done": "Mission complete.", "score": "You got {n} of {total} questions right.", "scoreNone": "You practised {total} questions. Read the explanations again at your own pace.", "mistake": "A common mistake", "outro": "This was an example. For the real missions you can use the Android app.", "again": "Try again", "lang": "en"}},
     android: "Started as an Android app", androidText: "The Android app is our starting point. Now we are gradually making room for learning in your browser too.",
     link: "About Breinhap and Android", privacy: "Privacy", terms: "Terms", cookies: "Cookies", deletion: "Delete your data",
     footer: "Small steps. At your pace.", missing: "This page does not exist yet.", back: "Back to Breinhap",
@@ -61,13 +64,14 @@ const copy = {
     skip: "Aller au contenu", theme: "Thème sombre", mainNav: "Menu principal", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Se connecter", register: "Créer un compte", account: "Compte", manage: "Gestion Breinhap", myAccount: "Mon compte", switchAccount: "Changer de compte", legalNav: "Mentions légales",
     title: "Apprendre par petites bouchées.", intro: "Un endroit calme pour commencer, une petite étape à la fois.",
-    badge: "Bientôt sur le web", notice: "Nous construisons Breinhap étape par étape. Voici notre première page ; vous ne pouvez pas encore y lancer de missions.",
+    badge: "Bientôt sur le web", notice: "Nous construisons Breinhap étape par étape. Vous pouvez essayer une mission d’exemple ci-dessous ; les vraies missions dans votre navigateur viendront plus tard.",
     text: "Breinhap vous aide à vous mettre aux études. De courtes missions, des étapes claires et la place d’apprendre à votre rythme.",
     next: "Ce qui vous attend", cards: [
       ["Une courte mission", "Une étape à votre portée, adaptée au temps et à l’énergie dont vous disposez."],
       ["Un rythme familier", "Échauffement, apprentissage, pratique et vérification. Vous savez toujours ce qui vient ensuite."],
       ["Sans pression du temps", "Pas de séries à tenir ni de pénalité pour une pause. Vous commencez quand vous êtes prêt."],
     ],
+    example: {"title": "Essayez un exemple", "lead": "Voici comment fonctionne une mission dans l’application Breinhap : échauffement, apprentissage, pratique et vérification, une chose par écran. Pas de minuteur, et rien n’est enregistré ni envoyé. La mission elle-même est en néerlandais.", "noscript": "L’exemple nécessite JavaScript. L’application Android fonctionne sans.", "ui": {"introTitle": "Une courte mission d’exemple", "introNote": "Environ 4 minutes. Vous pouvez arrêter à tout moment en fermant la page. Le texte de la mission est en néerlandais.", "start": "Commencer l’exemple", "next": "Continuer", "finish": "Terminer", "right": "C’est juste.", "notYet": "Pas encore.", "stepsLabel": "Étapes", "steps": {"Opwarmen": "Échauffement", "Leren": "Apprendre", "Doen": "Pratiquer", "Check": "Vérifier"}, "count": "{n} sur {total}", "lastQuestion": "Dernière question.", "example": "Exemple :", "options": "Réponses", "items": "Choisir dans l’ordre", "yourOrder": "Votre ordre", "orderHelp": "Touchez les éléments dans le bon ordre.", "check": "Vérifier", "clear": "Choisir à nouveau", "done": "Mission terminée.", "score": "Vous avez eu {n} réponses justes sur {total}.", "scoreNone": "Vous avez travaillé {total} questions. Relisez calmement les explications.", "mistake": "Une erreur fréquente", "outro": "Ceci était un exemple. Pour les vraies missions, vous pouvez utiliser l’application Android.", "again": "Réessayer", "lang": "fr"}},
     android: "Né comme application Android", androidText: "L’application Android est notre point de départ. Nous faisons maintenant peu à peu de la place à l’apprentissage dans votre navigateur.",
     link: "En savoir plus sur Breinhap et Android", privacy: "Confidentialité", terms: "Conditions", cookies: "Cookies", deletion: "Supprimer vos données",
     footer: "Petits pas. À votre rythme.", missing: "Cette page n’existe pas encore.", back: "Retour à Breinhap",
@@ -76,17 +80,24 @@ const copy = {
     skip: "Zum Inhalt", theme: "Dunkles Design", mainNav: "Hauptmenü", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Anmelden", register: "Konto erstellen", account: "Konto", manage: "Breinhap-Verwaltung", myAccount: "Mein Konto", switchAccount: "Konto wechseln", legalNav: "Rechtliches",
     title: "Lernen in kleinen Happen.", intro: "Ein ruhiger Ort zum Anfangen, ein kleiner Schritt nach dem anderen.",
-    badge: "Bald im Web", notice: "Wir bauen Breinhap Schritt für Schritt. Dies ist unsere erste Seite; Missionen können Sie hier noch nicht starten.",
+    badge: "Bald im Web", notice: "Wir bauen Breinhap Schritt für Schritt. Unten können Sie eine Beispielmission ausprobieren; die echten Missionen im Browser folgen später.",
     text: "Breinhap hilft Ihnen beim Einstieg ins Lernen. Kurze Missionen, klare Schritte und Raum, in Ihrem eigenen Tempo zu lernen.",
     next: "Was Sie erwartet", cards: [
       ["Eine kurze Mission", "Ein machbarer Schritt, der zu Ihrer Zeit und Energie passt."],
       ["Ein vertrauter Rhythmus", "Aufwärmen, lernen, üben und prüfen. Sie wissen immer, was als Nächstes kommt."],
       ["Ohne Zeitdruck", "Keine Serien und keine Strafe für eine Pause. Sie fangen an, wenn Sie bereit sind."],
     ],
+    example: {"title": "Beispiel ausprobieren", "lead": "So funktioniert eine Mission in der Breinhap-App: aufwärmen, lernen, üben und prüfen, immer eines pro Bildschirm. Es gibt keinen Timer, und nichts wird gespeichert oder gesendet. Die Mission selbst ist auf Niederländisch.", "noscript": "Das Beispiel braucht JavaScript. Die Android-App funktioniert ohne.", "ui": {"introTitle": "Eine kurze Beispielmission", "introNote": "Etwa 4 Minuten. Sie können jederzeit aufhören, indem Sie die Seite schließen. Der Text der Mission ist auf Niederländisch.", "start": "Beispiel starten", "next": "Weiter", "finish": "Fertig", "right": "Richtig.", "notYet": "Noch nicht.", "stepsLabel": "Schritte", "steps": {"Opwarmen": "Aufwärmen", "Leren": "Lernen", "Doen": "Üben", "Check": "Prüfen"}, "count": "{n} von {total}", "lastQuestion": "Letzte Frage.", "example": "Beispiel:", "options": "Antworten", "items": "In der Reihenfolge wählen", "yourOrder": "Ihre Reihenfolge", "orderHelp": "Tippen Sie die Teile in der richtigen Reihenfolge an.", "check": "Prüfen", "clear": "Neu wählen", "done": "Mission geschafft.", "score": "Sie hatten {n} von {total} Fragen richtig.", "scoreNone": "Sie haben {total} Fragen geübt. Lesen Sie die Erklärungen in Ruhe noch einmal.", "mistake": "Ein häufiger Fehler", "outro": "Das war ein Beispiel. Für die echten Missionen können Sie die Android-App nutzen.", "again": "Noch einmal versuchen", "lang": "de"}},
     android: "Als Android-App gestartet", androidText: "Die Android-App ist unser Ausgangspunkt. Jetzt schaffen wir Schritt für Schritt auch Platz zum Lernen in Ihrem Browser.",
     link: "Mehr über Breinhap und Android", privacy: "Datenschutz", terms: "Nutzungsbedingungen", cookies: "Cookies", deletion: "Ihre Daten löschen",
     footer: "Kleine Schritte. In Ihrem Tempo.", missing: "Diese Seite gibt es noch nicht.", back: "Zurück zu Breinhap",
   },
+};
+
+/** The example section (breinhap#114): the mission and interface text are embedded as JSON data, which the CSP allows. */
+const exampleSection = (t) => {
+  const data = JSON.stringify({ ui: t.example.ui, mission: mission.mission }).replaceAll("<", "\\u003c");
+  return `<section class="example" id="voorbeeld" aria-labelledby="example-title"><h2 id="example-title">${esc(t.example.title)}</h2><p class="intro">${esc(t.example.lead)}</p><div data-example><noscript><p>${esc(t.example.noscript)}</p></noscript></div><script type="application/json" id="example-data">${data}</script></section>`;
 };
 
 const esc = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
@@ -133,7 +144,7 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 <meta property="og:title" content="Breinhap · ${esc(t.title)}"><meta property="og:description" content="${esc(t.intro)}">
 <meta property="og:type" content="website"><meta property="og:url" content="${origin}${path}"><meta property="og:locale" content="${OG_LOCALE[lang]}">
 <meta name="theme-color" content="#222222"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script><script src="/account.js"></script>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script><script src="/account.js"></script><script src="/example.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">${t.skip}</a>
@@ -150,6 +161,7 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="${path}">${t.back}</a></section>` : `
 <section class="hero"><p class="eyebrow">Breinhap</p><h1>${t.title}</h1><p class="lead">${t.intro}</p><p class="intro">${t.text}</p>
 <a class="button" href="https://breinhap.asafarim.site${androidPath}">${t.link} <span aria-hidden="true">↗</span></a></section>
+${exampleSection(t)}
 <section class="expect"><h2>${t.next}</h2><div class="cards">${t.cards.map(([title, text], index) => `<article class="card"><span class="number" aria-hidden="true">0${index + 1}</span><h3>${title}</h3><p>${text}</p></article>`).join("")}</div></section>
 <section class="android"><h2>${t.android}</h2><p>${t.androidText}</p></section>`}
 </main>
@@ -161,6 +173,7 @@ rmSync(dist, { recursive: true, force: true });
 for (const lang of LANGUAGES) mkdirSync(join(dist, lang === "nl" ? "" : lang), { recursive: true });
 for (const asset of ["logo.svg", "favicon.svg", "theme.js", "locale-selector.js", "locale-selector.css"]) cpSync(join(shared, "public", asset), join(dist, asset));
 cpSync(join(root, "src/account.js"), join(dist, "account.js"));
+cpSync(join(root, "src/example.js"), join(dist, "example.js"));
 writeFileSync(join(dist, "styles.css"), readFileSync(join(shared, "src/theme.css"), "utf8") + "\n" + readFileSync(join(root, "src/styles.css"), "utf8"));
 for (const lang of LANGUAGES) writeFileSync(join(dist, lang === "nl" ? "" : lang, "index.html"), page(lang));
 writeFileSync(join(dist, "404.html"), page("nl", true));
