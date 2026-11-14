@@ -1,8 +1,7 @@
-import * as Speech from "expo-speech";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from "react-native";
 import { useSettings } from "../settings/SettingsContext";
-import { speechOptions } from "../speech/voices";
+import { toggleReading } from "../speech/narrate";
 import { useVoices } from "../speech/useVoices";
 import { fontSize, radius, spacing } from "../theme/tokens";
 
@@ -106,7 +105,7 @@ export function Card({ children }: { children: ReactNode }) {
   );
 }
 
-/** Read a text aloud with the student's chosen Dutch voice (Instellingen). Pressing again stops it. */
+/** Read a text aloud with the student's chosen voice (Instellingen): recorded when this build has it, else the device voice. Pressing again stops it. */
 export function ReadAloud({ text }: { text: string }) {
   const { settings } = useSettings();
   const { voices } = useVoices();
@@ -116,11 +115,7 @@ export function ReadAloud({ text }: { text: string }) {
       label="🔊 Voorlezen"
       accessibilityHint="Leest de tekst voor"
       onPress={async () => {
-        if (await Speech.isSpeakingAsync()) {
-          Speech.stop();
-        } else {
-          Speech.speak(text, speechOptions(voices, settings));
-        }
+        await toggleReading(text, settings, voices);
       }}
     />
   );

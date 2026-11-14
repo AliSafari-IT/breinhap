@@ -13,6 +13,7 @@ const FILES = [
 	["schema.ts", "content-schema.mjs"],
 	["pick.ts", "content-pick.mjs"],
 	["mission.ts", "content-mission.mjs"],
+	["narration.ts", "content-narration.mjs"],
 ].map(([from, to]) => ({
 	source: new URL(`../../../packages/content/src/${from}`, import.meta.url),
 	target: new URL(`../src/vendor/${to}`, import.meta.url),

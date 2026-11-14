@@ -1,11 +1,12 @@
-import * as Speech from "expo-speech";
+import { NARRATION_PREVIEW } from "@breinhap/content";
 import { Linking, Platform, View } from "react-native";
 import { useSettings } from "../settings/SettingsContext";
+import { read, recordedNarrators, type ReadChoice } from "../speech/narrate";
 import { useVoices } from "../speech/useVoices";
 import { dutchVoices, speechOptions, voiceLabels, type Tempo } from "../speech/voices";
 import { AppText, Button, Card, styles } from "./ui";
 
-const PREVIEW = "Hallo! Zo klink ik als ik een kaart voorlees.";
+const PREVIEW = NARRATION_PREVIEW;
 const TEMPOS: Array<{ value: Tempo; label: string }> = [
   { value: "rustig", label: "Rustig" },
   { value: "normaal", label: "Normaal" },
@@ -30,13 +31,32 @@ export function VoicePicker() {
   const labels = voiceLabels(voices);
   const current = speechOptions(all, settings);
 
-  const preview = (choice: { voiceId: string | null; tempo: Tempo }) => {
-    void Speech.stop().finally(() => Speech.speak(PREVIEW, speechOptions(all, choice)));
-  };
+  const preview = (choice: ReadChoice) => read(PREVIEW, choice, all);
 
   return (
     <Card>
       <AppText variant="title">Voorleesstem</AppText>
+      {recordedNarrators.length > 0 && (
+        <>
+          <AppText variant="small" muted>
+            Breinhap-stem: opgenomen voor de missies in de app. Waar er geen opname is, leest de stem van je toestel voor.
+          </AppText>
+          <View style={styles.row}>
+            {recordedNarrators.map((narrator) => (
+              <Button
+                key={narrator}
+                kind={settings.narrator === narrator ? "primary" : "secondary"}
+                label={`Breinhap · ${narrator === "vrouw" ? "Vrouw" : "Man"}`}
+                accessibilityHint="Kiest deze stem en laat ze horen"
+                onPress={() => {
+                  update({ narrator });
+                  preview({ ...settings, narrator });
+                }}
+              />
+            ))}
+          </View>
+        </>
+      )}
       {loaded && voices.length === 0 ? (
         <AppText muted>
           Er staat nog geen Nederlandse stem op je toestel. Installeer er een via de spraakinstellingen van je toestel. Daarna kies je hier je stem.
@@ -50,12 +70,12 @@ export function VoicePicker() {
             {voices.map((voice) => (
               <Button
                 key={voice.identifier}
-                kind={current.voice === voice.identifier ? "primary" : "secondary"}
+                kind={!settings.narrator && current.voice === voice.identifier ? "primary" : "secondary"}
                 label={labels.get(voice.identifier) ?? voice.name}
                 accessibilityHint="Kiest deze stem en laat ze horen"
                 onPress={() => {
-                  update({ voiceId: voice.identifier });
-                  preview({ voiceId: voice.identifier, tempo: settings.tempo });
+                  update({ voiceId: voice.identifier, narrator: null });
+                  preview({ voiceId: voice.identifier, narrator: null, tempo: settings.tempo });
                 }}
               />
             ))}
@@ -73,7 +93,7 @@ export function VoicePicker() {
             label={tempo.label}
             onPress={() => {
               update({ tempo: tempo.value });
-              preview({ voiceId: settings.voiceId, tempo: tempo.value });
+              preview({ ...settings, tempo: tempo.value });
             }}
           />
         ))}

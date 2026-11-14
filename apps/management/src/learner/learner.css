@@ -40,3 +40,7 @@ body.learner a { color: var(--accent); text-underline-offset: .2em; }
 .catalogue .card h2 { margin-bottom: .25rem; }
 .catalogue .card p { margin: .25rem 0; }
 .filters { margin: 12px 0 4px; }
+/* read-aloud (narration.js) */
+.narration { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button.secondary:hover { background: var(--accent-hover); color: var(--accent-ink); }

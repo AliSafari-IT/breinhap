@@ -6,6 +6,7 @@ import { languageOf } from "./learner/messages.mjs";
 import { bootstrapPage, donePage, messagePage, resultPage, runPage, startPage } from "./learner/pages.mjs";
 import { t } from "./learner/messages.mjs";
 import { CATALOGUE, catalogueFilters, cataloguePage, objectPage, runStep } from "./learner/public-missions.mjs";
+import { loadNarration, narrationClip } from "./learner/narration.mjs";
 
 /**
  * The isolated public learner handler (breinhap#82). The edge sends breinhap.com/p/* here; nothing
@@ -35,6 +36,7 @@ const assetFiles = new Map(
 			["/p/assets/learner.css", "./learner/learner.css", "text/css"],
 			["/p/assets/theme.css", "../../site/src/theme.css", "text/css"],
 			["/p/assets/bootstrap.js", "./learner/bootstrap.js", "text/javascript"],
+			["/p/assets/narration.js", "./learner/narration.js", "text/javascript"],
 		].map(async ([path, file, type]) => {
 			const body = await readFile(new URL(file, import.meta.url));
 			return [path, { body, type: `${type}; charset=utf-8`, etag: `"${createHash("sha256").update(body).digest("base64url")}"` }];
@@ -45,7 +47,7 @@ const assetFiles = new Map(
 const HEADERS = {
 	"Cache-Control": "no-store",
 	"Content-Security-Policy":
-		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; connect-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
 	"X-Content-Type-Options": "nosniff",
 	"X-Frame-Options": "DENY",
 	// not "no-referrer": a browser then sends `Origin: null` on same-origin form posts, which the Origin check must refuse.
@@ -111,7 +113,10 @@ const label = (value) => createHash("sha256").update(String(value)).digest("base
  * one code cannot lock the real learner out of anything but that single code's resolve for a minute.
  * `requesterOf(req)` is the trusted-proxy client address. Without a budget the player does not run.
  */
-export function createLearnerHandler({ learner, catalog, budget, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
+// recorded read-aloud clips (prototype); null when apps/management/narration is not installed
+const installedNarration = await loadNarration();
+
+export function createLearnerHandler({ learner, catalog, budget, narration = installedNarration, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
 	return async function handleLearner(req, res) {
 		let lang = languageOf(req.headers["accept-language"]);
 		const send = (status, body, type = "text/html; charset=utf-8", extra = {}) => {
@@ -140,6 +145,13 @@ export function createLearnerHandler({ learner, catalog, budget, requesterOf = (
 		if (asset) {
 			if (method !== "GET" && method !== "HEAD") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
 			return send(200, asset.body, asset.type, { ETag: asset.etag, "Cache-Control": "public, max-age=300" });
+		}
+		if (path.startsWith("/p/audio/")) {
+			if (method !== "GET" && method !== "HEAD") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
+			const clip = await narrationClip(narration, path);
+			if (!clip) return send(404, "Not found", "text/plain; charset=utf-8");
+			// named by the hash of the text it speaks, so a clip never changes under its URL
+			return send(200, clip, "audio/mpeg", { "Cache-Control": "public, max-age=31536000, immutable" });
 		}
 		// breinhap#35: the public catalogue. Stateless, cookie-free, and absent without a catalogue.
 		const catalogueMatch = path === CATALOGUE || path === `${CATALOGUE}/` ? [path] : /^\/p\/missies\/([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(path);
@@ -178,7 +190,7 @@ export function createLearnerHandler({ learner, catalog, budget, requesterOf = (
 				if (req.headers.origin !== PUBLIC_ORIGIN) return send(403, "Forbidden", "text/plain; charset=utf-8");
 				const form = await readForm(req);
 				if (!form) return send(400, "Bad request", "text/plain; charset=utf-8");
-				const page = runStep(lang, object, form);
+				const page = runStep(lang, object, form, narration);
 				return page ? send(200, page) : gone();
 			} catch {
 				return send(503, messagePage(lang, "errorTitle", "errorText"));
