@@ -58,8 +58,19 @@
   function accept(value) {
     var active = !!value && value.active === true;
     var initials = active && typeof value.initials === "string" && /^[\p{L}\p{N}]{1,2}$/u.test(value.initials) ? value.initials : "";
-    state = { active: active, access: active && value.access === true, initials: initials };
+    // breinhap#124: the read-aloud voice the person chose per language in management's Instellingen.
+    var voices = {};
+    if (active && value.voices && typeof value.voices === "object") {
+      ["nl", "fr", "en", "de"].forEach(function (lang) {
+        var v = value.voices[lang];
+        if (typeof v === "string" && /^[a-z]{2,20}$/.test(v)) voices[lang] = v;
+      });
+    }
+    state = { active: active, access: active && value.access === true, initials: initials, voices: voices };
     render();
+    // The try-out (example.js) listens for this to start in the person's own voice.
+    window.BreinhapAccount = { active: state.active, voices: voices };
+    try { document.dispatchEvent(new CustomEvent("breinhap:account")); } catch (e) {}
   }
 
   function check() {

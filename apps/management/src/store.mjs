@@ -312,6 +312,20 @@ export class IdentityStore {
 			},
 		);
 	}
+	/**
+	 * The read-aloud voice a person chose per reading language (breinhap#124), e.g. { nl: "emma" }. Kept with the
+	 * account, encrypted like every other entry, so the choice follows them to every device. {} when none.
+	 */
+	async voicePreferences(sub) {
+		const key = this.keyFor("voices", sub);
+		const value = this.decode(key, await this.client.get(key));
+		return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+	}
+	async saveVoicePreferences(sub, voices) {
+		const key = this.keyFor("voices", sub);
+		if (!Object.keys(voices).length) return this.client.del(key);
+		return this.client.set(key, this.encode(key, voices));
+	}
 	async membership(sub) {
 		const key = this.keyFor("member", sub);
 		return this.decode(key, await this.client.get(key));

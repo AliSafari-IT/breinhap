@@ -1,5 +1,11 @@
 // Trusted workspace UI copy. Dutch source keys are canonical; values never contain authored content.
 export const MESSAGES = {
+	"Instellingen": {
+		"nl": "Instellingen",
+		"en": "Settings",
+		"fr": "Paramètres",
+		"de": "Einstellungen"
+	},
 	"(bij practice en check): choice of order.": {
 		"nl": "(bij practice en check): choice of order.",
 		"en": "(for practice and check): choice or order.",

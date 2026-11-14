@@ -142,3 +142,73 @@ export function maskEmail(email) {
 	const [local, domain] = String(email).split("@");
 	return `${(local ?? "").slice(0, 1)}•••@${domain ?? ""}`;
 }
+
+/** Instellingen → Voorleesstem (breinhap#124): which voice reads aloud, per reading language, for this account. */
+const SETTINGS = {
+	nl: {
+		title: "Instellingen",
+		heading: "Voorleesstem",
+		lead: "Kies per taal welke stem de missies voorleest op breinhap.com. Je keuze blijft bij je account, dus ook op een andere computer of gsm.",
+		recorded: "opgenomen stem",
+		device: "Stem van je browser",
+		onlyDevice: (names) => `Voor ${names} zijn er nog geen opgenomen stemmen. Daar leest de stem van je browser voor.`,
+		save: "Opslaan",
+		saved: "Je voorleesstem is opgeslagen.",
+		back: "Naar Breinhap",
+	},
+	fr: {
+		title: "Paramètres",
+		heading: "Voix de lecture",
+		lead: "Choisissez pour chaque langue la voix qui lit les missions à voix haute sur breinhap.com. Votre choix reste lié à votre compte, aussi sur un autre ordinateur ou téléphone.",
+		recorded: "voix enregistrée",
+		device: "Voix de votre navigateur",
+		onlyDevice: (names) => `Il n’y a pas encore de voix enregistrées pour ${names}. Votre navigateur y lit à voix haute.`,
+		save: "Enregistrer",
+		saved: "Votre voix de lecture est enregistrée.",
+		back: "Vers Breinhap",
+	},
+	en: {
+		title: "Settings",
+		heading: "Reading voice",
+		lead: "Choose, per language, which voice reads the missions aloud on breinhap.com. Your choice stays with your account, so also on another computer or phone.",
+		recorded: "recorded voice",
+		device: "Your browser's voice",
+		onlyDevice: (names) => `There are no recorded voices for ${names} yet. Your browser's voice reads those aloud.`,
+		save: "Save",
+		saved: "Your reading voice is saved.",
+		back: "To Breinhap",
+	},
+	de: {
+		title: "Einstellungen",
+		heading: "Vorlesestimme",
+		lead: "Wählen Sie pro Sprache, welche Stimme die Missionen auf breinhap.com vorliest. Ihre Wahl bleibt bei Ihrem Konto, also auch auf einem anderen Computer oder Handy.",
+		recorded: "aufgenommene Stimme",
+		device: "Stimme Ihres Browsers",
+		onlyDevice: (names) => `Für ${names} gibt es noch keine aufgenommenen Stimmen. Dort liest Ihr Browser vor.`,
+		save: "Speichern",
+		saved: "Ihre Vorlesestimme ist gespeichert.",
+		back: "Zu Breinhap",
+	},
+};
+export const settingsLabel = (lang) => (SETTINGS[lang] ?? SETTINGS.nl).title;
+
+export function settingsPage(lang, { csrf, email, voices = {}, catalogue, languages, device, saved = false, version }) {
+	const t = SETTINGS[lang] ?? SETTINGS.nl;
+	const withVoices = languages.filter((reading) => (catalogue[reading] ?? []).length);
+	const without = languages.filter((reading) => !withVoices.includes(reading));
+	const rows = withVoices
+		.map((reading) => {
+			const recorded = catalogue[reading];
+			const chosen = voices[reading] ?? recorded[0][0];
+			const options = [...recorded.map(([id, label]) => [id, `${label} · ${t.recorded}`]), [device, t.device]]
+				.map(([id, label]) => `<option value="${esc(id)}"${id === chosen ? " selected" : ""}>${esc(label)}</option>`)
+				.join("");
+			return `<div class="field"><label for="voice-${reading}" lang="${reading}">${esc(LANGUAGE_NAMES[reading])}</label><select id="voice-${reading}" name="voice-${reading}">${options}</select></div>`;
+		})
+		.join("");
+	const names = without.map((reading) => `<span lang="${reading}">${esc(LANGUAGE_NAMES[reading])}</span>`).join(", ");
+	const others = without.length ? `<p class="muted">${t.onlyDevice(names)}</p>` : "";
+	const notice = saved ? `<p class="notice" role="status">${esc(t.saved)}</p>` : "";
+	const card = `<h2>${esc(t.heading)}</h2><p class="auth-lead">${esc(t.lead)}</p>${notice}<form class="auth-form" method="post" action="/instellingen?lang=${lang}"><input type="hidden" name="csrf" value="${esc(csrf)}">${rows}${others}<button type="submit" class="action-block">${esc(t.save)}</button></form><p><a href="${esc(websiteHome(lang))}">${esc(t.back)}</a></p>`;
+	return shell(lang, t.title, card, { path: "/instellingen", version, account: accountStrip(lang, csrf, email) });
+}

@@ -206,3 +206,13 @@ test("recorded voices: the try-out loads the voice list, and the CSP lets it pla
   assert.match(nginx, /Content-Security-Policy "default-src 'none'; script-src 'self'; connect-src https:\/\/management\.breinhap\.com; style-src 'self'; img-src 'self'; media-src 'self';/);
 });
 
+test("signed in: the account menu links to the voice settings in management, in the page's language", () => {
+  for (const [folder, , , lang] of LANGUAGES) {
+    const html = read(`${folder}index.html`);
+    assert.ok(html.includes(`<a href="https://management.breinhap.com/instellingen?lang=${lang}" data-account="settings">`), folder);
+  }
+  const account = read("account.js");
+  assert.match(account, /breinhap:account/);
+  assert.match(read("example.js"), /BreinhapAccount/);
+});
+

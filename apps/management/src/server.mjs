@@ -9,6 +9,7 @@ import {
 	safeNext,
 	ORIGIN,
 	readForm,
+	csrfValid,
 } from "./identity.mjs";
 import { connectDatabase } from "./db.mjs";
 import { Directory } from "./directory.mjs";
@@ -20,7 +21,8 @@ import {
 } from "./directory-pages.mjs";
 import { langCookie, localeOf, T, languageSelector } from "./account/i18n.mjs";
 import { header, managementFooter, websiteHome } from "./header.mjs";
-import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice } from "./account/pages.mjs";
+import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice, settingsPage } from "./account/pages.mjs";
+import { cleanVoices, DEVICE_VOICE, READING_LANGUAGES, VOICES } from "./voices.mjs";
 import { ContentStore } from "./content.mjs";
 import { createHeadlessAuth } from "./vendor/asafarim-headless.mjs";
 import { handleExtractions } from "./extract/routes.mjs";
@@ -92,7 +94,7 @@ const assets = new Map(await Promise.all([
 
 function documentPage(title, content, active, session, pathname = active, search = "") {
 	const account = session
-		? ui`<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? ui`<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.map((role) => tr(role)).join(", ") : tr("nog geen"))}</p>${session.admin ? ui`<a href="/beheer/leerlingen">Leerlingen en groepen</a>` : ""}<form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
+		? ui`<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? ui`<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.map((role) => tr(role)).join(", ") : tr("nog geen"))}</p>${session.admin ? ui`<a href="/beheer/leerlingen">Leerlingen en groepen</a>` : ""}<a href="/instellingen">Instellingen</a><form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
 		: "";
 	const links = [...routes()].map(([path, [label]]) => [path, label]);
 	if (session?.admin) links.push(["/beheer", tr("Toegang beheren")]);
@@ -242,6 +244,26 @@ export function createHandler({
 				undefined,
 				result.headers,
 			);
+		}
+		// breinhap#124: Instellingen → Voorleesstem, for every signed-in account (also before a role is approved).
+		if (identity && url.pathname === "/instellingen") {
+			if (!["GET", "HEAD", "POST"].includes(req.method))
+				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", { Allow: "GET, POST" });
+			const value = await identity.current(req, false).catch(() => null);
+			if (!value) return send(303, "", undefined, { Location: `/login?next=${encodeURIComponent("/instellingen")}` });
+			const lang = localeOf(req, url);
+			if (req.method === "POST") {
+				const form = await readForm(req);
+				if (!csrfValid(req, form, value.saved))
+					return send(403, page(tr("Aanvraag geweigerd"), tr("Laad de pagina opnieuw en probeer nog eens.")));
+				const chosen = cleanVoices(Object.fromEntries(READING_LANGUAGES.map((l) => [l, form.get(`voice-${l}`)])));
+				await identity.store.saveVoicePreferences(value.saved.sub, chosen);
+				await identity.audit("voices.saved", value.saved.sub).catch(() => {});
+				return send(303, "", undefined, { Location: `/instellingen?opgeslagen=1&lang=${lang}` });
+			}
+			const voices = cleanVoices(await identity.store.voicePreferences(value.saved.sub));
+			const langHeader = url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {};
+			return send(200, settingsPage(lang, { csrf: value.saved.csrf, email: value.saved.email ?? "", voices, catalogue: VOICES, languages: READING_LANGUAGES, device: DEVICE_VOICE, saved: url.searchParams.get("opgeslagen") === "1", version: manifest.version }), undefined, langHeader);
 		}
 		if (identity && ["/registreren", "/registreren/intrekken"].includes(url.pathname)) {
 			if (url.pathname === "/registreren/intrekken" && req.method !== "POST")

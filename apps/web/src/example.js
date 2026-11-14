@@ -118,7 +118,7 @@
 
   // The only state: what the visitor picked, where they are, and the run in progress. Never persisted.
   var state = fresh();
-  function fresh() { return { voice: state && state.voice, screen: "profile", step: "city", city: null, schoolId: null, year: null, profile: null, courseId: null, minutes: null, run: null, focused: null }; }
+  function fresh() { return { voice: state && state.voice, voicePicked: state && state.voicePicked, screen: "profile", step: "city", city: null, schoolId: null, year: null, profile: null, courseId: null, minutes: null, run: null, focused: null }; }
 
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -161,6 +161,17 @@
   var audio = null;
   var playing = null; // the read button that is playing now
   state.voice = voiceIds[0] || null;
+  // A signed-in person's saved voice for Dutch (the missions are Dutch) from management's Instellingen, via the
+  // navbar's session check (account.js). It applies until they pick another voice here during this visit.
+  function applySavedVoice() {
+    var saved = root.BreinhapAccount && root.BreinhapAccount.voices && root.BreinhapAccount.voices.nl;
+    if (state.voicePicked || !saved || voiceIds.indexOf(saved) < 0 || saved === state.voice) return;
+    state.voice = saved;
+    var select = document.getElementById("ex-voice");
+    if (select) select.value = saved;
+  }
+  applySavedVoice();
+  document.addEventListener("breinhap:account", applySavedVoice);
   function stopReading() {
     if (audio) { audio.onended = audio.onpause = audio.onerror = null; audio.pause(); }
     if (synth) synth.cancel();
@@ -210,7 +221,7 @@
       if (id === state.voice) option.setAttribute("selected", "");
       select.appendChild(option);
     });
-    select.addEventListener("change", function () { stopReading(); state.voice = select.value; });
+    select.addEventListener("change", function () { stopReading(); state.voice = select.value; state.voicePicked = true; });
     return el("p", { class: "ex-voice-row" }, [el("label", { for: "ex-voice", text: ui.voice }), select]);
   }
 
