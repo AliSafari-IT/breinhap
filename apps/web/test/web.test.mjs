@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { test } from "node:test";
+import vm from "node:vm";
 
 const read = (path) => readFileSync(new URL(`../dist/${path}`, import.meta.url), "utf8");
 const LANGUAGES = [
@@ -11,17 +12,60 @@ const LANGUAGES = [
   ["de/", "de-BE", "/de/", "de", "en/"],
 ];
 
-test("every language explains that web missions are not available yet", () => {
+test("every language says honestly what the web offers today: one example mission, real missions later", () => {
   for (const [folder, language, , , ] of LANGUAGES) {
     const html = read(`${folder}index.html`);
     assert.ok(html.includes(`<html lang="${language}">`), folder);
     assert.ok(html.indexOf('class="release-banner"') < html.indexOf('<main id="main"'), folder);
     assert.doesNotMatch(html, /play\.google\.com|<form\b|role="alert"/);
   }
-  assert.match(read("index.html"), /je kunt hier nog geen missies starten/);
-  assert.match(read("en/index.html"), /you cannot start missions here yet/);
-  assert.match(read("fr/index.html"), /vous ne pouvez pas encore y lancer de missions/);
-  assert.match(read("de/index.html"), /Missionen können Sie hier noch nicht starten/);
+  assert.match(read("index.html"), /de echte missies in je browser komen later/);
+  assert.match(read("en/index.html"), /the real missions in your browser come later/);
+  assert.match(read("fr/index.html"), /les vraies missions dans votre navigateur viendront plus tard/);
+  assert.match(read("de/index.html"), /die echten Missionen im Browser folgen später/);
+});
+
+test("every language embeds the reviewed example mission as data, with no inline script and nothing sent", () => {
+  const example = JSON.parse(readFileSync(new URL("../src/example-mission.json", import.meta.url), "utf8"));
+  assert.equal(example.mission.id, "bio-prikkel-reactie-volgorde");
+  assert.doesNotMatch(JSON.stringify(example), /review/i);
+  for (const [folder, , , lang] of LANGUAGES) {
+    const html = read(`${folder}index.html`);
+    assert.match(html, /<section class="example" id="voorbeeld"/, folder);
+    assert.match(html, /<script src="\/example\.js" defer><\/script>/, folder);
+    // The only inline script is the JSON data block, which the CSP (script-src 'self') does not execute
+    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].map((m) => m[1].trim());
+    assert.deepEqual(inline, ['type="application/json" id="example-data"'], folder);
+    const data = JSON.parse(html.match(/<script type="application\/json" id="example-data">(.*?)<\/script>/s)[1]);
+    assert.equal(data.ui.lang, lang);
+    assert.deepEqual(data.mission, example.mission, folder);
+    assert.ok(html.indexOf('id="voorbeeld"') < html.indexOf('class="expect"'), folder);
+  }
+  const script = read("example.js");
+  assert.doesNotMatch(script, /fetch\(|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|document\.cookie|innerHTML|eval\(/);
+});
+
+test("the example player follows the shared mission rules", () => {
+  const sandbox = {};
+  vm.runInNewContext(read("example.js"), sandbox);
+  const { pages, isCorrect, shuffled, STEPS } = sandbox.BreinhapExample;
+  const { mission } = JSON.parse(readFileSync(new URL("../src/example-mission.json", import.meta.url), "utf8"));
+  const list = pages(mission);
+  assert.deepEqual([...new Set(list.map((p) => p.step))], [...STEPS]);
+  assert.equal(list.length, 1 + mission.learn.length + mission.practice.length + mission.check.length);
+  const order = mission.practice.find((q) => q.kind === "order");
+  const choice = mission.practice.find((q) => q.kind === "choice");
+  assert.equal(isCorrect(order, { placed: [...order.items] }), true);
+  assert.equal(isCorrect(order, { placed: [...order.items].reverse() }), false);
+  assert.equal(isCorrect(order, { placed: order.items.slice(0, 2) }), false);
+  assert.equal(isCorrect(choice, { chosen: choice.answerIndex }), true);
+  assert.equal(isCorrect(choice, { chosen: (choice.answerIndex + 1) % choice.options.length }), false);
+  assert.equal(isCorrect(choice, undefined), false);
+  for (let i = 0; i < 50; i++) {
+    const out = shuffled(order.items);
+    assert.deepEqual([...out].sort(), [...order.items].sort());
+    assert.notDeepEqual(out, order.items, "the display order is never the answer");
+  }
 });
 
 test("each page has its own metadata, all four alternates, and keeps the Android and legal destinations", () => {
@@ -45,7 +89,8 @@ test("each page has its own metadata, all four alternates, and keeps the Android
 test("static pages fit the existing CSP and all local assets exist", () => {
   for (const file of ["index.html", "en/index.html", "fr/index.html", "de/index.html", "404.html"]) {
     const html = read(file);
-    assert.doesNotMatch(html, /<style\b|\sstyle=|\son\w+=|<script(?![^>]*src=)/);
+    // No inline script that runs. The example's JSON data block (type="application/json") is data the CSP does not execute.
+    assert.doesNotMatch(html, /<style\b|\sstyle=|\son\w+=|<script(?![^>]*(?:src=|type="application\/json"))/);
     for (const [, path] of html.matchAll(/(?:src|href)="(\/[^"#]*)"/g)) {
       const target = path.endsWith("/") ? `${path}index.html` : path;
       assert.ok(existsSync(new URL(`../dist${target}`, import.meta.url)), `${file}: ${path}`);
