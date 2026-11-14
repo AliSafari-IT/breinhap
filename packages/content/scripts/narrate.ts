@@ -26,7 +26,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { NARRATION_KEY_VERSION, NARRATION_PREVIEW, NARRATORS, narrationKey, narrationText, normaliseNarration, samplePack, type NarrationManifest, type Narrator } from "../src/index";
+import { NARRATION_KEY_VERSION, NARRATION_PREVIEW, NARRATORS, narrationKey, narrationText, normaliseNarration, questionNarrationText, samplePack, type NarrationManifest, type Narrator } from "../src/index";
 
 const API = process.env.ELEVENLABS_API_URL ?? "https://api.elevenlabs.io"; // overridable for a local fake in tests
 const DEFAULT_MISSIONS = ["bio-prikkel-reactie-volgorde", "economie-inflatie-koopkracht-1", "geschiedenis-franse-revolutie-1"];
@@ -44,6 +44,8 @@ const { values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     "list-voices": { type: "boolean", default: false },
     install: { type: "boolean", default: false },
+    texts: { type: "string", default: "cards" },
+    "install-web": { type: "boolean", default: false },
   },
   allowPositionals: true,
 });
@@ -96,18 +98,28 @@ function cardTexts(): { mission: string; title: string; text: string }[] {
     for (const mission of object.missions) {
       if (wanted && !wanted.has(mission.id)) continue;
       for (const card of [mission.warmup, ...mission.learn]) out.push({ mission: mission.id, title: mission.title, text: normaliseNarration(narrationText(card)) });
+      // --texts all: also every question and explanation, as breinhap.com's try-out reads them aloud
+      if (values.texts === "all")
+        for (const q of [...mission.practice, ...mission.check]) {
+          out.push({ mission: mission.id, title: mission.title, text: normaliseNarration(questionNarrationText(q)) });
+          out.push({ mission: mission.id, title: mission.title, text: normaliseNarration(q.explanation) });
+        }
     }
   }
   if (wanted) for (const id of wanted) if (!out.some((t) => t.mission === id)) throw new Error(`No reviewed mission "${id}"`);
   return out;
 }
 
-function voices(): Partial<Record<Narrator, string>> {
-  const map: Partial<Record<Narrator, string>> = {};
+/**
+ * --voice <narrator>=<voiceId>. The app knows the narrators vrouw and man; breinhap.com's try-out plays any
+ * narrator in the manifest (e.g. emma, sare, evie), so any short lowercase name is accepted here.
+ */
+function voices(): Record<string, string> {
+  const map: Record<string, string> = {};
   for (const pair of values.voice ?? []) {
     const [narrator, id] = pair.split("=");
-    if (!NARRATORS.includes(narrator as Narrator) || !id) throw new Error(`--voice takes ${NARRATORS.join("|")}=<voiceId>, got "${pair}"`);
-    map[narrator as Narrator] = id;
+    if (!narrator || !/^[a-z]{2,20}$/.test(narrator) || !id) throw new Error(`--voice takes <narrator>=<voiceId> (narrator: ${NARRATORS.join(", ")} or another lowercase name), got "${pair}"`);
+    map[narrator] = id;
   }
   return map;
 }
@@ -116,7 +128,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&${{ "&": "amp", "<": "l
 
 /** A plain page to listen to every clip side by side: open narration/out/index.html in a browser. */
 function listeningPage(manifest: NarrationManifest, texts: ReturnType<typeof cardTexts>): string {
-  const narrators = NARRATORS.filter((n) => manifest.narrators[n]);
+  const narrators = Object.keys(manifest.narrators) as Narrator[];
   const rows = texts
     .map(({ mission, text }, i) => {
       const prev = texts[i - 1]?.mission;
@@ -205,6 +217,27 @@ async function main() {
   await writeFile(join(out, "index.html"), listeningPage(manifest, texts));
   console.log(`Listen: ${join(out, "index.html")}`);
   if (values.install) await install(manifest, out);
+  if (values["install-web"]) await installWeb(manifest, out);
+}
+
+/**
+ * Copy every narrator's clips into breinhap.com (apps/web/narration), replacing what was there. The website build
+ * turns the manifest into /narration/voices.js, so the try-out can offer these voices.
+ */
+async function installWeb(manifest: NarrationManifest, out: string) {
+  const web = resolve(import.meta.dirname, "../../../apps/web/narration");
+  await rm(web, { recursive: true, force: true });
+  let count = 0;
+  for (const [narrator, entry] of Object.entries(manifest.narrators)) {
+    if (!entry) continue;
+    await mkdir(join(web, narrator), { recursive: true });
+    for (const file of Object.values(entry.clips)) {
+      await copyFile(join(out, narrator, file), join(web, narrator, file));
+      count++;
+    }
+  }
+  await writeFile(join(web, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  console.log(`Installed ${count} clips into apps/web/narration.`);
 }
 
 /** Copy the clips into the app and the web player, replacing whatever was installed before. */

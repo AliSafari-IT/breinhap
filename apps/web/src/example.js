@@ -88,7 +88,23 @@
     return text.replace(/\{(\w+)\}/g, function (_, key) { return String(values[key]); });
   }
 
-  root.BreinhapExample = { STEPS: STEPS, YEARS: YEARS, TIME_OPTIONS: TIME_OPTIONS, logic: logic, pages: pages, isCorrect: isCorrect, shuffled: shuffled, fill: fill };
+  /**
+   * What is read aloud, and the recorded clip's key: the same rules as packages/content narration.ts
+   * (narrationText, questionNarrationText, normaliseNarration, narrationKey). A clip is found by the hash of the
+   * exact text, so a clip recorded for old text is never played over new text.
+   */
+  var NARRATION_KEY_VERSION = 1;
+  function cardText(card) { return [card.text, card.example].filter(Boolean).join(" "); }
+  function questionText(q) { return q.prompt + " " + (q.options || q.items).join(". ") + "."; }
+  function normalise(text) { return text.normalize("NFC").replace(/\s+/g, " ").trim(); }
+  function keyFor(text) {
+    var bytes = new TextEncoder().encode("breinhap-narration:" + NARRATION_KEY_VERSION + "\n" + normalise(text));
+    return root.crypto.subtle.digest("SHA-256", bytes).then(function (hash) {
+      return Array.prototype.map.call(new Uint8Array(hash), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("").slice(0, 16);
+    });
+  }
+
+  root.BreinhapExample = { cardText: cardText, questionText: questionText, normalise: normalise, keyFor: keyFor, NARRATION_KEY_VERSION: NARRATION_KEY_VERSION, STEPS: STEPS, YEARS: YEARS, TIME_OPTIONS: TIME_OPTIONS, logic: logic, pages: pages, isCorrect: isCorrect, shuffled: shuffled, fill: fill };
 
   if (typeof document === "undefined") return;
 
@@ -102,7 +118,7 @@
 
   // The only state: what the visitor picked, where they are, and the run in progress. Never persisted.
   var state = fresh();
-  function fresh() { return { screen: "profile", step: "city", city: null, schoolId: null, year: null, profile: null, courseId: null, minutes: null, run: null, focused: null }; }
+  function fresh() { return { voice: state && state.voice, screen: "profile", step: "city", city: null, schoolId: null, year: null, profile: null, courseId: null, minutes: null, run: null, focused: null }; }
 
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -133,28 +149,69 @@
     return [school && school.name + ", " + school.city, yearLabel(profile.year), richting && richting.label].filter(Boolean).join(" · ");
   }
 
-  // Read aloud with the browser's own speech in Dutch (the missions are Dutch). Nothing is fetched or sent; where the
-  // browser has no speech, there is no button and everything else works as before.
+  // Read aloud. Recorded Flemish voices (ElevenLabs, made offline before a release and served from this site as
+  // /narration/<voice>/<key>.mp3, listed in /narration/voices.js) when one exists for the exact text; otherwise the
+  // browser's own Dutch speech. Nothing is sent anywhere: the only requests are for the clips on this site. The
+  // chosen voice is kept for this visit only.
   var synth = typeof root.speechSynthesis !== "undefined" && typeof root.SpeechSynthesisUtterance !== "undefined" ? root.speechSynthesis : null;
-  function stopReading() { if (synth) synth.cancel(); }
+  var recorded = (root.BreinhapVoices && root.BreinhapVoices.keyVersion === NARRATION_KEY_VERSION && root.BreinhapVoices.voices) || [];
+  var canHash = !!(root.crypto && root.crypto.subtle && root.TextEncoder);
+  if (!canHash) recorded = [];
+  var voiceIds = recorded.map(function (v) { return v.id; }).concat(synth ? ["device"] : []);
+  var audio = null;
+  var playing = null; // the read button that is playing now
+  state.voice = voiceIds[0] || null;
+  function stopReading() {
+    if (audio) { audio.onended = audio.onpause = audio.onerror = null; audio.pause(); }
+    if (synth) synth.cancel();
+    if (playing) { playing(false); playing = null; }
+  }
+  function speakDevice(text, done) {
+    if (!synth) return done();
+    var u = new root.SpeechSynthesisUtterance(text);
+    u.lang = "nl-BE";
+    u.rate = 0.9;
+    var voices = synth.getVoices();
+    var voice = voices.filter(function (v) { return /^nl[-_]BE/i.test(v.lang); })[0] || voices.filter(function (v) { return /^nl/i.test(v.lang); })[0];
+    if (voice) u.voice = voice;
+    u.onend = u.onerror = done;
+    synth.speak(u);
+  }
   function readButton(text) {
-    if (!synth) return null;
+    if (!voiceIds.length) return null;
     var b = el("button", { type: "button", class: "ex-button secondary ex-read", "aria-pressed": "false", text: "🔊 " + ui.readAloud });
     function setPlaying(on) { b.textContent = (on ? "⏹ " + ui.stopReading : "🔊 " + ui.readAloud); b.setAttribute("aria-pressed", on ? "true" : "false"); }
     b.addEventListener("click", function () {
-      if (b.getAttribute("aria-pressed") === "true") { synth.cancel(); return setPlaying(false); }
-      synth.cancel();
-      var u = new root.SpeechSynthesisUtterance(text);
-      u.lang = "nl-BE";
-      u.rate = 0.9;
-      var voices = synth.getVoices();
-      var voice = voices.filter(function (v) { return /^nl[-_]BE/i.test(v.lang); })[0] || voices.filter(function (v) { return /^nl/i.test(v.lang); })[0];
-      if (voice) u.voice = voice;
-      u.onend = u.onerror = function () { setPlaying(false); };
-      synth.speak(u);
+      if (b.getAttribute("aria-pressed") === "true") return stopReading();
+      stopReading();
       setPlaying(true);
+      playing = setPlaying;
+      var done = function () { if (playing === setPlaying) { setPlaying(false); playing = null; } };
+      var voice = recorded.filter(function (v) { return v.id === state.voice; })[0];
+      if (!voice) return speakDevice(text, done);
+      keyFor(text).then(function (key) {
+        if (playing !== setPlaying) return; // stopped while hashing
+        if (voice.clips.indexOf(key) < 0) return speakDevice(text, done); // no clip for this exact text
+        audio = audio || new root.Audio();
+        audio.src = "/narration/" + voice.id + "/" + key + ".mp3";
+        audio.onended = audio.onerror = done;
+        audio.play().catch(function () { speakDevice(text, done); });
+      }, function () { speakDevice(text, done); });
     });
     return b;
+  }
+  /** The voice picker: only when there is more than one voice to choose from. */
+  function voicePicker() {
+    if (voiceIds.length < 2) return null;
+    var select = el("select", { id: "ex-voice", class: "ex-voice" });
+    voiceIds.forEach(function (id) {
+      var v = recorded.filter(function (r) { return r.id === id; })[0];
+      var option = el("option", { value: id, text: v ? v.name + " · " + ui.voiceRecorded : ui.voiceDevice });
+      if (id === state.voice) option.setAttribute("selected", "");
+      select.appendChild(option);
+    });
+    select.addEventListener("change", function () { stopReading(); state.voice = select.value; });
+    return el("p", { class: "ex-voice-row" }, [el("label", { for: "ex-voice", text: ui.voice }), select]);
   }
 
   var panel = el("div", { class: "ex-panel", "aria-live": "polite" });
@@ -300,17 +357,18 @@
     if (run.index >= run.list.length) { run.focused = -1; return done(run); }
     var page = run.list[run.index];
     var nodes = runHeader(run, page);
+    nodes.push(voicePicker());
     if (page.kind === "card") {
       nodes.push(dutch("p", page.card.text, { class: "ex-text", "data-focus": "" }));
       if (page.card.example) nodes.push(dutch("p", ui.example + " " + page.card.example, { class: "ex-example" }));
-      nodes.push(readButton(page.card.text + (page.card.example ? " " + page.card.example : "")));
+      nodes.push(readButton(cardText(page.card)));
       nodes.push(button(ui.next, next));
       run.focused = -1;
       return go(nodes);
     }
     var q = page.question;
     nodes.push(dutch("p", q.prompt, { class: "ex-text", "data-focus": "" }));
-    nodes.push(readButton(q.prompt + " " + (q.kind === "choice" ? q.options : q.items).join(". ") + "."));
+    nodes.push(readButton(questionText(q)));
     var answered = run.answers[run.index];
     if (q.kind === "choice") choice(nodes, run, q, answered);
     else order(nodes, run, q, answered);

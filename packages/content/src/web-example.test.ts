@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import committedData from "../../../apps/web/src/example-data.js?raw";
 import player from "../../../apps/web/src/example.js?raw";
 import { missionPages } from "./mission";
+import { narrationKey, narrationText, normaliseNarration, questionNarrationText } from "./narration";
 import { pickMission } from "./pick";
 import { SCHOOLS, STUDIERICHTINGEN, YEARS, coursesFor, richtingenFor } from "./schools";
 import { samplePack } from "./samples";
@@ -54,5 +55,27 @@ describe("website: Try Breinhap on the home page", () => {
         }
       }
     }
+  });
+
+  it("reads aloud the same texts and finds the same recorded clips as the generator", async () => {
+    const sandbox: Record<string, any> = { crypto: globalThis.crypto };
+    new Function("globalThis", player)(sandbox);
+    const web = sandbox.BreinhapExample;
+    for (const object of webData().objects)
+      for (const mission of object.missions) {
+        const texts: string[] = [];
+        for (const card of [mission.warmup, ...mission.learn]) {
+          expect(web.cardText(card)).toBe(narrationText(card as Parameters<typeof narrationText>[0]));
+          texts.push(web.cardText(card));
+        }
+        for (const q of [...mission.practice, ...mission.check]) {
+          expect(web.questionText(q)).toBe(questionNarrationText(q));
+          texts.push(web.questionText(q), q.explanation);
+        }
+        for (const text of texts) {
+          expect(web.normalise(text)).toBe(normaliseNarration(text));
+          expect(await web.keyFor(text)).toBe(narrationKey(text));
+        }
+      }
   });
 });
