@@ -21,11 +21,13 @@ import { CATALOGUE, catalogueFilters, cataloguePage, objectPage, runStep } from 
  * breinhap#35 adds the public mission catalogue, which needs no link, cookie or stored attempt:
  *   GET/HEAD /p/missies (filters vak, jaar)  /p/missies/{object id}
  *   POST     /p/missies/{object id}  (one step of a run; the state travels in the form)
+ *   GET/HEAD /p/missies.json  (the same catalogue as JSON, for the Android app's download)
  */
 export const PUBLIC_HOST = "breinhap.com";
 export const PUBLIC_ORIGIN = `https://${PUBLIC_HOST}`;
 const FLOW = "__Secure-bh-flow";
 const ATTEMPT = "__Secure-bh-attempt";
+const CATALOGUE_JSON = "/p/missies.json";
 const MAX_BODY = 16_384;
 const PAGE_KEY = /^(?:m:\d{1,2}:\d{1,3}|a:\d{1,2})$/;
 
@@ -140,6 +142,23 @@ export function createLearnerHandler({ learner, catalog, budget, requesterOf = (
 		if (asset) {
 			if (method !== "GET" && method !== "HEAD") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
 			return send(200, asset.body, asset.type, { ETag: asset.etag, "Cache-Control": "public, max-age=300" });
+		}
+		// The Android app's download of the same public catalogue: every listed object as clean JSON.
+		// No query, no cookie, no identifier; the app stores it on the device and plays it offline.
+		if (path === CATALOGUE_JSON) {
+			if (!catalog) return send(404, "Not found", "text/plain; charset=utf-8");
+			if (method !== "GET" && method !== "HEAD") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
+			const json = (status, value) => send(status, JSON.stringify(value), "application/json; charset=utf-8");
+			if (url.search) return json(400, { error: "no_query" });
+			try {
+				if (!budget) return json(503, { error: "unavailable" });
+				const who = label(requesterOf(req));
+				for (const [kind, limit, seconds, key] of [["missions", 240, 60, who], ["missions-all", 6000, 60, "all"]])
+					if (!(await budget(`learner-${kind}`, limit, seconds, key))) return send(429, JSON.stringify({ error: "too_many" }), "application/json; charset=utf-8", { "Retry-After": "60" });
+				return json(200, { schemaVersion: 1, objects: await catalog.publicObjects() });
+			} catch {
+				return json(503, { error: "unavailable" });
+			}
 		}
 		// breinhap#35: the public catalogue. Stateless, cookie-free, and absent without a catalogue.
 		const catalogueMatch = path === CATALOGUE || path === `${CATALOGUE}/` ? [path] : /^\/p\/missies\/([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(path);
