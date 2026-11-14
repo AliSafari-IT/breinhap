@@ -234,7 +234,7 @@ function browser(publishing, { budget = async () => true } = {}) {
 		return { status, headers, body: text };
 	};
 }
-const hidden = (html) => Object.fromEntries([...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map(([, k, v]) => [k, v.replaceAll("&amp;", "&").replaceAll("&quot;", '"')]));
+const hidden = (html) => Object.fromEntries([...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map(([, k, v]) => [k, v.replace(/&(amp|quot|lt|gt|#39);/g, (_, e) => ({ amp: "&", quot: '"', lt: "<", gt: ">", "#39": "'" })[e])]));
 
 test("breinhap.com/p/missies: browse, filter and play a listed mission without a login or a cookie", async () => {
 	const w = await setup();
