@@ -5,6 +5,7 @@ import { PracticeError } from "./practice/model.mjs";
 import { languageOf } from "./learner/messages.mjs";
 import { bootstrapPage, donePage, messagePage, resultPage, runPage, startPage } from "./learner/pages.mjs";
 import { t } from "./learner/messages.mjs";
+import { CATALOGUE, catalogueFilters, cataloguePage, objectPage, runStep } from "./learner/public-missions.mjs";
 
 /**
  * The isolated public learner handler (breinhap#82). The edge sends breinhap.com/p/* here; nothing
@@ -16,6 +17,10 @@ import { t } from "./learner/messages.mjs";
  * Allowlist (exact Host, exact method, exact path, anything else fails closed with 404/405):
  *   GET/HEAD /p/  /p/start  /p/run  /p/done  /p/assets/{learner.css,theme.css,bootstrap.js}
  *   POST     /p/resolve  /p/start  /p/answer  /p/submit  /p/finish
+ *
+ * breinhap#35 adds the public mission catalogue, which needs no link, cookie or stored attempt:
+ *   GET/HEAD /p/missies (filters vak, jaar)  /p/missies/{object id}
+ *   POST     /p/missies/{object id}  (one step of a run; the state travels in the form)
  */
 export const PUBLIC_HOST = "breinhap.com";
 export const PUBLIC_ORIGIN = `https://${PUBLIC_HOST}`;
@@ -106,7 +111,7 @@ const label = (value) => createHash("sha256").update(String(value)).digest("base
  * one code cannot lock the real learner out of anything but that single code's resolve for a minute.
  * `requesterOf(req)` is the trusted-proxy client address. Without a budget the player does not run.
  */
-export function createLearnerHandler({ learner, budget, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
+export function createLearnerHandler({ learner, catalog, budget, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
 	return async function handleLearner(req, res) {
 		let lang = languageOf(req.headers["accept-language"]);
 		const send = (status, body, type = "text/html; charset=utf-8", extra = {}) => {
@@ -136,6 +141,51 @@ export function createLearnerHandler({ learner, budget, requesterOf = (req) => r
 			if (method !== "GET" && method !== "HEAD") return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: "GET, HEAD" });
 			return send(200, asset.body, asset.type, { ETag: asset.etag, "Cache-Control": "public, max-age=300" });
 		}
+		// breinhap#35: the public catalogue. Stateless, cookie-free, and absent without a catalogue.
+		const catalogueMatch = path === CATALOGUE || path === `${CATALOGUE}/` ? [path] : /^\/p\/missies\/([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(path);
+		if (catalogueMatch) {
+			if (!catalog) return send(404, "Not found", "text/plain; charset=utf-8");
+			const objectId = catalogueMatch[1];
+			const isGet = method === "GET" || method === "HEAD";
+			if (!isGet && !(objectId && method === "POST"))
+				return send(405, "Method not allowed", "text/plain; charset=utf-8", { Allow: objectId ? "GET, HEAD, POST" : "GET, HEAD" });
+			const who = label(requesterOf(req));
+			const gone = () => send(404, messagePage(lang, "missionGoneTitle", "missionGoneText", { link: `<p><a href="${CATALOGUE}">${t(lang, "backToCatalogue")}</a></p>` }));
+			try {
+				if (!budget) return send(503, messagePage(lang, "errorTitle", "errorText"));
+				for (const [kind, limit, seconds, key] of [["missions", 240, 60, who], ["missions-all", 6000, 60, "all"]])
+					if (!(await budget(`learner-${kind}`, limit, seconds, key))) return tooMany();
+				if (!objectId) {
+					const filters = catalogueFilters(url.searchParams);
+					// only the two known filters survive; anything else is dropped, never echoed back
+					const canonical = new URLSearchParams();
+					if (filters.subject) canonical.set("vak", filters.subject);
+					if (filters.grade) canonical.set("jaar", String(filters.grade));
+					const query = canonical.toString();
+					if (path !== CATALOGUE || url.search !== (query ? `?${query}` : ""))
+						return redirect(`${CATALOGUE}${query ? `?${query}` : ""}`);
+					return send(200, cataloguePage(lang, await catalog.publicCatalog(filters), filters));
+				}
+				if (url.search) return redirect(path);
+				let object;
+				try {
+					object = await catalog.publicObject(objectId);
+				} catch (error) {
+					if (error?.code === "not_found") return gone();
+					throw error;
+				}
+				if (isGet) return send(200, objectPage(lang, object));
+				if (req.headers.origin !== PUBLIC_ORIGIN) return send(403, "Forbidden", "text/plain; charset=utf-8");
+				const form = await readForm(req);
+				if (!form) return send(400, "Bad request", "text/plain; charset=utf-8");
+				const page = runStep(lang, object, form);
+				return page ? send(200, page) : gone();
+			} catch {
+				return send(503, messagePage(lang, "errorTitle", "errorText"));
+			}
+		}
+		if (!learner) return send(404, "Not found", "text/plain; charset=utf-8");
+
 		const GETS = new Set(["/p", "/p/", "/p/start", "/p/run", "/p/done"]);
 		const POSTS = new Set(["/p/resolve", "/p/start", "/p/answer", "/p/submit", "/p/finish"]);
 		if (!GETS.has(path) && !POSTS.has(path)) return send(404, "Not found", "text/plain; charset=utf-8");

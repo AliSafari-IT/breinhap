@@ -138,6 +138,56 @@ const M = {
 		"Breinhap · aucun compte requis · ni publicité ni suivi",
 		"Breinhap · kein Konto nötig · keine Werbung und kein Tracking",
 	],
+	// breinhap#35: the public mission catalogue (/p/missies)
+	catalogueTitle: ["Missies", "Missions", "Missions", "Missionen"],
+	catalogueIntro: [
+		"Kies een missie om rustig te oefenen. Je hebt geen account nodig en er wordt niets bewaard.",
+		"Choose a mission to practise at your own pace. You do not need an account and nothing is saved.",
+		"Choisissez une mission pour vous exercer à votre rythme. Aucun compte n’est nécessaire et rien n’est enregistré.",
+		"Wähle eine Mission und übe in Ruhe. Du brauchst kein Konto und es wird nichts gespeichert.",
+	],
+	subject: ["Vak", "Subject", "Matière", "Fach"],
+	year: ["Jaar", "Year", "Année", "Jahr"],
+	yearN: ["Jaar {0}", "Year {0}", "Année {0}", "Jahr {0}"],
+	allSubjects: ["Alle vakken", "All subjects", "Toutes les matières", "Alle Fächer"],
+	allYears: ["Alle jaren", "All years", "Toutes les années", "Alle Jahre"],
+	filter: ["Toon missies", "Show missions", "Afficher les missions", "Missionen zeigen"],
+	missionCount: [
+		"{0} missie(s), samen ongeveer {1} minuten",
+		"{0} mission(s), about {1} minutes in all",
+		"{0} mission(s), environ {1} minutes au total",
+		"{0} Mission(en), zusammen etwa {1} Minuten",
+	],
+	emptyCatalogue: [
+		"Er staan nog geen missies klaar. Kom later nog eens kijken.",
+		"There are no missions ready yet. Have a look again later.",
+		"Aucune mission n’est encore prête. Revenez plus tard.",
+		"Es sind noch keine Missionen bereit. Schau später noch einmal vorbei.",
+	],
+	emptyFiltered: [
+		"Voor deze keuze is er nog geen missie.",
+		"There is no mission for this choice yet.",
+		"Il n’y a pas encore de mission pour ce choix.",
+		"Für diese Auswahl gibt es noch keine Mission.",
+	],
+	showAll: ["Toon alle missies", "Show all missions", "Afficher toutes les missions", "Alle Missionen zeigen"],
+	backToCatalogue: ["Terug naar de missies", "Back to the missions", "Retour aux missions", "Zurück zu den Missionen"],
+	publicPrivacy: [
+		"Je antwoorden blijven alleen op dit scherm. Niemand ziet ze en ze worden niet bewaard.",
+		"Your answers stay on this screen only. Nobody sees them and they are not saved.",
+		"Vos réponses restent uniquement sur cet écran. Personne ne les voit et elles ne sont pas enregistrées.",
+		"Deine Antworten bleiben nur auf diesem Bildschirm. Niemand sieht sie und sie werden nicht gespeichert.",
+	],
+	missionDone: ["Missie klaar", "Mission done", "Mission terminée", "Mission geschafft"],
+	commonMistake: ["Veelgemaakte fout", "A common mistake", "Erreur fréquente", "Häufiger Fehler"],
+	again: ["Nog eens", "Once more", "Encore une fois", "Noch einmal"],
+	missionGoneTitle: ["Deze missie is er niet", "This mission is not here", "Cette mission n’est pas disponible", "Diese Mission gibt es nicht"],
+	missionGoneText: [
+		"Ze bestaat niet of is niet meer beschikbaar. Kies een andere missie.",
+		"It does not exist or is no longer available. Choose another mission.",
+		"Elle n’existe pas ou n’est plus disponible. Choisissez une autre mission.",
+		"Sie existiert nicht oder ist nicht mehr verfügbar. Wähle eine andere Mission.",
+	],
 };
 
 /** A learner message in `lang` with `{n}` slots filled. Unknown languages fall back to Dutch. */

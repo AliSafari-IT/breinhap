@@ -12,7 +12,7 @@ import {
 	toValues,
 } from "./library.mjs";
 import { previewPage } from "./preview.mjs";
-import { publicationPage } from "./publishing-page.mjs";
+import { publicationPage, publicListingPage } from "./publishing-page.mjs";
 import { assignmentsPage } from "./assignments-page.mjs";
 import { learnerUrl, mintedPage, packAttemptPage, packEditorPage, packLinksPage, packResultsPage, packsListPage } from "./packs-page.mjs";
 import { randomBytes } from "node:crypto";
@@ -89,6 +89,7 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 	const csrf = req.managementSession.csrf;
 	const refused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten maken leerobjecten. Beheerders beheren mensen en toegang.") };
 	const reviewRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen nakijkers kunnen inhoud nakijken.") };
+	const listingRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen beheerders bepalen wat openbaar is op breinhap.com.") };
 	const publishRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen aangewezen uitgevers kunnen inhoud publiceren.") };
 	const assignmentRefused = { status: 403, title: tr("Geen toegang"), body: tr("Alleen ouders, begeleiders en leerkrachten wijzen inhoud toe aan hun eigen leerlingen of groepen.") };
 	const canPublish = await content.directory.can(principal, "content.publish");
@@ -146,6 +147,47 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 						: "";
 			return { status: 200, title: tr("Publicaties"), body: publicationPage(rows, { csrf, notice: feedback }), active: "/bibliotheek" };
 		}, publishRefused);
+	}
+	// breinhap#35: the administrator decides what is public on breinhap.com
+	if (path === "/bibliotheek/openbaar") {
+		if (!publishing) return { status: 200, title: tr("Openbare missies"), body: tr("Publicaties zijn nog niet ingericht op deze server."), active: "/bibliotheek" };
+		if (req.method === "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET" } };
+		return guard(async () => {
+			const rows = await publishing.listingCandidates(principal);
+			const state = url.searchParams.get("openbaar");
+			const feedback =
+				state === "1"
+					? notice(tr("Het leerobject staat nu in de openbare catalogus op breinhap.com."))
+					: state === "0"
+						? notice(tr("Het leerobject staat niet meer in de openbare catalogus."))
+						: "";
+			return { status: 200, title: tr("Openbare missies"), body: publicListingPage(rows, { csrf, notice: feedback }), active: "/bibliotheek" };
+		}, listingRefused);
+	}
+	const listingMatch = /^\/bibliotheek\/openbaar\/([a-z0-9-]{1,80})\/(toevoegen|verwijderen)$/.exec(path);
+	if (listingMatch) {
+		if (!publishing) return { status: 503, title: tr("Openbare missies"), body: tr("Publicaties zijn nog niet ingericht op deze server.") };
+		if (req.method !== "POST") return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "POST" } };
+		const [, listingObject, listingAction] = listingMatch;
+		const back = ui`<p><a href="/bibliotheek/openbaar">${tr("Terug naar de openbare missies")}</a></p>`;
+		if (!ID.test(listingObject)) return { status: 404, title: tr("Niet gevonden"), body: back };
+		return guard(async () => {
+			try {
+				if (listingAction === "toevoegen") await publishing.list(principal, listingObject);
+				else await publishing.unlist(principal, listingObject);
+				return redirect(`/bibliotheek/openbaar?openbaar=${listingAction === "toevoegen" ? 1 : 0}`);
+			} catch (error) {
+				if (error?.code === "not_found")
+					return { status: 404, title: tr("Niet gevonden"), body: ui`${tr("Dit leerobject bestaat niet.")}${back}` };
+				if (error?.code === "not_published")
+					return { status: 409, title: tr("Niet openbaar gemaakt"), body: ui`${tr("Alleen een leerobject met een actieve publicatie kan openbaar worden.")}${back}` };
+				if (error?.code === "already_listed")
+					return { status: 409, title: tr("Niet openbaar gemaakt"), body: ui`${tr("Dit leerobject staat al in de openbare catalogus.")}${back}` };
+				if (error?.code === "not_listed")
+					return { status: 409, title: tr("Niet gewijzigd"), body: ui`${tr("Dit leerobject staat niet in de openbare catalogus.")}${back}` };
+				throw error;
+			}
+		}, listingRefused);
 	}
 	const publicationMatch = /^\/bibliotheek\/publicaties\/([a-z0-9-]{1,80})\/(publiceren|intrekken|herstellen)$/.exec(path);
 	if (publicationMatch) {

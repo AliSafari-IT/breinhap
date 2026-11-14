@@ -34,3 +34,9 @@ button:hover { background: var(--accent-hover); }
 .score { font-size: 1.3rem; font-weight: 600; }
 .learner-foot { max-width: 42rem; margin: 24px auto; padding: 0 16px; color: var(--muted); font-size: .9rem; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background-color .15s; } }
+/* breinhap#35: the public mission catalogue */
+body.learner a { color: var(--accent); text-underline-offset: .2em; }
+.catalogue { list-style: none; padding: 0; margin: 0; }
+.catalogue .card h2 { margin-bottom: .25rem; }
+.catalogue .card p { margin: .25rem 0; }
+.filters { margin: 12px 0 4px; }

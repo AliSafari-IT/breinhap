@@ -189,6 +189,13 @@ export class PublishingStore {
 				 WHERE workspace_id = $1 AND id = $2`,
 				[this.workspace, active.rows[0].id, principal.sub],
 			);
+			// breinhap#35: a withdrawn object also leaves the public catalogue; publishing it again
+			// later does not silently make it public again (a newer release, by contrast, keeps it).
+			await db.query(
+				`UPDATE public_listings SET unlisted_at = now(), unlisted_by = $3
+				 WHERE workspace_id = $1 AND learning_object_id = $2 AND unlisted_at IS NULL`,
+				[this.workspace, objectId, principal.sub],
+			);
 			await this.directory.audit(principal.sub, "content.withdraw", objectId, "done", db);
 			return { id: active.rows[0].id, objectId, revision: active.rows[0].revision };
 		});
@@ -204,7 +211,10 @@ export class PublishingStore {
 			`SELECT lo.id, lo.title, lo.subject, lo.grade,
 			   r.revision, r.content_hash AS "revisionHash", v.decided_at AS "decidedAt",
 			   p.id AS "publicationId", p.pack_version AS "version", p.state,
-			   p.published_at AS "publishedAt"
+			   p.published_at AS "publishedAt",
+			   EXISTS (SELECT 1 FROM public_listings l
+			           WHERE l.workspace_id = lo.workspace_id AND l.learning_object_id = lo.id
+			             AND l.unlisted_at IS NULL) AS "listed"
 			 FROM learning_objects lo
 			 JOIN learning_object_revisions r
 			   ON r.workspace_id = lo.workspace_id AND r.learning_object_id = lo.id
@@ -224,6 +234,151 @@ export class PublishingStore {
 			[this.workspace],
 		);
 		return rows;
+	}
+
+	/** breinhap#35: only an administrator decides what is public on breinhap.com. */
+	async administrator(principal, action) {
+		await this.directory.require(principal, "directory.manage", action);
+	}
+
+	/**
+	 * breinhap#35: puts an object's current release in the public catalogue on breinhap.com. Only an
+	 * administrator can, and only while the object has an active publication. Errors: `not_found`,
+	 * `not_published`, `already_listed`.
+	 */
+	async list(principal, objectId) {
+		await this.administrator(principal, "content.list");
+		if (typeof objectId !== "string" || !ID.test(objectId)) fail("not_found");
+		return this.directory.transaction(async (db) => {
+			// The same lock order as publish/withdraw: the object row first.
+			const object = await db.query(
+				"SELECT archived_at FROM learning_objects WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+				[this.workspace, objectId],
+			);
+			if (!object.rowCount || object.rows[0].archived_at) fail("not_found");
+			const active = await db.query(
+				"SELECT 1 FROM content_publications WHERE workspace_id = $1 AND learning_object_id = $2 AND state = 'active'",
+				[this.workspace, objectId],
+			);
+			if (!active.rowCount) fail("not_published");
+			const id = randomUUID();
+			try {
+				await db.query(
+					"INSERT INTO public_listings (workspace_id, id, learning_object_id, listed_by) VALUES ($1, $2, $3, $4)",
+					[this.workspace, id, objectId, principal.sub],
+				);
+			} catch (error) {
+				if (error.code === "23505") fail("already_listed");
+				throw error;
+			}
+			await this.directory.audit(principal.sub, "content.list", objectId, "done", db);
+			return { id, objectId };
+		});
+	}
+
+	/** Takes an object out of the public catalogue. The listing row stays as history. */
+	async unlist(principal, objectId) {
+		await this.administrator(principal, "content.unlist");
+		if (typeof objectId !== "string" || !ID.test(objectId)) fail("not_found");
+		return this.directory.transaction(async (db) => {
+			const object = await db.query(
+				"SELECT 1 FROM learning_objects WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+				[this.workspace, objectId],
+			);
+			if (!object.rowCount) fail("not_found");
+			const { rowCount } = await db.query(
+				`UPDATE public_listings SET unlisted_at = now(), unlisted_by = $3
+				 WHERE workspace_id = $1 AND learning_object_id = $2 AND unlisted_at IS NULL`,
+				[this.workspace, objectId, principal.sub],
+			);
+			if (!rowCount) fail("not_listed");
+			await this.directory.audit(principal.sub, "content.unlist", objectId, "done", db);
+			return { objectId };
+		});
+	}
+
+	/**
+	 * The administrator's view: every object with an active publication and whether it is public.
+	 * Titles and years only; no owner, reviewer, source or revision content.
+	 */
+	async listingCandidates(principal) {
+		await this.administrator(principal, "content.list.queue");
+		const { rows } = await this.pool.query(
+			`SELECT lo.id, lo.title, lo.subject, lo.grade, p.pack_version AS "version",
+			   p.published_at AS "publishedAt", l.listed_at AS "listedAt"
+			 FROM content_publications p
+			 JOIN learning_objects lo ON lo.workspace_id = p.workspace_id AND lo.id = p.learning_object_id
+			 LEFT JOIN public_listings l
+			   ON l.workspace_id = p.workspace_id AND l.learning_object_id = p.learning_object_id
+			  AND l.unlisted_at IS NULL
+			 WHERE p.workspace_id = $1 AND p.state = 'active' AND lo.archived_at IS NULL
+			 ORDER BY lo.title, lo.id`,
+			[this.workspace],
+		);
+		return rows.map((row) => ({ ...row, listed: row.listedAt !== null }));
+	}
+
+	/**
+	 * The public catalogue (no principal: the anonymous breinhap.com player reads it). Only objects
+	 * that are listed, not archived and have an active publication appear, with what a student needs
+	 * to choose: never an owner, reviewer, revision, source or internal identifier.
+	 */
+	async publicCatalog({ subject, grade } = {}) {
+		const params = [this.workspace];
+		let filter = "";
+		if (typeof subject === "string" && subject) {
+			params.push(subject);
+			filter += ` AND p.pack -> 'objects' -> 0 ->> 'subject' = $${params.length}`;
+		}
+		if (Number.isInteger(grade)) {
+			params.push(grade);
+			filter += ` AND (p.pack -> 'objects' -> 0 ->> 'grade')::int = $${params.length}`;
+		}
+		const { rows } = await this.pool.query(
+			`SELECT p.pack
+			 FROM public_listings l
+			 JOIN learning_objects lo ON lo.workspace_id = l.workspace_id AND lo.id = l.learning_object_id
+			 JOIN content_publications p
+			   ON p.workspace_id = l.workspace_id AND p.learning_object_id = l.learning_object_id
+			  AND p.state = 'active'
+			 WHERE l.workspace_id = $1 AND l.unlisted_at IS NULL AND lo.archived_at IS NULL${filter}
+			 ORDER BY (p.pack -> 'objects' -> 0 ->> 'grade')::int, p.pack -> 'objects' -> 0 ->> 'title', l.learning_object_id
+			 LIMIT 200`,
+			params,
+		);
+		return rows.map(({ pack }) => {
+			const object = pack.objects[0];
+			return {
+				id: object.id,
+				title: object.title,
+				subject: object.subject,
+				grade: object.grade,
+				missions: object.missions.length,
+				minutes: object.missions.reduce((sum, m) => sum + m.minutes, 0),
+			};
+		});
+	}
+
+	/**
+	 * One publicly listed object's clean delivery payload. Anything not listed, archived, withdrawn,
+	 * only superseded or unknown is the same `not_found`, so a direct id reveals nothing.
+	 */
+	async publicObject(objectId) {
+		if (typeof objectId !== "string" || !ID.test(objectId)) fail("not_found");
+		const { rows } = await this.pool.query(
+			`SELECT p.pack
+			 FROM public_listings l
+			 JOIN learning_objects lo ON lo.workspace_id = l.workspace_id AND lo.id = l.learning_object_id
+			 JOIN content_publications p
+			   ON p.workspace_id = l.workspace_id AND p.learning_object_id = l.learning_object_id
+			  AND p.state = 'active'
+			 WHERE l.workspace_id = $1 AND l.learning_object_id = $2 AND l.unlisted_at IS NULL
+			   AND lo.archived_at IS NULL`,
+			[this.workspace, objectId],
+		);
+		const object = rows[0]?.pack?.objects?.[0];
+		if (!object || object.schemaVersion !== SCHEMA_VERSION) fail("not_found");
+		return object;
 	}
 
 	/** The current delivery pack of one object. Internal only: no route may call this yet (#34/#81). */
