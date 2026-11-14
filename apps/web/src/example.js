@@ -77,11 +77,15 @@
   var panel = el("div", { class: "ex-panel", "aria-live": "polite" });
   mount.appendChild(panel);
 
-  function show(nodes, focusNode) {
+  /** Mounts the nodes, then moves focus into them (never to a removed node). focus: a selector, or false for none. */
+  function show(nodes, focus) {
     panel.textContent = "";
     nodes.forEach(function (n) { panel.appendChild(n); });
-    var target = focusNode || panel.querySelector("[data-focus]");
-    if (target) { target.setAttribute("tabindex", "-1"); target.focus({ preventScroll: false }); }
+    if (focus === false) return;
+    var target = panel.querySelector(focus || "[data-focus]");
+    if (!target) return;
+    if (!/^(button)$/i.test(target.tagName)) target.setAttribute("tabindex", "-1");
+    target.focus();
   }
 
   function stepList(current) {
@@ -93,31 +97,32 @@
   }
   function header(page) {
     var n = state.index + 1;
-    var parts = [el("p", { class: "ex-count", text: mission.title + " · " + fill(ui.count, { n: n, total: list.length }) })];
+    var parts = [el("p", { class: "ex-count" }, [content("span", mission.title, {}), document.createTextNode(" · " + fill(ui.count, { n: n, total: list.length }))])];
     if (state.index === list.length - 1) parts.push(el("p", { class: "ex-count", text: ui.lastQuestion }));
     return [stepList(page.step)].concat(parts);
   }
 
-  function intro() {
+  function intro(focus) {
     show([
       el("h3", { text: ui.introTitle, "data-focus": "" }),
       content("p", mission.title, { class: "ex-mission" }),
       el("p", { class: "ex-note", text: ui.introNote }),
       button(ui.start, function () { state = { index: 0, answers: {}, started: true }; render(); })
-    ]);
+    ], focus);
   }
 
   function next() { state.index += 1; render(); }
 
   function render() {
-    if (!state.started) return intro();
-    if (state.index >= list.length) return done();
+    if (!state.started) return intro(false); // the first render must not take focus from the page
+    if (state.index >= list.length) { state.focused = -1; return done(); }
     var page = list[state.index];
     var nodes = header(page);
     if (page.kind === "card") {
       nodes.push(content("p", page.card.text, { class: "ex-text", "data-focus": "" }));
       if (page.card.example) nodes.push(content("p", ui.example + " " + page.card.example, { class: "ex-example" }));
       nodes.push(button(ui.next, next));
+      state.focused = -1;
       return show(nodes);
     }
     var q = page.question;
@@ -125,8 +130,9 @@
     var answered = state.answers[state.index];
     if (q.kind === "choice") choice(nodes, q, answered);
     else order(nodes, q, answered);
-    show(nodes, answered ? null : panel.querySelector("[data-focus]"));
-    if (answered) { var fb = panel.querySelector("[data-feedback]"); if (fb) { fb.setAttribute("tabindex", "-1"); fb.focus(); } }
+    var entering = state.focused !== state.index;
+    state.focused = state.index;
+    show(nodes, answered ? "[data-feedback]" : entering ? "[data-focus]" : ".option:not(:disabled), .ex-actions .ex-button:not(:disabled)");
   }
 
   function feedback(nodes, q, answer) {
