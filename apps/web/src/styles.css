@@ -96,3 +96,9 @@ footer nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .ex-placed { margin: 0 0 16px; padding-left: 1.5rem; min-height: 1.5rem; }
 .ex-feedback { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line); border-left: 6px solid var(--accent); background: var(--bg); }
 .ex-feedback p { margin: 4px 0 0; }
+.ex-times { grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
+.ex-card { margin: 0 0 16px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.ex-card .ex-mission { margin-bottom: 4px; }
+.ex-search { width: 100%; min-height: 48px; margin: 0 0 12px; padding: 8px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; }
+.ex-button[aria-pressed="true"] { outline: 2px solid var(--accent-ink); outline-offset: -5px; }
+.ex-read { align-self: start; margin: 0 0 16px; }

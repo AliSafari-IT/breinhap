@@ -12,60 +12,69 @@ const LANGUAGES = [
   ["de/", "de-BE", "/de/", "de", "en/"],
 ];
 
-test("every language says honestly what the web offers today: one example mission, real missions later", () => {
+test("every language says honestly what the web offers today: a try-out with example missions, full missions later", () => {
   for (const [folder, language, , , ] of LANGUAGES) {
     const html = read(`${folder}index.html`);
     assert.ok(html.includes(`<html lang="${language}">`), folder);
     assert.ok(html.indexOf('class="release-banner"') < html.indexOf('<main id="main"'), folder);
     assert.doesNotMatch(html, /play\.google\.com|<form\b|role="alert"/);
   }
-  assert.match(read("index.html"), /de echte missies in je browser komen later/);
-  assert.match(read("en/index.html"), /the real missions in your browser come later/);
-  assert.match(read("fr/index.html"), /les vraies missions dans votre navigateur viendront plus tard/);
-  assert.match(read("de/index.html"), /die echten Missionen im Browser folgen später/);
+  assert.match(read("index.html"), /de volledige missies in je browser komen later/);
+  assert.match(read("en/index.html"), /the full missions in your browser come later/);
+  assert.match(read("fr/index.html"), /les missions complètes dans votre navigateur viendront plus tard/);
+  assert.match(read("de/index.html"), /die vollständigen Missionen im Browser folgen später/);
 });
 
-test("every language embeds the reviewed example mission as data, with no inline script and nothing sent", () => {
-  const example = JSON.parse(readFileSync(new URL("../src/example-mission.json", import.meta.url), "utf8"));
-  assert.equal(example.mission.id, "bio-prikkel-reactie-volgorde");
-  assert.doesNotMatch(JSON.stringify(example), /review/i);
+test("every language has the try-out in its own words, with no inline script and nothing sent", () => {
+  const titles = { nl: "Probeer Breinhap", en: "Try Breinhap", fr: "Essayez Breinhap", de: "Breinhap ausprobieren" };
   for (const [folder, , , lang] of LANGUAGES) {
     const html = read(`${folder}index.html`);
     assert.match(html, /<section class="example" id="voorbeeld"/, folder);
-    assert.match(html, /<script src="\/example\.js" defer><\/script>/, folder);
-    // The only inline script is the JSON data block, which the CSP (script-src 'self') does not execute
+    assert.ok(html.includes(`<h2 id="example-title">${titles[lang]}</h2>`), folder);
+    assert.match(html, /<script src="\/example-data\.js" defer><\/script><script src="\/example\.js" defer><\/script>/, folder);
+    // The only inline script is the JSON text block, which the CSP (script-src 'self') does not execute
     const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].map((m) => m[1].trim());
-    assert.deepEqual(inline, ['type="application/json" id="example-data"'], folder);
-    const data = JSON.parse(html.match(/<script type="application\/json" id="example-data">(.*?)<\/script>/s)[1]);
-    assert.equal(data.ui.lang, lang);
-    assert.deepEqual(data.mission, example.mission, folder);
+    assert.deepEqual(inline, ['type="application/json" id="example-ui"'], folder);
+    const ui = JSON.parse(html.match(/<script type="application\/json" id="example-ui">(.*?)<\/script>/s)[1]);
+    assert.equal(ui.lang, lang);
+    for (const key of ["qCity", "qSchool", "qYear", "qRichting", "studyWhat", "howMuch", "readAloud", "stopReading", "right", "notYet", "done"]) assert.ok(ui[key], `${lang}.${key}`);
     assert.ok(html.indexOf('id="voorbeeld"') < html.indexOf('class="expect"'), folder);
   }
   const script = read("example.js");
   assert.doesNotMatch(script, /fetch\(|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|document\.cookie|innerHTML|eval\(/);
+  assert.match(script, /speechSynthesis/);
 });
 
-test("the example player follows the shared mission rules", () => {
+test("the try-out plays the Android app's flow: school, year, richting, vak, minutes, one mission", () => {
   const sandbox = {};
+  vm.runInNewContext(read("example-data.js"), sandbox);
   vm.runInNewContext(read("example.js"), sandbox);
-  const { pages, isCorrect, shuffled, STEPS } = sandbox.BreinhapExample;
-  const { mission } = JSON.parse(readFileSync(new URL("../src/example-mission.json", import.meta.url), "utf8"));
-  const list = pages(mission);
+  const { logic: makeLogic, pages, isCorrect, shuffled, STEPS } = sandbox.BreinhapExample;
+  const D = sandbox.BreinhapData;
+  const L = makeLogic(D);
+  assert.ok(D.objects.length > 0 && D.schools.length > 0);
+  assert.doesNotMatch(read("example-data.js"), /reviewedBy|"review"/, "no review data reaches the page");
+  const [city] = L.cities();
+  const [school] = L.schoolsIn(city.name);
+  const richting = L.richtingenFor(school.id, 5)[0];
+  assert.ok(richting, "the catalogue school has a richting for year 5");
+  const courses = L.coursesFor({ schoolId: school.id, year: 5, richtingId: richting.id });
+  const withMissions = courses.find((c) => c.objects.length > 0);
+  assert.ok(withMissions, "a vak with missions");
+  const choice = L.pickMission(withMissions.objects, 15);
+  assert.ok(choice && choice.mission.minutes <= 15);
+  assert.equal(L.pickMission(withMissions.objects, 0), undefined, "nothing fits in no time");
+  const list = pages(choice.mission);
   assert.deepEqual([...new Set(list.map((p) => p.step))], [...STEPS]);
-  assert.equal(list.length, 1 + mission.learn.length + mission.practice.length + mission.check.length);
-  const order = mission.practice.find((q) => q.kind === "order");
-  const choice = mission.practice.find((q) => q.kind === "choice");
+  const order = D.objects.flatMap((o) => o.missions).flatMap((m) => [...m.practice, ...m.check]).find((q) => q.kind === "order");
+  const pick = D.objects.flatMap((o) => o.missions).flatMap((m) => [...m.practice, ...m.check]).find((q) => q.kind === "choice");
   assert.equal(isCorrect(order, { placed: [...order.items] }), true);
   assert.equal(isCorrect(order, { placed: [...order.items].reverse() }), false);
   assert.equal(isCorrect(order, { placed: order.items.slice(0, 2) }), false);
-  assert.equal(isCorrect(choice, { chosen: choice.answerIndex }), true);
-  assert.equal(isCorrect(choice, { chosen: (choice.answerIndex + 1) % choice.options.length }), false);
-  assert.equal(isCorrect(choice, undefined), false);
-  for (let i = 0; i < 50; i++) {
-    const out = shuffled(order.items);
-    assert.deepEqual([...out].sort(), [...order.items].sort());
-    assert.notDeepEqual(out, order.items, "the display order is never the answer");
-  }
+  assert.equal(isCorrect(pick, { chosen: pick.answerIndex }), true);
+  assert.equal(isCorrect(pick, { chosen: (pick.answerIndex + 1) % pick.options.length }), false);
+  assert.equal(isCorrect(pick, undefined), false);
+  for (let i = 0; i < 50; i++) assert.notDeepEqual(shuffled(order.items), order.items, "the display order is never the answer");
 });
 
 test("each page has its own metadata, all four alternates, and keeps the Android and legal destinations", () => {

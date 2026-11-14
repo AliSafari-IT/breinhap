@@ -1,18 +1,34 @@
 import { studentPayload } from "./mission";
 import { samplePack } from "./samples";
-import type { Mission } from "./schema";
-
-/** The learning object and mission shown on the website's home page (the biology plant mission). */
-export const WEB_EXAMPLE = { objectId: "biologie-prikkel-reactie-planten", missionId: "bio-prikkel-reactie-volgorde" } as const;
+import { SCHOOLS, STUDIERICHTINGEN, subjectLabel } from "./schools";
+import type { LearningObject } from "./schema";
 
 /**
- * What the website embeds: only the student payload of one reviewed mission, never review data. Throws
- * when the mission is gone or no longer reviewed, so the website cannot show unreviewed content.
+ * The reviewed objects in a fixed order (by id). The sample pack's own order depends on how the bundler orders
+ * module exports, so it differs between tools; the website file must not.
  */
-export function webExample(): { title: string; subject: string; grade: number; leerdoel: string; mission: Mission } {
-  const object = samplePack.objects.find((o) => o.id === WEB_EXAMPLE.objectId);
-  if (!object || object.review.status !== "reviewed") throw new Error(`web example object is missing or not reviewed: ${WEB_EXAMPLE.objectId}`);
-  const mission = studentPayload(object).missions.find((m) => m.id === WEB_EXAMPLE.missionId);
-  if (!mission) throw new Error(`web example mission is missing: ${WEB_EXAMPLE.missionId}`);
-  return { title: object.title, subject: object.subject, grade: object.grade, leerdoel: object.curriculum.leerdoel, mission };
+export function reviewedObjects(): LearningObject[] {
+  return samplePack.objects.filter((o: LearningObject) => o.review.status === "reviewed").sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * What breinhap.com's home page needs to play the same flow as the Android app (gemeente → school → jaar →
+ * richting → vak → "Ik heb __ minuten" → mission): the school and richting catalogue and the reviewed
+ * objects, as student payloads. The website cannot import this package (its image is built from apps/ only),
+ * so apps/web/src/example-data.js is generated from this and src/web-example.test.ts fails while it drifts.
+ * Only reviewed objects are included, and no review data, so unreviewed content cannot reach the website.
+ */
+export function webData() {
+  const reviewed = reviewedObjects();
+  return {
+    schools: SCHOOLS,
+    richtingen: STUDIERICHTINGEN,
+    subjectLabel,
+    objects: reviewed.map(studentPayload),
+  };
+}
+
+/** The exact text of apps/web/src/example-data.js. */
+export function webDataSource(): string {
+  return `// Generated from packages/content by scripts/web-example.ts. Do not edit; run:\n//   pnpm --filter @breinhap/content exec tsx scripts/web-example.ts\nglobalThis.BreinhapData = ${JSON.stringify(webData(), null, 1)};\n`;
 }
