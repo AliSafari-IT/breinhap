@@ -1,6 +1,7 @@
 // Privacy policy, cookie policy, terms of use and account-deletion text (Google Play requires privacy and deletion
 // on the web). Drafted for Ali's review (October 2026): not legal advice.
 // It must always match what the app really does: version 1 is offline, with no account and no data leaving the device.
+// Since app 0.1.2 the student can tap "Downloaden" to fetch the public missions from breinhap.com: one plain GET, nothing sent.
 // Update it (and the Play Console Data safety form) before sign-in, sync or AI ship.
 import { CONTACT_EMAIL, POLICY_UPDATED } from "./content.mjs";
 
@@ -15,7 +16,7 @@ export const privacy = {
       [
         "Kort",
         [
-          "Deze versie van Breinhap werkt volledig op je toestel. Je hebt geen account nodig, en de app stuurt niets over jou naar ons of naar iemand anders.",
+          "Deze versie van Breinhap werkt op je toestel. Je hebt geen account nodig, en de app stuurt niets over jou naar ons of naar iemand anders. Extra missies downloaden kan, maar alleen als jij dat vraagt.",
         ],
       ],
       [
@@ -44,6 +45,12 @@ export const privacy = {
               "Gegevens voor tracking of analytics, van ons of van andere bedrijven.",
             ],
           },
+        ],
+      ],
+      [
+        "Meer missies downloaden",
+        [
+          "Alleen als je zelf op “Downloaden” tikt bij “Meer missies”, haalt de app de openbare missies op van breinhap.com. Die vraag bevat niets over jou: geen account, geen cookie, geen toestel-id en geen antwoorden. Zoals bij elke website ziet onze server daarbij je IP-adres. We gebruiken het alleen om te veel verzoeken tegelijk af te remmen, niet om te weten wie je bent. De missies blijven daarna op je toestel. Je kan ze wissen bij “Meer missies”.",
         ],
       ],
       [
@@ -87,7 +94,7 @@ export const privacy = {
       [
         "In short",
         [
-          "This version of Breinhap works entirely on your device. You don't need an account, and the app sends nothing about you to us or to anyone else.",
+          "This version of Breinhap works on your device. You don't need an account, and the app sends nothing about you to us or to anyone else. You can download extra missions, but only when you ask for it.",
         ],
       ],
       [
@@ -116,6 +123,12 @@ export const privacy = {
               "Data for tracking or analytics, by us or by other companies.",
             ],
           },
+        ],
+      ],
+      [
+        "Downloading more missions",
+        [
+          "Only when you tap “Downloaden” under “Meer missies” does the app fetch the public missions from breinhap.com. That request carries nothing about you: no account, no cookie, no device id and no answers. As with any website, our server sees your IP address. We use it only to slow down too many requests at once, not to know who you are. The missions then stay on your device. You can delete them under “Meer missies”.",
         ],
       ],
       [

@@ -2,7 +2,7 @@
 // Keep sentences short and literal: the audience includes autistic and ADHD readers.
 
 export const CONTACT_EMAIL = "privacy@asafarim.site";
-export const POLICY_UPDATED = "2026-11-03";
+export const POLICY_UPDATED = "2026-11-14";
 
 const nl = {
   lang: "nl-BE",

@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Text } from "react-native";
+import { ContentProvider } from "../catalogue/ContentContext";
 import { CheckpointCleanup } from "../progress/CheckpointCleanup";
 import { ProfileProvider } from "../settings/ProfileContext";
 import { SettingsProvider, useSettings } from "../settings/SettingsContext";
@@ -33,6 +34,8 @@ function ThemedStack() {
           }}
         />
         <Stack.Screen name="mission/[id]" options={{ title: "Missie" }} />
+        <Stack.Screen name="missies/index" options={{ title: "Meer missies" }} />
+        <Stack.Screen name="missies/[id]" options={{ title: "Missies" }} />
         <Stack.Screen name="instellingen" options={{ title: "Instellingen" }} />
         <Stack.Screen name="over" options={{ title: "Over Breinhap" }} />
         <Stack.Screen name="school" options={{ title: "Mijn school" }} />
@@ -46,7 +49,9 @@ export default function RootLayout() {
   return (
     <SettingsProvider>
       <ProfileProvider>
-        <ThemedStack />
+        <ContentProvider>
+          <ThemedStack />
+        </ContentProvider>
       </ProfileProvider>
     </SettingsProvider>
   );

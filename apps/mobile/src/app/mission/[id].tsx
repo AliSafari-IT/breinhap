@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { QuestionView } from "../../components/Questions";
 import { StepBar } from "../../components/StepBar";
 import { AppText, Button, Card, ReadAloud, Screen } from "../../components/ui";
+import { useContent } from "../../catalogue/ContentContext";
 import { findMission } from "../../content";
 import { score } from "../../progress/model";
 import { missionStorage, useMissionProgress } from "../../progress/useMissionProgress";
@@ -15,7 +16,15 @@ import { useSettings } from "../../settings/SettingsContext";
  */
 export default function MissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const found = findMission(String(id));
+  const { loaded, objects } = useContent();
+  // wait for the downloaded missions: "unavailable" clears a paused mission's progress
+  if (!loaded)
+    return (
+      <Screen>
+        <AppText>Even laden…</AppText>
+      </Screen>
+    );
+  const found = findMission(objects, String(id));
   return found ? <MissionSession key={JSON.stringify(found.mission)} mission={found.mission} /> : <Unavailable id={String(id)} />;
 }
 
