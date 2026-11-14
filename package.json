@@ -9,6 +9,13 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "mobile": "pnpm --filter @breinhap/mobile start",
-    "site": "pnpm --filter @breinhap/site start"
+    "site": "pnpm --filter @breinhap/site start",
+    "env:status": "envage status",
+    "env:key:init": "envage init-key",
+    "env:encrypt": "envage encrypt --all --env root",
+    "env:decrypt": "envage decrypt --all --env root"
+  },
+  "devDependencies": {
+    "@asafarim/envage": "^0.5.0"
   }
 }

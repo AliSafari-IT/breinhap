@@ -1,7 +1,16 @@
 node_modules/
-.env
-.env.*
+# --- envage managed ---
+# Decrypted env files — never commit
+.env*
+!.env*.age
 !.env.example
+!.env.template
+# Age private key
+.age/key.txt
+# Recipient update recovery (contains old ciphertext)
+.envage-recovery-*/
+envage.config.json.lock
+# --- end envage ---
 *.tsbuildinfo
 coverage/
 .DS_Store

@@ -6,9 +6,10 @@
  * the hash of the text they speak (see src/narration.ts) plus a manifest and a listening page.
  * Clips whose text and voice are unchanged are reused, so a rerun only pays for what changed.
  *
- *   ELEVENLABS_API_KEY=… pnpm --filter @breinhap/content narrate -- --voice vrouw=<voiceId> --voice man=<voiceId>
+ *   pnpm env:decrypt     # once per machine: packages/content/.env.age → .env (git-ignored)
+ *   pnpm --filter @breinhap/content narrate -- --voice vrouw=<voiceId> --voice man=<voiceId>
  *   pnpm --filter @breinhap/content narrate -- --dry-run          # texts, characters and size, no API call
- *   ELEVENLABS_API_KEY=… pnpm --filter @breinhap/content narrate -- --list-voices
+ *   pnpm --filter @breinhap/content narrate -- --list-voices
  *
  * --install copies the clips into the Android app (apps/mobile/assets/narration + src/speech/recorded.ts)
  * and the web player (apps/management/narration). Only for a local or preview build until Ali has
@@ -17,9 +18,11 @@
  * Options: --missions id,id (default: three reviewed sample missions; "all" for every reviewed one),
  * --model (default eleven_multilingual_v2), --format (default mp3_44100_64), --out (default narration/out).
  *
- * The API key is read from ELEVENLABS_API_KEY only. It is never printed, written to disk or put in
+ * The API key comes from ELEVENLABS_API_KEY, set in the environment or in the git-ignored
+ * packages/content/.env that `pnpm env:decrypt` writes from the committed .env.age (envage). It is never printed, written to disk or put in
  * a URL, and error output shows the HTTP status and ElevenLabs' message, never the request headers.
  */
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -45,9 +48,16 @@ const { values } = parseArgs({
   allowPositionals: true,
 });
 
+/**
+ * packages/content/.env, decrypted from the committed .env.age by `pnpm env:decrypt` (envage). It is
+ * git-ignored. A variable already set in the environment wins.
+ */
+const ENV_FILE = resolve(import.meta.dirname, "../.env");
+if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
+
 function apiKey(): string {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) throw new Error("Set ELEVENLABS_API_KEY in the environment (never in a file in this repo).");
+  if (!key) throw new Error("No ELEVENLABS_API_KEY: run `pnpm env:decrypt` (packages/content/.env.age), or set it in the environment.");
   return key;
 }
 
