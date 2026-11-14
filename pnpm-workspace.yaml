@@ -8,3 +8,5 @@ nodeLinker: hoisted
 # none: its binary comes from the platform optional dependency.
 allowBuilds:
   esbuild: false
+minimumReleaseAgeExclude:
+  - '@asafarim/envage@0.5.1'
