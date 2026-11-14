@@ -2,7 +2,8 @@ import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Linking, View } from "react-native";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
-import { learningObjects } from "../content";
+import { useContent } from "../catalogue/ContentContext";
+import { bundledObjects } from "../content";
 import { CONTACT_EMAIL, LEGAL, SITE } from "../links";
 
 function open(url: string) {
@@ -30,7 +31,8 @@ export default function AboutScreen() {
   const version = Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "?";
   const build = Application.nativeBuildVersion;
   const buildDate = formatDate(Constants.expoConfig?.extra?.buildDate as string | undefined);
-  const reviewed = learningObjects
+  const { publicObjects, fetchedAt } = useContent();
+  const reviewed = bundledObjects
     .map((object) => (object.review.status === "reviewed" ? object.review.reviewedAt : undefined))
     .filter((date): date is string => date !== undefined)
     .sort()
@@ -47,12 +49,15 @@ export default function AboutScreen() {
         <Row label="Versie" value={build ? `${version} (${build})` : version} />
         {buildDate && <Row label="Laatst bijgewerkt" value={buildDate} />}
         {contentDate && <Row label="Inhoud nagekeken" value={contentDate} />}
-        <Row label="Missies in deze versie" value={String(learningObjects.reduce((n, o) => n + o.missions.length, 0))} />
+        <Row label="Missies in deze versie" value={String(bundledObjects.reduce((n, o) => n + o.missions.length, 0))} />
+        {fetchedAt && (
+          <Row label="Gedownloade missies" value={`${publicObjects.reduce((n, o) => n + o.missions.length, 0)} (${formatDate(fetchedAt)})`} />
+        )}
       </Card>
       <Card>
         <AppText variant="title">Privacy en voorwaarden</AppText>
         <AppText variant="small" muted>
-          Breinhap werkt zonder account en stuurt niets over jou door. Je school, instellingen en voortgang van gepauzeerde missies blijven op je toestel.
+          Breinhap werkt zonder account en stuurt niets over jou door. Je school, instellingen en voortgang van gepauzeerde missies blijven op je toestel. Alleen als je zelf op “Downloaden” tikt, haalt de app de openbare missies op van breinhap.com, zonder iets over jou mee te sturen.
         </AppText>
         <View style={styles.row}>
           {LEGAL.map((page) => (

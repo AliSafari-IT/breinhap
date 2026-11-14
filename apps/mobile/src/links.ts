@@ -9,3 +9,11 @@ export const LEGAL: Array<{ label: string; url: string }> = [
 ];
 
 export const CONTACT_EMAIL = "privacy@asafarim.site";
+
+/**
+ * The public mission catalogue on breinhap.com (breinhap#35), as JSON. A build can point
+ * elsewhere (for a test server) with EXPO_PUBLIC_CATALOGUE_URL; it must be https.
+ */
+const configured = process.env.EXPO_PUBLIC_CATALOGUE_URL;
+export const CATALOGUE_URL =
+  configured && configured.startsWith("https://") ? configured : "https://breinhap.com/p/missies.json";

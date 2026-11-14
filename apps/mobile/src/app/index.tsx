@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Linking, Pressable, View } from "react-native";
 import { SchoolPicker, profileLabel } from "../components/SchoolPicker";
 import { AppText, Button, Card, Screen, styles } from "../components/ui";
-import { includeDrafts, learningObjects, showsDrafts } from "../content";
+import { useContent } from "../catalogue/ContentContext";
+import { includeDrafts, showsDrafts } from "../content";
 import { LEGAL } from "../links";
 import { useProfile } from "../settings/ProfileContext";
 import { useSettings } from "../settings/SettingsContext";
@@ -18,6 +19,7 @@ const TIME_OPTIONS = [2, 5, 10, 15] as const;
  */
 export default function Home() {
   const { loaded, profile, save } = useProfile();
+  const { objects } = useContent();
 
   if (!loaded) return <Screen>{null}</Screen>;
   if (!profile) {
@@ -29,7 +31,7 @@ export default function Home() {
       </Screen>
     );
   }
-  return <Study label={profileLabel(profile)} courses={coursesFor(profile, learningObjects)} />;
+  return <Study label={profileLabel(profile)} courses={coursesFor(profile, objects)} />;
 }
 
 function Study({ label, courses }: { label: string; courses: ProfileCourse[] }) {
@@ -65,7 +67,7 @@ function Study({ label, courses }: { label: string; courses: ProfileCourse[] }) 
           ))}
           {ready.length === 0 && (
             <Card>
-              <AppText>Voor jouw vakken staan er nog geen missies in deze versie. Ze komen eraan.</AppText>
+              <AppText>Voor jouw vakken staan er nog geen missies in deze versie. Kijk bij “Meer missies” of er nieuwe zijn.</AppText>
             </Card>
           )}
           {soon.length > 0 && (
@@ -131,6 +133,7 @@ function Study({ label, courses }: { label: string; courses: ProfileCourse[] }) 
 function Footer() {
   return (
     <>
+      <Button kind="secondary" label="Meer missies" accessibilityHint="Toont de openbare missies van breinhap.com" onPress={() => router.push("/missies")} />
       <Button kind="secondary" label="Instellingen" onPress={() => router.push("/instellingen")} />
       <Button kind="secondary" label="Over Breinhap" onPress={() => router.push("/over")} />
 
