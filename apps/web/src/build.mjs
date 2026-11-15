@@ -181,7 +181,7 @@ cpSync(join(root, "src/example-data.js"), join(dist, "example-data.js"));
  * try-out which voices and clips exist; with no recordings it lists none and the browser's own voice is used.
  */
 const narration = JSON.parse(readFileSync(join(root, "narration/manifest.json"), "utf8"));
-const VOICE_ORDER = ["emma", "sare", "evie"];
+const VOICE_ORDER = ["emma", "sare", "evie", "hans", "steven"];
 const voices = Object.entries(narration.narrators ?? {})
   .filter(([id, entry]) => /^[a-z]{2,20}$/.test(id) && entry && Object.keys(entry.clips ?? {}).length)
   .sort(([a], [b]) => (VOICE_ORDER.indexOf(a) + 1 || 99) - (VOICE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b))
