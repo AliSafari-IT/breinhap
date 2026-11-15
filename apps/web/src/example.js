@@ -200,6 +200,7 @@
   }
   /** Every read button on screen shows the voice that will read; refreshed when the voice changes. */
   function relabelReadButtons() {
+    if (!panel) return; // the saved voice can arrive before the panel exists; new buttons read state.voice anyway
     Array.prototype.forEach.call(panel.querySelectorAll(".ex-read"), function (b) { if (b.relabel) b.relabel(); });
   }
   /**
@@ -215,36 +216,49 @@
     var b = el("button", { type: "button", class: "ex-button secondary ex-read", "aria-pressed": "false" });
     var note = el("p", { class: "ex-note ex-read-note", role: "status" });
     var on = false;
-    function setPlaying(value) {
+    var reader = null; // while playing: the name of the voice that actually reads
+    var attempt = 0; // each start; late results of an older start are ignored
+    function setPlaying(value, name) {
       on = value;
-      b.textContent = (on ? "⏹ " + ui.stopReading : "🔊 " + ui.readAloud) + " · " + voiceName(state.voice);
+      reader = value ? name || voiceName(state.voice) : null;
+      b.textContent = (on ? "⏹ " + ui.stopReading + " · " + reader : "🔊 " + ui.readAloud + " · " + voiceName(state.voice));
       b.setAttribute("aria-pressed", on ? "true" : "false");
     }
-    b.relabel = function () { setPlaying(on); };
+    b.relabel = function () { if (!on) setPlaying(false); };
     setPlaying(false);
     b.addEventListener("click", function () {
       if (on) return stopReading();
       stopReading();
       note.textContent = "";
-      setPlaying(true);
-      playing = setPlaying;
-      var done = function () { if (playing === setPlaying) { setPlaying(false); playing = null; } };
+      var mine = ++attempt;
+      var current = function () { return attempt === mine && playing === stop; };
+      var stop = function (value) { if (!value) attempt++; setPlaying(value); };
+      var done = function () { if (current()) { setPlaying(false); playing = null; } };
+      var failed = function (error) {
+        if (!current() || (error && error.name === "AbortError")) return; // stopped on purpose, or an older start
+        note.textContent = ui.clipFailed;
+        done();
+      };
+      playing = stop;
       var voice = recorded.filter(function (v) { return v.id === state.voice; })[0];
-      if (!voice) return speakDevice(text, done);
+      if (!voice) { setPlaying(true, ui.voiceDevice); return speakDevice(text, done); }
+      setPlaying(true, voice.name);
       function play(k) {
+        if (!current()) return;
         if (voice.clips.indexOf(k) < 0) {
           note.textContent = ui.clipMissing;
+          setPlaying(true, ui.voiceDevice); // the browser reads this one; the chosen voice stays selected
           return speakDevice(text, done);
         }
         audio = audio || new root.Audio();
         audio.src = "/narration/" + voice.id + "/" + k + ".mp3";
         audio.onended = done;
-        audio.onerror = function () { note.textContent = ui.clipFailed; done(); };
+        audio.onerror = function () { failed(null); };
         var started = audio.play();
-        if (started && started.catch) started.catch(function () { note.textContent = ui.clipFailed; done(); });
+        if (started && started.catch) started.catch(failed);
       }
       if (key !== null) return play(key); // the usual case: synchronous, inside the click
-      keyFor(text).then(function (k) { key = k; if (playing === setPlaying) play(k); }, function () { note.textContent = ui.clipFailed; done(); });
+      keyFor(text).then(function (k) { key = k; play(k); }, failed);
     });
     return el("div", { class: "ex-read-row" }, [b, note]);
   }
