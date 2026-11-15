@@ -142,7 +142,7 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 <link rel="alternate" hreflang="x-default" href="${origin}/">
 <meta property="og:title" content="Breinhap · ${esc(t.title)}"><meta property="og:description" content="${esc(t.intro)}">
 <meta property="og:type" content="website"><meta property="og:url" content="${origin}${path}"><meta property="og:locale" content="${OG_LOCALE[lang]}">
-<meta name="theme-color" content="#222222"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#222222"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/theme.js"></script><script src="/locale-selector.js" defer></script><script src="/account.js"></script><script src="/example-data.js" defer></script><script src="/narration/voices.js" defer></script><script src="/example.js" defer></script>
 </head>
 <body>
@@ -170,7 +170,7 @@ ${exampleSection(t)}
 
 rmSync(dist, { recursive: true, force: true });
 for (const lang of LANGUAGES) mkdirSync(join(dist, lang === "nl" ? "" : lang), { recursive: true });
-for (const asset of ["logo.svg", "favicon.svg", "theme.js", "locale-selector.js", "locale-selector.css"]) cpSync(join(shared, "public", asset), join(dist, asset));
+for (const asset of ["logo.svg", "favicon.svg", "favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "theme.js", "locale-selector.js", "locale-selector.css"]) cpSync(join(shared, "public", asset), join(dist, asset));
 cpSync(join(root, "src/account.js"), join(dist, "account.js"));
 cpSync(join(root, "src/example.js"), join(dist, "example.js"));
 cpSync(join(root, "src/example-data.js"), join(dist, "example-data.js"));
@@ -201,6 +201,11 @@ writeFileSync(join(dist, "styles.css"), readFileSync(join(shared, "src/theme.css
 for (const lang of LANGUAGES) writeFileSync(join(dist, lang === "nl" ? "" : lang, "index.html"), page(lang));
 writeFileSync(join(dist, "404.html"), page("nl", true));
 
+// The web app manifest: name and icons for "add to home screen" and browser UI (breinhap#130).
+writeFileSync(join(dist, "site.webmanifest"), JSON.stringify({
+  name: "Breinhap", short_name: "Breinhap", start_url: "/", display: "browser", background_color: "#222222", theme_color: "#222222",
+  icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }, { src: "/icon-512.png", sizes: "512x512", type: "image/png" }],
+}, null, 2) + "\n");
 writeFileSync(join(dist, "robots.txt"), `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
 writeFileSync(join(dist, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${LANGUAGES.map((l) => `<url><loc>${origin}${pathOf(l)}</loc></url>`).join("")}</urlset>\n`);
 console.log(`Built ${dist}`);

@@ -41,8 +41,9 @@ if (mount) {
 			value: { country: "BE", language },
 			triggerVariant: "compact",
 			align: "end",
-			// Include the visible trigger label (e.g. "🇧🇪 BE") to satisfy WCAG 2.5.3 Label in Name.
-			ariaLabel: `BE, ${messages?.ariaLabel || "Taal · Langue · Sprache · Language"}`,
+			// WCAG 2.5.3 Label in Name (breinhap#90): the compact trigger shows "🇧🇪 BE · NL", so the accessible name
+			// starts with that same visible text (the flag is decorative), then says what the control is.
+			ariaLabel: `BE · ${language.toUpperCase()}, ${messages?.ariaLabel || "Taal · Langue · Sprache · Language"}`,
 			strings: messages || undefined,
 			onChange: (next, meta) => {
 				if (meta?.reason === "init" || next.language === language) return;

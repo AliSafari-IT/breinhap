@@ -92,6 +92,13 @@ const assets = new Map(await Promise.all([
 	return [path, { body, type: `${type}; charset=utf-8`, etag: `"${createHash("sha256").update(body).digest("base64url")}"` }];
 })));
 
+/** Favicons, shared with breinhap.com (apps/site/public). */
+const ICONS = {
+	"/favicon.ico": ["favicon.ico", "image/x-icon"],
+	"/favicon.svg": ["favicon.svg", "image/svg+xml"],
+	"/apple-touch-icon.png": ["apple-touch-icon.png", "image/png"],
+};
+
 function documentPage(title, content, active, session, pathname = active, search = "") {
 	const account = session
 		? ui`<details class="management-account"><summary>Account</summary><div class="account-panel">${session.email ? ui`<p class="account-email">${esc(session.email)}</p>` : ""}<p>Je rollen: ${esc(session.roles.length ? session.roles.map((role) => tr(role)).join(", ") : tr("nog geen"))}</p>${session.admin ? ui`<a href="/beheer/leerlingen">Leerlingen en groepen</a>` : ""}<a href="/instellingen">Instellingen</a><form method="post" action="/afmelden"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><button type="submit">Afmelden</button></form><a href="/login?switch=1">Wissel van account</a></div></details>`
@@ -101,7 +108,7 @@ function documentPage(title, content, active, session, pathname = active, search
 	const nav = active !== undefined || session?.roles?.length
 		? ui`<nav class="management-nav" aria-label="Beheernavigatie">${links.map(([path, label]) => ui`<a href="${esc(path)}"${pathname === path || (path !== "/" && pathname?.startsWith(`${path}/`)) ? ' aria-current="page"' : ""}>${esc(tr(label))}</a>`).join("")}</nav>`
 		: "";
-	return ui`<!doctype html><html lang="${uiLocale()}" data-saving="${esc(tr("Bezig met opslaan…"))}" data-access-unavailable="${esc(tr("Je toegang kan nu niet worden gecontroleerd. Vernieuw de pagina om opnieuw te proberen."))}" data-connection-lost="${esc(tr("Verbinding verbroken. Vernieuw de pagina om je toegang opnieuw te controleren."))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} — Breinhap beheer</title><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/locale-selector.js" defer></script><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body class="management-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ lang: uiLocale(), name: tr("Breinhap beheer"), href: "/", navigation: nav, tools: ui`<a class="web-link" href="${websiteHome(uiLocale())}">Breinhap web</a>${languageSelector(uiLocale(), pathname ?? "/", search)}${account}` })}<main id="inhoud" tabindex="-1" class="management-main"><h1>${esc(title)}</h1><div class="page-content">${content}</div></main>${managementFooter(esc(manifest.version))}</body></html>`;
+	return ui`<!doctype html><html lang="${uiLocale()}" data-saving="${esc(tr("Bezig met opslaan…"))}" data-access-unavailable="${esc(tr("Je toegang kan nu niet worden gecontroleerd. Vernieuw de pagina om opnieuw te proberen."))}" data-connection-lost="${esc(tr("Verbinding verbroken. Vernieuw de pagina om je toegang opnieuw te controleren."))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} — Breinhap beheer</title><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/locale-selector.css"><script src="/locale-selector.js" defer></script><script src="/theme.js"></script><script src="/session.js" defer></script><script src="/editor.js" defer></script></head><body class="management-body"><a class="skip" href="#inhoud">Naar inhoud</a>${header({ lang: uiLocale(), name: tr("Breinhap beheer"), href: "/", navigation: nav, tools: ui`<a class="web-link" href="${websiteHome(uiLocale())}">Breinhap web</a>${languageSelector(uiLocale(), pathname ?? "/", search)}${account}` })}<main id="inhoud" tabindex="-1" class="management-main"><h1>${esc(title)}</h1><div class="page-content">${content}</div></main>${managementFooter(esc(manifest.version))}</body></html>`;
 }
 
 // The resolver and identity adapter are server-only; no request header grants a role.
@@ -603,6 +610,11 @@ export function createHandler({
 			const headers = { "Cache-Control": "public, max-age=0, must-revalidate", ETag: asset.etag };
 			const unchanged = req.headers["if-none-match"] === asset.etag;
 			return send(unchanged ? 304 : 200, unchanged ? "" : asset.body, asset.type, headers);
+		}
+		// breinhap#130: the same icons as breinhap.com, public like the logo
+		if (Object.hasOwn(ICONS, url.pathname)) {
+			const [file, type] = ICONS[url.pathname];
+			return send(200, await readFile(new URL(`../../site/public/${file}`, import.meta.url)), type, { "Cache-Control": "public, max-age=86400" });
 		}
 		if (url.pathname === "/logo.svg")
 			return send(

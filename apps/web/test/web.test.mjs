@@ -225,5 +225,16 @@ test("read aloud names its voice and never swaps a chosen recorded voice silentl
     const ui = JSON.parse(read(`${folder}index.html`).match(/<script type="application\/json" id="example-ui">(.*?)<\/script>/s)[1]);
     assert.ok(ui.clipMissing && ui.clipFailed, lang);
   }
+
+test("favicons: ico, svg, Apple touch icon and a web manifest on every page", () => {
+  for (const [folder] of LANGUAGES) {
+    const html = read(`${folder}index.html`);
+    assert.ok(html.includes('<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest">'), folder);
+  }
+  assert.match(read("404.html"), /rel="apple-touch-icon"/);
+  for (const file of ["favicon.ico", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png"]) assert.ok(existsSync(new URL(`../dist/${file}`, import.meta.url)), file);
+  const manifest = JSON.parse(read("site.webmanifest"));
+  assert.equal(manifest.name, "Breinhap");
+  assert.deepEqual(manifest.icons.map((i) => i.sizes), ["192x192", "512x512"]);
 });
 

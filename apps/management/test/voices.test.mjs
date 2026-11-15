@@ -31,3 +31,8 @@ test("accounts awaiting approval reach the voice settings too, in their language
 	assert.equal(typeof pendingPage, "function");
 });
 
+test("every management page links the favicons (breinhap#130)", () => {
+	const html = settingsPage("nl", { csrf: "c", email: "a@example.com", voices: {}, catalogue: VOICES, languages: READING_LANGUAGES, device: DEVICE_VOICE, version: "0" });
+	assert.ok(html.includes('<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">'));
+});
+

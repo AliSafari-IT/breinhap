@@ -225,6 +225,12 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	assert.doesNotMatch(register.body, /Maak een account voor|Bevestig wie je bent/);
 	assert.ok(signIn.body.includes(`Breinhap beheer · ${manifest.version}`));
 	assert.equal((await get("/readyz")).status, 200);
+	// breinhap#130: the favicons are public, like the logo
+	for (const [path, type] of [["/favicon.ico", "image/x-icon"], ["/favicon.svg", "image/svg+xml"], ["/apple-touch-icon.png", "image/png"]]) {
+		const icon = await get(path);
+		assert.equal(icon.status, 200, path);
+		assert.match(icon.headers["content-type"], new RegExp(type.replace("+", "\\+")), path);
+	}
 	const start = await get("/auth/start");
 	const flowCookie = start.headers["set-cookie"][0].split(";")[0];
 	const callback = await get(`/auth/callback?code=valid&state=${state}`, {
