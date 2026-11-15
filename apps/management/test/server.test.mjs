@@ -276,7 +276,15 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 	);
 	assert.deepEqual(JSON.parse(anonymous.body), { active: false, access: false });
 	// breinhap#124: Instellingen → Voorleesstem, one voice per reading language, kept with the account.
-	assert.equal((await get("/instellingen")).headers.location, "/login?next=%2Finstellingen");
+	assert.equal((await get("/instellingen")).headers.location, "/login?next=%2Finstellingen&lang=nl");
+	// signing in from there comes back there: the sign-in page keeps the (allowlisted) destination, also when
+	// switching language; anything not allowlisted becomes "/"
+	const loginToSettings = await get("/login?next=%2Finstellingen&lang=en");
+	assert.ok(loginToSettings.body.includes('href="/auth/start?next=%2Finstellingen"'));
+	assert.ok(loginToSettings.body.includes('href="/login?next=%2Finstellingen&amp;lang=fr"'));
+	assert.ok((await get("/login?next=https%3A%2F%2Fevil.example")).body.includes('href="/auth/start"'));
+	assert.equal((await get("/login?next=%2Finstellingen", { headers: { Cookie: session } })).headers.location, "/instellingen");
+	assert.equal((await get("/login?next=%2F%2Fevil.example", { headers: { Cookie: session } })).headers.location, "/");
 	const settings = await get("/instellingen?lang=en", { headers: { Cookie: session } });
 	assert.equal(settings.status, 200);
 	assert.match(settings.body, /<h2>Reading voice<\/h2>/);

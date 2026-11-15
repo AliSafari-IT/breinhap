@@ -163,12 +163,17 @@
   state.voice = voiceIds[0] || null;
   // A signed-in person's saved voice for Dutch (the missions are Dutch) from management's Instellingen, via the
   // navbar's session check (account.js). It applies until they pick another voice here during this visit.
+  // Without a valid saved voice (signed out, or an account that chose none) it falls back to the default, so one
+  // account's choice never stays behind for the next.
   function applySavedVoice() {
+    if (state.voicePicked) return;
     var saved = root.BreinhapAccount && root.BreinhapAccount.voices && root.BreinhapAccount.voices.nl;
-    if (state.voicePicked || !saved || voiceIds.indexOf(saved) < 0 || saved === state.voice) return;
-    state.voice = saved;
+    var voice = saved && voiceIds.indexOf(saved) >= 0 ? saved : voiceIds[0] || null;
+    if (voice === state.voice) return;
+    stopReading();
+    state.voice = voice;
     var select = document.getElementById("ex-voice");
-    if (select) select.value = saved;
+    if (select) select.value = voice;
   }
   applySavedVoice();
   document.addEventListener("breinhap:account", applySavedVoice);
