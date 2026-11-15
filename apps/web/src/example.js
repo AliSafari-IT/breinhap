@@ -174,6 +174,7 @@
     state.voice = voice;
     var select = document.getElementById("ex-voice");
     if (select) select.value = voice;
+    relabelReadButtons();
   }
   applySavedVoice();
   document.addEventListener("breinhap:account", applySavedVoice);
@@ -193,28 +194,59 @@
     u.onend = u.onerror = done;
     synth.speak(u);
   }
+  function voiceName(id) {
+    var v = recorded.filter(function (r) { return r.id === id; })[0];
+    return v ? v.name : ui.voiceDevice;
+  }
+  /** Every read button on screen shows the voice that will read; refreshed when the voice changes. */
+  function relabelReadButtons() {
+    Array.prototype.forEach.call(panel.querySelectorAll(".ex-read"), function (b) { if (b.relabel) b.relabel(); });
+  }
+  /**
+   * The read button. The clip key is computed when the button is shown, so a click starts the recording directly
+   * inside the click: browsers only allow audio to start from a user action, and starting it after an async step
+   * can be refused. A chosen recorded voice is never replaced silently: a text without a recording, or a recording
+   * that cannot start, says so in a note next to the button.
+   */
   function readButton(text) {
     if (!voiceIds.length) return null;
-    var b = el("button", { type: "button", class: "ex-button secondary ex-read", "aria-pressed": "false", text: "🔊 " + ui.readAloud });
-    function setPlaying(on) { b.textContent = (on ? "⏹ " + ui.stopReading : "🔊 " + ui.readAloud); b.setAttribute("aria-pressed", on ? "true" : "false"); }
+    var key = null;
+    if (recorded.length) keyFor(text).then(function (k) { key = k; }, function () {});
+    var b = el("button", { type: "button", class: "ex-button secondary ex-read", "aria-pressed": "false" });
+    var note = el("p", { class: "ex-note ex-read-note", role: "status" });
+    var on = false;
+    function setPlaying(value) {
+      on = value;
+      b.textContent = (on ? "⏹ " + ui.stopReading : "🔊 " + ui.readAloud) + " · " + voiceName(state.voice);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    b.relabel = function () { setPlaying(on); };
+    setPlaying(false);
     b.addEventListener("click", function () {
-      if (b.getAttribute("aria-pressed") === "true") return stopReading();
+      if (on) return stopReading();
       stopReading();
+      note.textContent = "";
       setPlaying(true);
       playing = setPlaying;
       var done = function () { if (playing === setPlaying) { setPlaying(false); playing = null; } };
       var voice = recorded.filter(function (v) { return v.id === state.voice; })[0];
       if (!voice) return speakDevice(text, done);
-      keyFor(text).then(function (key) {
-        if (playing !== setPlaying) return; // stopped while hashing
-        if (voice.clips.indexOf(key) < 0) return speakDevice(text, done); // no clip for this exact text
+      function play(k) {
+        if (voice.clips.indexOf(k) < 0) {
+          note.textContent = ui.clipMissing;
+          return speakDevice(text, done);
+        }
         audio = audio || new root.Audio();
-        audio.src = "/narration/" + voice.id + "/" + key + ".mp3";
-        audio.onended = audio.onerror = done;
-        audio.play().catch(function () { speakDevice(text, done); });
-      }, function () { speakDevice(text, done); });
+        audio.src = "/narration/" + voice.id + "/" + k + ".mp3";
+        audio.onended = done;
+        audio.onerror = function () { note.textContent = ui.clipFailed; done(); };
+        var started = audio.play();
+        if (started && started.catch) started.catch(function () { note.textContent = ui.clipFailed; done(); });
+      }
+      if (key !== null) return play(key); // the usual case: synchronous, inside the click
+      keyFor(text).then(function (k) { key = k; if (playing === setPlaying) play(k); }, function () { note.textContent = ui.clipFailed; done(); });
     });
-    return b;
+    return el("div", { class: "ex-read-row" }, [b, note]);
   }
   /** The voice picker: only when there is more than one voice to choose from. */
   function voicePicker() {
@@ -226,7 +258,7 @@
       if (id === state.voice) option.setAttribute("selected", "");
       select.appendChild(option);
     });
-    select.addEventListener("change", function () { stopReading(); state.voice = select.value; state.voicePicked = true; });
+    select.addEventListener("change", function () { stopReading(); state.voice = select.value; state.voicePicked = true; relabelReadButtons(); });
     return el("p", { class: "ex-voice-row" }, [el("label", { for: "ex-voice", text: ui.voice }), select]);
   }
 
