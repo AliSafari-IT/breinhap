@@ -2,7 +2,7 @@
 // Redis store and the Postgres directory. Who may open and change "Leerlingen en groepen", what an
 // adult's "Leerlingen" page shows, and that revoking a membership ends the adult's links.
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
@@ -11,6 +11,7 @@ import pg from "pg";
 import { migrate } from "../src/db.mjs";
 import { Directory } from "../src/directory.mjs";
 import { createIdentity, ORIGIN } from "../src/identity.mjs";
+import { LearnerAccounts } from "../src/learner-accounts.mjs";
 import { createManagementServer } from "../src/server.mjs";
 import { makeStore, member } from "./helpers.mjs";
 
@@ -166,6 +167,70 @@ test("administrators manage learners, groups and links; the linked teacher then 
 	assert.equal(none.status, 200);
 	assert.doesNotMatch(none.body, /Ann|Bo\b/);
 	assert.match(none.body, /nog geen leerlingen aan jou gekoppeld/);
+});
+
+test("a link code is made on the pages, shown once, and the administrator can end the link (breinhap#134)", async () => {
+	const s = await stack();
+	const boss = await s.login("admin");
+	const post = (who, path, form) =>
+		s.call(path, { cookie: who.cookie, method: "POST", form: { ...form, csrf: who.csrf } });
+	await post(boss, "/beheer/leerlingen/nieuw", { displayName: "Ann", schoolYear: "3" });
+	await post(boss, "/beheer/leerlingen/nieuw", { displayName: "Bo", schoolYear: "3" });
+	const view = await s.directory.overview({ sub: "admin", role: "breinhap.admin" });
+	const ann = view.learners.find((l) => l.displayName === "Ann").id;
+
+	// the code page shows the code exactly once, grouped, with the line for the student
+	const made = await post(boss, "/beheer/leerlingen/koppelcode", { learner: ann });
+	assert.equal(made.status, 200);
+	const shown = /value="([A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2})"/.exec(made.body)?.[1];
+	assert.ok(shown, "the grouped code is on the page");
+	assert.match(made.body, /noteer haar nu/);
+	assert.match(made.body, /Ga naar breinhap\.com/);
+	const rows = await pool.query(
+		"SELECT code_hash FROM learner_link_codes WHERE workspace_id = $1",
+		[s.directory.workspace],
+	);
+	assert.equal(rows.rows.length, 1);
+	assert.equal(
+		rows.rows[0].code_hash.toString("hex"),
+		createHash("sha256").update(shown.replaceAll("-", ""), "utf8").digest("hex"),
+	);
+
+	// the state shows on the page; a second code revokes the first; revoking ends the waiting one
+	const listed = await s.call("/beheer/leerlingen", { cookie: boss.cookie });
+	assert.match(listed.body, /Code wacht tot/);
+	const again = await post(boss, "/beheer/leerlingen/koppelcode", { learner: ann });
+	assert.notEqual(/value="([A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2})"/.exec(again.body)?.[1], shown);
+	assert.equal((await post(boss, "/beheer/leerlingen/koppelcode/intrekken", { learner: ann })).status, 303);
+	const cleared = await s.call("/beheer/leerlingen", { cookie: boss.cookie });
+	assert.match(cleared.body, /Niet gekoppeld/);
+
+	// an unknown learner refuses with the not-found page
+	const unknown = await post(boss, "/beheer/leerlingen/koppelcode", { learner: "00000000-0000-0000-0000-000000000000" });
+	assert.equal(unknown.status, 404);
+
+	// the parent makes a code for their own learner on their own page, not for the other one
+	await post(boss, "/beheer/koppelingen/nieuw", { subject: "parent", target: `learner:${ann}` });
+	const parent = await s.login("parent");
+	const mine = await s.call("/leerlingen", { cookie: parent.cookie });
+	assert.match(mine.body, /Koppelcode maken/);
+	assert.doesNotMatch(mine.body, /Bo\b/);
+	const fromParent = await post(parent, "/leerlingen/koppelcode", { learner: ann });
+	assert.equal(fromParent.status, 200);
+	assert.match(fromParent.body, /Koppelcode voor/);
+	const notMine = await post(parent, "/leerlingen/koppelcode", { learner: view.learners.find((l) => l.displayName === "Bo").id });
+	assert.equal(notMine.status, 404);
+
+	// after redeeming (service level), the administrator sees the link and can end it
+	const sub = "test:student-server";
+	const service = new LearnerAccounts({ directory: s.directory });
+	await service.redeem(sub, /value="([A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2})"/.exec(fromParent.body)[1]);
+	const linked = await s.call("/beheer/leerlingen", { cookie: boss.cookie });
+	assert.match(linked.body, /Gekoppeld sinds/);
+	const done = await post(boss, "/beheer/leerlingen/koppeling/verbreken", { learner: ann });
+	assert.equal(done.status, 303);
+	const after = await s.call("/beheer/leerlingen", { cookie: boss.cookie });
+	assert.match(after.body, /Niet gekoppeld/);
 });
 
 test("refusals: wrong role for the target, linking yourself, and a non-admin, a stale sign-in or a forged CSRF token change nothing", async () => {

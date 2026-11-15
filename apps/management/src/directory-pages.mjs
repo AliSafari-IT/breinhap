@@ -1,5 +1,6 @@
-import { tr, ui, uiLocale } from "./workspace-i18n.mjs";
+import { tr, ui, uiLocale, formatLocale } from "./workspace-i18n.mjs";
 import { DirectoryError, GRANTABLE, SCHOOL_YEARS } from "./directory.mjs";
+import { displayCode } from "./learner-accounts.mjs";
 import { SELF_SERVICE_ROLES } from "./store.mjs";
 const ROLE_NAME = { "breinhap.parent": "ouder", "breinhap.tutor": "begeleider", "breinhap.teacher": "leerkracht", "breinhap.admin": "beheerder" };
 
@@ -33,6 +34,8 @@ export const DIRECTORY_ERRORS = () => Object.freeze({
 	role_mismatch:
 		tr("Deze rol past niet bij deze koppeling: een ouder koppel je aan een leerling, een leerkracht aan een groep, een begeleider aan beide."),
 	exists: tr("Deze koppeling of dit recht bestaat al."),
+	// breinhap#134: link codes
+	linked: tr("Deze leerling is al gekoppeld aan een account. Verbreek eerst de koppeling."),
 });
 
 const csrfField = (csrf) => ui`<input type="hidden" name="csrf" value="${esc(csrf)}">`;
@@ -41,8 +44,39 @@ const button = (path, fields, label, csrf) =>
 		.map(([name, value]) => ui`<input type="hidden" name="${name}" value="${esc(value)}">`)
 		.join("")}${csrfField(csrf)}<button>${label}</button></form>`;
 
+// breinhap#134: the link between a learner profile and a student account, per learner
+const CODE_TTL_DAYS = 14;
+const day = (value) =>
+	value ? new Date(value).toLocaleDateString(formatLocale(), { timeZone: "Europe/Brussels" }) : "";
+
+/** The one line a learner shows in the lists: not linked, a code waiting, or linked since a date. */
+const linkState = (state) =>
+	state?.linkedAt
+		? { label: tr`Gekoppeld sinds ${day(state.linkedAt)}`, linked: true }
+		: state?.codeExpiresAt
+			? { label: tr`Code wacht tot ${day(state.codeExpiresAt)}`, waiting: true }
+			: { label: tr("Niet gekoppeld") };
+
+/** What the pages show when the learner's row is not in the state list (never happens for admins). */
+const noState = [];
+
+/**
+ * breinhap#134: the page after a code is made. The code is shown once — it lives only as a hash in
+ * the database — so this page says to note it now. The printable sentence is what the adult hands
+ * to the student.
+ */
+export function linkCodePage(learnerName, created, back) {
+	const grouped = displayCode(created.code);
+	return ui`Koppelcode voor <strong>${esc(learnerName)}</strong>.</p>
+<p><label>Koppelcode <input readonly value="${grouped}" aria-label="${tr("Koppelcode")}"></label></p>
+<p>Deze code is ${CODE_TTL_DAYS} dagen geldig (tot ${day(created.expiresAt)}) en werkt maar één keer. Ze staat nergens opgeslagen: noteer haar nu.</p>
+<p>Print of kopieer deze regel voor de leerling:</p>
+<p class="notice">Ga naar breinhap.com, kies <em>Leerling aanmelden</em> en typ deze code: <strong>${grouped}</strong></p>
+<p><a href="${back}">${tr("Terug naar de leerlingen")}</a><p>`;
+}
+
 /** The administrator's page. `content` goes inside the shell's paragraph, hence the leading </p>. */
-export function adminDirectoryPage(view, csrf, members = []) {
+export function adminDirectoryPage(view, csrf, members = [], linkStates = noState) {
 	// breinhap#signup: people by name and e-mail, never an account code to type
 	const nameOf = new Map(members.map((m) => [m.subject, [[m.profile?.firstName, m.profile?.lastName].filter(Boolean).join(" "), m.profile?.email].filter(Boolean).join(" · ") || tr("(onbekend lid)")]));
 	const who = (sub) => esc(nameOf.get(sub) ?? tr("(geen lid meer)"));
@@ -67,13 +101,21 @@ export function adminDirectoryPage(view, csrf, members = []) {
 		),
 		...view.groups.map((g) => ui`<option value="group:${esc(g.id)}">Groep: ${esc(g.name)}</option>`),
 	].join("");
+	// breinhap#134: per learner, whether a student account is linked or a code is waiting
+	const states = new Map(linkStates.map((s) => [s.learnerId, s]));
 
 	const learners = view.learners.length
 		? ui`<ul class="requests">${view.learners
-				.map(
-					(l) =>
-						ui`<li><p><strong>${esc(l.displayName)}</strong> · ${YEAR(l.schoolYear)}</p>${button("/beheer/leerlingen/archiveren", { learner: l.id }, tr("Archiveren"), csrf)}</li>`,
-				)
+				.map((l) => {
+					const state = linkState(states.get(l.id));
+					return ui`<li><p><strong>${esc(l.displayName)}</strong> · ${YEAR(l.schoolYear)} · ${state.label}</p>${
+						state.linked
+							? button("/beheer/leerlingen/koppeling/verbreken", { learner: l.id }, tr("Koppeling verbreken"), csrf)
+							: state.waiting
+								? `${button("/beheer/leerlingen/koppelcode", { learner: l.id }, tr("Nieuwe code"), csrf)}${button("/beheer/leerlingen/koppelcode/intrekken", { learner: l.id }, tr("Intrekken"), csrf)}`
+								: button("/beheer/leerlingen/koppelcode", { learner: l.id }, tr("Koppelcode maken"), csrf)
+					}${button("/beheer/leerlingen/archiveren", { learner: l.id }, tr("Archiveren"), csrf)}</li>`;
+				})
 				.join("")}</ul>`
 		: ui`<p>Nog geen leerlingen.</p>`;
 	const groups = view.groups.length
@@ -122,7 +164,8 @@ export function adminDirectoryPage(view, csrf, members = []) {
 				.join("")}</ul>`
 		: ui`<p>Nog geen extra rechten.</p>`;
 
-	return ui`Leerlingen hebben (nog) geen eigen account. Een leerlingprofiel bevat alleen een voornaam of bijnaam en het jaar. Vul nooit een diagnose of andere gevoelige gegevens in.</p>
+	return ui`Een leerlingprofiel bevat alleen een voornaam of bijnaam en het jaar. Vul nooit een diagnose of andere gevoelige gegevens in.</p>
+<p>Een leerling heeft nog geen eigen account. Met een <strong>koppelcode</strong> koppelt de leerling zelf zijn account (aangemaakt op breinhap.com) aan zijn profiel: hij ziet dan de opdrachten die aan hem zijn toegewezen. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.</p>
 <h2>Leerlingen</h2>${learners}
 <form method="post" action="/beheer/leerlingen/nieuw"><label>Voornaam of bijnaam <input name="displayName" required maxlength="40"></label><label>Jaar <select name="schoolYear">${years}</select></label>${csrfField(csrf)}<button>Leerling toevoegen</button></form>
 <h2>Groepen</h2>${groups}
@@ -133,15 +176,25 @@ ${!targets ? ui`<p>Maak eerst een leerling of groep.</p>` : !adults.length ? ui`
 ${adults.length ? "" : ui`<p>Er zijn nog geen leden om een recht aan te geven.</p>`}<form method="post" action="/beheer/rechten/toekennen"${adults.length ? "" : " hidden"}>${peopleSelect(tr("Wie"))}<label>Recht <select name="capability">${GRANTABLE.map((c) => ui`<option value="${c}">${tr(CAPABILITY[c])}</option>`).join("")}</select></label>${csrfField(csrf)}<button>Recht toekennen</button></form><p><a href="/beheer">Terug naar Toegang beheren</a>`;
 }
 
-/** The adult's own page: only what the directory lets them see. */
-export function learnersPage(learners, groups) {
+/** The adult's own page: only what the directory lets them see, with a code per own learner (breinhap#134). */
+export function learnersPage(learners, groups, csrf, linkStates = noState) {
+	const states = new Map(linkStates.map((s) => [s.learnerId, s]));
 	const list = learners.length
-		? ui`<ul>${learners.map((l) => ui`<li>${esc(l.displayName)} · ${YEAR(l.schoolYear)}</li>`).join("")}</ul>`
+		? ui`<ul>${learners.map((l) => {
+				const state = linkState(states.get(l.id));
+				return ui`<li><p>${esc(l.displayName)} · ${YEAR(l.schoolYear)} · ${state.label}</p>${
+					state.linked
+						? ""
+						: state.waiting
+							? `${button("/leerlingen/koppelcode", { learner: l.id }, tr("Nieuwe code"), csrf)}${button("/leerlingen/koppelcode/intrekken", { learner: l.id }, tr("Intrekken"), csrf)}`
+							: button("/leerlingen/koppelcode", { learner: l.id }, tr("Koppelcode maken"), csrf)
+				}</li>`;
+			}).join("")}</ul>`
 		: ui`<p>Er zijn nog geen leerlingen aan jou gekoppeld. Een beheerder van Breinhap koppelt je aan je leerlingen of groepen.</p>`;
 	const groupList = groups.length
 		? ui`<h2>Mijn groepen</h2><ul>${groups.map((g) => ui`<li>${esc(g.name)} · ${g.size} leerling(en)</li>`).join("")}</ul>`
 		: "";
-	return ui`Hier zie je alleen de leerlingen die aan jou gekoppeld zijn.</p><h2>Mijn leerlingen</h2>${list}${groupList}<p>`;
+	return ui`Hier zie je alleen de leerlingen die aan jou gekoppeld zijn.</p><p>Met een koppelcode koppelt een leerling zijn eigen account (op breinhap.com) aan zijn profiel; daarna ziet hij de opdrachten die jij aan hem toewijst. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.</p><h2>Mijn leerlingen</h2>${list}${groupList}<p>`;
 }
 
 const one = (form, name) => {

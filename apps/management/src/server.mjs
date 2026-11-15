@@ -12,13 +12,15 @@ import {
 	csrfValid,
 } from "./identity.mjs";
 import { connectDatabase } from "./db.mjs";
-import { Directory } from "./directory.mjs";
+import { Directory, DirectoryError } from "./directory.mjs";
 import {
 	adminDirectoryAction,
 	adminDirectoryPage,
 	DIRECTORY_ERRORS,
 	learnersPage,
+	linkCodePage,
 } from "./directory-pages.mjs";
+import { LearnerAccountError, LearnerAccounts } from "./learner-accounts.mjs";
 import { langCookie, localeOf, T, languageSelector } from "./account/i18n.mjs";
 import { header, managementFooter, websiteHome } from "./header.mjs";
 import { emailPage, fallbackPage, pendingPage, profilePage, rejectedPage, decisionNotice, settingsPage } from "./account/pages.mjs";
@@ -124,6 +126,14 @@ export function createHandler({
 	// breinhap#34: assigning active publications to linked learners and groups
 	assignments = directory && identity?.store
 		? new AssignmentStore({ directory, membership: (sub) => identity.store.membership(sub) })
+		: undefined,
+	// breinhap#134: linking a learner profile to a student account with a one-time code
+	learnerAccounts = directory && identity?.store
+		? new LearnerAccounts({
+				directory,
+				membership: (sub) => identity.store.membership(sub),
+				budget: (kind, limit, seconds, requester) => identity.store.budget(kind, limit, seconds, requester),
+			})
 		: undefined,
 	// breinhap#80: the practice storage, shared by pack authoring (#80/#81) and the public learner (#82)
 	practiceStore = directory && content
@@ -336,11 +346,14 @@ export function createHandler({
 			const adminPrincipal = { sub: value.saved.sub, role: "breinhap.admin" };
 			if (req.method === "GET" && url.pathname === "/beheer/leerlingen") {
 				if (!directory) return send(200, directoryUnavailable(req.managementSession));
+				const linkStates = learnerAccounts
+					? await learnerAccounts.states(adminPrincipal)
+					: [];
 				return send(
 					200,
 					page(
 						tr("Leerlingen en groepen"),
-						notice + adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members()),
+						notice + adminDirectoryPage(await directory.overview(adminPrincipal), value.saved.csrf, await identity.store.members(), linkStates),
 						null,
 						req.managementSession,
 					),
@@ -399,6 +412,56 @@ export function createHandler({
 				return send(403, tr("Aanvraag geweigerd."));
 			if (DIRECTORY_PATHS.test(url.pathname)) {
 				if (!directory) return send(200, directoryUnavailable(req.managementSession));
+				// breinhap#134: a link code is shown once, so creating one answers with a page, not a redirect
+				if (url.pathname === "/beheer/leerlingen/koppelcode") {
+					if (!learnerAccounts) return send(404, tr("Niet gevonden"));
+					if (form.getAll("learner").length !== 1) return send(400, tr("Ongeldige leerling."));
+					try {
+						const created = await learnerAccounts.createCode(adminPrincipal, form.get("learner"));
+						return send(
+							200,
+							page(
+								tr("Koppelcode gemaakt"),
+								linkCodePage(created.learnerName, created, "/beheer/leerlingen"),
+								null,
+								req.managementSession,
+							),
+						);
+					} catch (error) {
+						if (error.code !== "not_found" && error.code !== "linked") throw error;
+						return send(
+							error.code === "not_found" ? 404 : 409,
+							page(
+								tr("Niet gewijzigd"),
+								ui`${esc(DIRECTORY_ERRORS()[error.code] ?? DIRECTORY_ERRORS().forbidden)} <a href="/beheer/leerlingen">${tr("Terug")}</a>`,
+								null,
+								req.managementSession,
+							),
+						);
+					}
+				}
+				if (url.pathname === "/beheer/leerlingen/koppelcode/intrekken") {
+					if (!learnerAccounts) return send(404, tr("Niet gevonden"));
+					if (form.getAll("learner").length !== 1) return send(400, tr("Ongeldige leerling."));
+					try {
+						await learnerAccounts.revokeCode(adminPrincipal, form.get("learner"));
+					} catch (error) {
+						if (error.code !== "not_found") throw error;
+						return send(404, page(tr("Niet gewijzigd"), ui`${esc(DIRECTORY_ERRORS().not_found)} <a href="/beheer/leerlingen">${tr("Terug")}</a>`, null, req.managementSession));
+					}
+					return send(303, "", undefined, { Location: "/beheer/leerlingen" });
+				}
+				if (url.pathname === "/beheer/leerlingen/koppeling/verbreken") {
+					if (!learnerAccounts) return send(404, tr("Niet gevonden"));
+					if (form.getAll("learner").length !== 1) return send(400, tr("Ongeldige leerling."));
+					try {
+						await learnerAccounts.unlink(adminPrincipal, form.get("learner"));
+					} catch (error) {
+						if (error.code !== "not_found") throw error;
+						return send(404, page(tr("Niet gewijzigd"), ui`${esc(DIRECTORY_ERRORS().not_found)} <a href="/beheer/leerlingen">${tr("Terug")}</a>`, null, req.managementSession));
+					}
+					return send(303, "", undefined, { Location: "/beheer/leerlingen" });
+				}
 				const result = await adminDirectoryAction(url.pathname, form, {
 					directory,
 					principal: adminPrincipal,
@@ -576,6 +639,63 @@ export function createHandler({
 				result.headers ?? {},
 			);
 		}
+		// breinhap#134: a linked adult makes link codes for their own learners on their own page
+		if (
+			identity &&
+			["/leerlingen/koppelcode", "/leerlingen/koppelcode/intrekken"].includes(url.pathname)
+		) {
+			if (req.method !== "POST")
+				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", {
+					Allow: "POST",
+				});
+			const value = await identity.current(req).catch(() => null);
+			if (!value)
+				return send(303, "", undefined, { Location: `/login?next=${encodeURIComponent(url.pathname)}&lang=${localeOf(req, url)}` });
+			const principal = await identity.principal(req);
+			if (!principal)
+				return send(403, page(tr("Geen toegang"), tr("Je hebt geen toegang tot deze pagina.")));
+			if (!directory || !learnerAccounts)
+				return send(200, directoryUnavailable(req.managementSession));
+			const form = await readForm(req);
+			if (
+				req.headers.origin !== ORIGIN ||
+				form.getAll("csrf").length !== 1 ||
+				form.get("csrf") !== value.saved.csrf
+			)
+				return send(403, tr("Aanvraag geweigerd."));
+			const revoking = url.pathname === "/leerlingen/koppelcode/intrekken";
+			if (form.getAll("learner").length !== 1) return send(400, tr("Ongeldige leerling."));
+			try {
+				if (revoking) await learnerAccounts.revokeCode(principal, form.get("learner"));
+				else {
+					const created = await learnerAccounts.createCode(principal, form.get("learner"));
+					return send(
+						200,
+						page(
+							tr("Koppelcode gemaakt"),
+							linkCodePage(created.learnerName, created, "/leerlingen"),
+							url.pathname,
+							req.managementSession,
+						),
+					);
+				}
+			} catch (error) {
+				// `not_found` also arrives as a DirectoryError: the learner is unknown or not theirs
+				if (!(error instanceof LearnerAccountError) && !(error instanceof DirectoryError)) throw error;
+				if (error.code !== "not_found" && error.code !== "linked" && error.code !== "forbidden")
+					throw error;
+				return send(
+					error.code === "not_found" ? 404 : error.code === "forbidden" ? 403 : 409,
+					page(
+						tr("Niet gewijzigd"),
+						ui`${esc(DIRECTORY_ERRORS()[error.code] ?? DIRECTORY_ERRORS().forbidden)} <a href="/leerlingen">${tr("Terug")}</a>`,
+						url.pathname,
+						req.managementSession,
+					),
+				);
+			}
+			return send(303, "", undefined, { Location: "/leerlingen" });
+		}
 		if (!["GET", "HEAD"].includes(req.method))
 			return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", {
 				Allow: "GET, HEAD",
@@ -719,13 +839,19 @@ export function createHandler({
 			const principal = await identity?.principal(req);
 			if (!principal)
 				return send(403, page(tr("Geen toegang"), tr("Je hebt geen toegang tot deze pagina.")));
-			const [learners, groups] = await Promise.all([
+			const [learners, groups, linkStates] = await Promise.all([
 				directory.learners(principal),
 				directory.groups(principal),
+				learnerAccounts ? learnerAccounts.states(principal) : Promise.resolve([]),
 			]);
 			return send(
 				200,
-				page(tr("Leerlingen"), learnersPage(learners, groups), url.pathname, req.managementSession),
+				page(
+					tr("Leerlingen"),
+					learnersPage(learners, groups, req.managementSession.csrf, linkStates),
+					url.pathname,
+					req.managementSession,
+				),
 			);
 		}
 		const route = routes().get(url.pathname);
