@@ -81,7 +81,7 @@ test("editor, library, directory and preview localize chrome while preserving na
 		const directory = adminDirectoryPage({ learners: [{ id: "one", displayName: "Overzicht", schoolYear: 3 }], groups: [], memberships: [], links: [], grants: [] }, "csrf");
 		assert.ok(directory.includes(`<h2>${expected[lang][1]}</h2>`));
 		assert.match(directory, /<strong>Overzicht<\/strong>/);
-		assert.match(learnersPage([{ displayName: "Opslaan", schoolYear: 3 }], []), /<li>Opslaan/);
+		assert.match(learnersPage([{ displayName: "Opslaan", schoolYear: 3 }], []), /<li><p>Opslaan/);
 		const object = objectNamed("preview", { title: "Opslaan" });
 		const preview = previewPage(object, new URLSearchParams(), { base: "/bibliotheek/preview/voorbeeld", back: "/bibliotheek/preview", label: "v1" });
 		assert.ok(preview.includes(object.missions[0].warmup.text));

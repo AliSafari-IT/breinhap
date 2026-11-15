@@ -4043,5 +4043,119 @@ export const MESSAGES = {
 		"en": "An administrator decides what is public on breinhap.com. Withdrawing removes it there at once too.",
 		"fr": "Un administrateur décide de ce qui est public sur breinhap.com. Le retrait le supprime aussi immédiatement là-bas.",
 		"de": "Ein Administrator entscheidet, was auf breinhap.com öffentlich ist. Zurückziehen entfernt es auch dort sofort."
+	},
+	"Niet gekoppeld": {
+		"nl": "Niet gekoppeld",
+		"en": "Not linked",
+		"fr": "Non lié",
+		"de": "Nicht verknüpft"
+	},
+	"Gekoppeld sinds {0}": {
+		"nl": "Gekoppeld sinds {0}",
+		"en": "Linked since {0}",
+		"fr": "Lié depuis le {0}",
+		"de": "Verknüpft seit {0}"
+	},
+	"Code wacht tot {0}": {
+		"nl": "Code wacht tot {0}",
+		"en": "Code waiting until {0}",
+		"fr": "Code en attente jusqu’au {0}",
+		"de": "Code wartet bis {0}"
+	},
+	"Koppelcode maken": {
+		"nl": "Koppelcode maken",
+		"en": "Create link code",
+		"fr": "Créer un code de liaison",
+		"de": "Koppelcode erstellen"
+	},
+	"Nieuwe code": {
+		"nl": "Nieuwe code",
+		"en": "New code",
+		"fr": "Nouveau code",
+		"de": "Neuer Code"
+	},
+	"Koppeling verbreken": {
+		"nl": "Koppeling verbreken",
+		"en": "Unlink",
+		"fr": "Délier",
+		"de": "Verknüpfung aufheben"
+	},
+	"Koppelcode": {
+		"nl": "Koppelcode",
+		"en": "Link code",
+		"fr": "Code de liaison",
+		"de": "Koppelcode"
+	},
+	"Koppelcode gemaakt": {
+		"nl": "Koppelcode gemaakt",
+		"en": "Link code created",
+		"fr": "Code de liaison créé",
+		"de": "Koppelcode erstellt"
+	},
+	"Koppelcode voor": {
+		"nl": "Koppelcode voor",
+		"en": "Link code for",
+		"fr": "Code de liaison pour",
+		"de": "Koppelcode für"
+	},
+	"Deze code is {0} dagen geldig (tot {1}) en werkt maar één keer. Ze staat nergens opgeslagen: noteer haar nu.": {
+		"nl": "Deze code is {0} dagen geldig (tot {1}) en werkt maar één keer. Ze staat nergens opgeslagen: noteer haar nu.",
+		"en": "This code is valid for {0} days (until {1}) and works once only. It is not stored anywhere: write it down now.",
+		"fr": "Ce code est valable {0} jours (jusqu’au {1}) et ne fonctionne qu’une fois. Il n’est conservé nulle part : notez-le maintenant.",
+		"de": "Dieser Code ist {0} Tage gültig (bis {1}) und funktioniert nur einmal. Er wird nirgends gespeichert: Notieren Sie ihn jetzt."
+	},
+	"Print of kopieer deze regel voor de leerling:": {
+		"nl": "Print of kopieer deze regel voor de leerling:",
+		"en": "Print or copy this line for the student:",
+		"fr": "Imprimez ou copiez cette ligne pour l’élève :",
+		"de": "Drucken oder kopieren Sie diese Zeile für die Schülerin oder den Schüler:"
+	},
+	"Ga naar breinhap.com, kies": {
+		"nl": "Ga naar breinhap.com, kies",
+		"en": "Go to breinhap.com, choose",
+		"fr": "Allez sur breinhap.com, choisissez",
+		"de": "Gehen Sie zu breinhap.com, wählen Sie"
+	},
+	"Leerling aanmelden": {
+		"nl": "Leerling aanmelden",
+		"en": "Student sign-in",
+		"fr": "Connexion élève",
+		"de": "Schüleranmeldung"
+	},
+	"en typ deze code:": {
+		"nl": "en typ deze code:",
+		"en": "and type this code:",
+		"fr": "et tapez ce code :",
+		"de": "und tippen Sie diesen Code:"
+	},
+	"Terug naar de leerlingen": {
+		"nl": "Terug naar de leerlingen",
+		"en": "Back to the learners",
+		"fr": "Retour aux élèves",
+		"de": "Zurück zu den Lernenden"
+	},
+	"Deze leerling is al gekoppeld aan een account. Verbreek eerst de koppeling.": {
+		"nl": "Deze leerling is al gekoppeld aan een account. Verbreek eerst de koppeling.",
+		"en": "This learner is already linked to an account. Unlink first.",
+		"fr": "Cet élève est déjà lié à un compte. Déliez d’abord.",
+		"de": "Diese(r) Lernende ist bereits mit einem Konto verknüpft. Heben Sie zuerst die Verknüpfung auf."
+	},
+	"Ongeldige leerling.": {
+		"nl": "Ongeldige leerling.",
+		"en": "Invalid learner.",
+		"fr": "Élève non valable.",
+		"de": "Ungültige(r) Lernende."
+	},
+	"Een leerling heeft nog geen eigen account. Met een koppelcode koppelt de leerling zelf zijn account (aangemaakt op breinhap.com) aan zijn profiel: hij ziet dan de opdrachten die aan hem zijn toegewezen. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.": {
+		"nl": "Een leerling heeft nog geen eigen account. Met een koppelcode koppelt de leerling zelf zijn account (aangemaakt op breinhap.com) aan zijn profiel: hij ziet dan de opdrachten die aan hem zijn toegewezen. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.",
+		"en": "A learner has no account of their own yet. With a link code, the learner links their own account (created on breinhap.com) to their profile; they then see the assignments made to them. You pass the code on once; it works for 14 days and once only.",
+		"fr": "Un élève n’a pas encore de compte personnel. Avec un code de liaison, l’élève lie lui-même son compte (créé sur breinhap.com) à son profil ; il voit alors les devoirs qui lui sont attribués. Vous transmettez le code une seule fois ; il est valable 14 jours et une seule fois.",
+		"de": "Ein Lernender hat noch kein eigenes Konto. Mit einem Koppelcode verknüpft die Person ihr Konto (erstellt auf breinhap.com) selbst mit ihrem Profil; sie sieht dann die ihr zugewiesenen Aufgaben. Sie geben den Code einmal weiter; er gilt 14 Tage und nur einmal."
+	},
+	"Met een koppelcode koppelt een leerling zijn eigen account (op breinhap.com) aan zijn profiel; daarna ziet hij de opdrachten die jij aan hem toewijst. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.": {
+		"nl": "Met een koppelcode koppelt een leerling zijn eigen account (op breinhap.com) aan zijn profiel; daarna ziet hij de opdrachten die jij aan hem toewijst. Je geeft de code één keer door, ze werkt 14 dagen en maar één keer.",
+		"en": "With a link code, a learner links their own account (on breinhap.com) to their profile; they then see the assignments you make to them. You pass the code on once; it works for 14 days and once only.",
+		"fr": "Avec un code de liaison, un élève lie son propre compte (sur breinhap.com) à son profil ; il voit ensuite les devoirs que vous lui attribuez. Vous transmettez le code une seule fois ; il est valable 14 jours et une seule fois.",
+		"de": "Mit einem Koppelcode verknüpft ein Lernender sein eigenes Konto (auf breinhap.com) mit seinem Profil; danach sieht er die Aufgaben, die Sie ihm zuweisen. Sie geben den Code einmal weiter; er gilt 14 Tage und nur einmal."
 	}
 };
