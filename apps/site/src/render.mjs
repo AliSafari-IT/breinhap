@@ -200,6 +200,29 @@ function home(t, lang) {
     .map((it) => `<details class="faq-item"><summary>${esc(it.q)}</summary><p>${esc(it.a)}</p></details>`)
     .join("");
 
+  // The planned student web screens (breinhap#22), as sketches: decorative mock UI in a browser frame, with the
+  // caption carrying the meaning. Classes only, no style attributes (CSP).
+  const st = t.students;
+  const mock = (ui) => {
+    const head = `<p class="sk-h">${esc(ui.heading)}</p>${ui.who ? `<p class="sk-sub">${esc(ui.who)}</p>` : ""}`;
+    if (ui.items)
+      return head + ui.items.map(([state, title, meta, until], i) => `<div class="sk-item"><span class="sk-badge sk-badge--${i + 1}">${esc(state)}</span><span class="sk-title">${esc(title)}</span><span class="sk-meta">${esc(meta)}</span>${until ? `<span class="sk-meta sk-until">${esc(until)}</span>` : ""}</div>`).join("");
+    if (ui.missions)
+      return head + ui.missions.map(([title, meta, action], i) => `<div class="sk-item sk-row"><span><span class="sk-title">${esc(title)}</span><span class="sk-meta">${esc(meta)}</span></span><span class="${i === 0 ? "sk-btn" : "sk-done"}">${esc(action)}${i === 0 ? "" : " ✓"}</span></div>`).join("");
+    if (ui.rows)
+      return head + ui.rows.map(([name, state], i) => `<div class="sk-item sk-row"><span class="sk-title">${esc(name)}</span><span class="sk-state sk-state--${i + 1}">${esc(state)}</span></div>`).join("");
+    return `${head}<span class="sk-label">${esc(ui.label)}</span><span class="sk-input">${esc(ui.value)}</span><span class="sk-btn sk-btn--wide">${esc(ui.button)}</span>`;
+  };
+  const sketches = st.screens
+    .map(
+      (sc, i) => `<li class="sketch"><figure>
+        <div class="sk-frame" aria-hidden="true"><div class="sk-bar"><span></span><span></span><span></span><span class="sk-tag">${esc(st.sketch)}</span></div><div class="sk-screen">${mock(sc.ui)}</div></div>
+        <figcaption><span class="flow-num" aria-hidden="true">${i + 1}</span><span><strong>${esc(sc.title)}</strong> ${esc(sc.text)}</span></figcaption>
+      </figure></li>`,
+    )
+    .join("");
+  const studentNotes = st.notes.map((n) => `<li>${icon("shield")}<span>${esc(n)}</span></li>`).join("");
+
   const body = `
 <section class="hero">
   <div class="wrap hero-inner">
@@ -244,6 +267,16 @@ function home(t, lang) {
         <button type="button" class="btn btn--ghost flow-toggle" data-flow-toggle data-play="${esc(f.play)}" data-pause="${esc(f.pause)}" hidden>${esc(f.pause)}</button>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="leerlingen" class="section section--plan" aria-labelledby="students-title">
+  <div class="wrap">
+    <p class="kicker">${esc(st.kicker)}</p>
+    <h2 id="students-title">${esc(st.title)}</h2>
+    <p class="lead">${esc(st.lead)}</p>
+    <ol class="sketches">${sketches}</ol>
+    <ul class="safe sketch-notes">${studentNotes}</ul>
   </div>
 </section>
 

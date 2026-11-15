@@ -299,3 +299,36 @@ p { margin: 0 0 1em; }
 .app-card h3 { margin-top: 0; }
 .app-card .btn { margin-top: auto; max-width: 100%; white-space: normal; }
 @media (max-width: 860px) { .app-cards { grid-template-columns: 1fr; } }
+
+/* The planned student web screens (breinhap#22): sketches in a small browser frame. */
+.section--plan { border-top: 1px solid var(--line); }
+.sketches { list-style: none; margin: 28px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+.sketch figure { margin: 0; display: grid; gap: 14px; }
+.sk-frame { border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: var(--shadow); overflow: hidden; }
+.sk-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: var(--top-bg); }
+.sk-bar > span:not(.sk-tag) { width: 9px; height: 9px; border-radius: 50%; background: var(--top-muted); opacity: 0.6; }
+.sk-tag { margin-left: auto; color: var(--top-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.sk-screen { display: grid; gap: 8px; align-content: start; min-height: 232px; padding: 16px; background: var(--bg); font-size: 0.86rem; line-height: 1.35; }
+.sk-h { margin: 0; font-weight: 800; font-size: 1rem; color: var(--ink); }
+.sk-sub { margin: -4px 0 2px; color: var(--muted); font-size: 0.8rem; }
+.sk-label { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.sk-input { display: block; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); overflow-wrap: anywhere; }
+.sk-btn { display: inline-block; padding: 7px 12px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 700; white-space: nowrap; }
+.sk-btn--wide { display: block; text-align: center; }
+.sk-item { display: grid; gap: 2px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.sk-row { grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.sk-row > span:first-child { display: grid; gap: 2px; }
+.sk-title { font-weight: 700; color: var(--ink); }
+.sk-meta { color: var(--muted); font-size: 0.78rem; }
+.sk-until { font-weight: 700; }
+.sk-badge { justify-self: start; padding: 1px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; background: var(--accent-soft); color: var(--ink); }
+.sk-badge--2 { background: var(--warn-bg); }
+.sk-badge--3, .sk-done { color: var(--good); }
+.sk-badge--3 { background: transparent; border: 1px solid var(--line); }
+.sk-done { font-weight: 700; white-space: nowrap; }
+.sk-state { font-size: 0.78rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.sk-state--1 { color: var(--good); }
+.sk-state--2 { color: var(--ink); }
+.sketch figcaption { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; color: var(--muted); }
+.sketch figcaption strong { display: block; color: var(--ink); }
+.sketch-notes { margin-top: 32px; }

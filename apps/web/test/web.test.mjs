@@ -239,3 +239,11 @@ test("favicons: ico, svg, Apple touch icon and a web manifest on every page", ()
   assert.deepEqual(manifest.icons.map((i) => i.sizes), ["192x192", "512x512"]);
 });
 
+test("the coming-soon banner says Breinhap is free, in every language", () => {
+  const free = { "": /volledig gratis: er is geen enkele geldtransactie tussen gebruikers en Breinhap/, "en/": /completely free: no money changes hands between users and Breinhap/, "fr/": /entièrement gratuit : aucune transaction financière/, "de/": /vollständig kostenlos: Zwischen Nutzerinnen und Nutzern und Breinhap fließt kein Geld/ };
+  for (const [folder, pattern] of Object.entries(free)) {
+    const banner = read(`${folder}index.html`).match(/<aside class="release-banner".*?<\/aside>/s)[0];
+    assert.match(banner, pattern, folder);
+  }
+});
+

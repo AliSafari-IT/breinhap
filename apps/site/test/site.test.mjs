@@ -136,3 +136,22 @@ test("both introduction languages expose public web and restricted adult entry p
   assert.ok(html.includes(`Website v${JSON.parse(readFileSync(new URL("../package.json", import.meta.url),"utf8")).version}`));
  }
 });
+
+test("the home pages sketch the coming student web flow, with the free and 13+ notes, in both languages", () => {
+  for (const [file, title, free, age] of [
+    ["index.html", "Binnenkort: je opdrachten op het web", /volledig gratis: er is geen enkele geldtransactie tussen gebruikers en Breinhap/, /alleen gebruikt worden door leerlingen van 13 jaar of ouder/],
+    ["en/index.html", "Coming soon: your assignments on the web", /completely free: no money changes hands between users and Breinhap/, /only be used by students aged 13 or older/],
+  ]) {
+    const html = readFileSync(new URL(`../dist/${file}`, import.meta.url), "utf8");
+    const section = html.match(/<section id="leerlingen".*?<\/section>/s)[0];
+    assert.ok(section.includes(`<h2 id="students-title">${title}</h2>`), file);
+    assert.equal((section.match(/<li class="sketch">/g) ?? []).length, 5, file);
+    // the mock screens are decoration; the captions carry the meaning
+    assert.equal((section.match(/<div class="sk-frame" aria-hidden="true">/g) ?? []).length, 5, file);
+    assert.equal((section.match(/<figcaption>/g) ?? []).length, 5, file);
+    assert.match(section, free, file);
+    assert.match(section, age, file);
+    assert.doesNotMatch(section, /style=|<style/);
+  }
+});
+

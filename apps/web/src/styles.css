@@ -108,3 +108,4 @@ footer nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .ex-read-row .ex-read { margin: 0; }
 .ex-read-note:empty { display: none; }
 .ex-read-note { margin: 8px 0 0; }
+.release-banner .banner-free { font-weight: 700; }
