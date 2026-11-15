@@ -408,6 +408,8 @@ export function createIdentity({
 				invite,
 				// Alleen een vaste webbestemming; nooit een retour-URL uit de browser overnemen.
 				webLocale: url.searchParams.getAll("web").length === 1 && url.searchParams.get("web") === "1" ? localeOf(req, url) : null,
+				// an allowlisted local path to return to (safeNext), never a URL from elsewhere
+				next: url.searchParams.getAll("next").length === 1 ? safeNext(url.searchParams.get("next")) : null,
 				expires: now() + 600_000,
 			};
 			const location = await provider.authorizationUrl(state);
@@ -467,7 +469,7 @@ export function createIdentity({
 		if (!(await store.saveSession(id, saved)))
 			return message(400, tr("Deze aanmelding is beëindigd. Probeer opnieuw."));
 		const webLocale = LANGUAGES.includes(flow.webLocale) ? flow.webLocale : null;
-		const destination = flow.invite ? "/uitnodiging/bevestigen" : webLocale ? `${SITE_ORIGIN}/${webLocale === "nl" ? "" : `${webLocale}/`}` : "/";
+		const destination = flow.invite ? "/uitnodiging/bevestigen" : webLocale ? `${SITE_ORIGIN}/${webLocale === "nl" ? "" : `${webLocale}/`}` : flow.next ? safeNext(flow.next) : "/";
 		return redirect(destination, [
 			cookie(SESSION, id, Math.floor((saved.expires - time) / 1000)),
 			...(webLocale ? [langCookie(webLocale, new URL(ORIGIN).host)] : []),

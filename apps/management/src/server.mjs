@@ -249,8 +249,9 @@ export function createHandler({
 		if (identity && url.pathname === "/instellingen") {
 			if (!["GET", "HEAD", "POST"].includes(req.method))
 				return send(405, tr("Method not allowed"), "text/plain; charset=utf-8", { Allow: "GET, POST" });
-			const value = await identity.current(req, false).catch(() => null);
-			if (!value) return send(303, "", undefined, { Location: `/login?next=${encodeURIComponent("/instellingen")}` });
+			// A visit or save is activity: renew the idle timeout (only background polls like /auth/session do not).
+			const value = await identity.current(req).catch(() => null);
+			if (!value) return send(303, "", undefined, { Location: `/login?next=${encodeURIComponent("/instellingen")}&lang=${localeOf(req, url)}` });
 			const lang = localeOf(req, url);
 			if (req.method === "POST") {
 				const form = await readForm(req);
@@ -622,7 +623,9 @@ export function createHandler({
 			const stepUp = url.pathname === "/login" && (url.searchParams.get("opnieuw") === "1" || url.searchParams.get("fresh") === "1");
 			const switching = url.pathname === "/login" && url.searchParams.get("switch") === "1";
 			const signedIn = identity ? await identity.current(req, false).catch(() => null) : null;
-			if (signedIn && !stepUp && !switching) return send(303, "", undefined, { Location: "/" });
+			// Where to go after signing in: only allowlisted local paths (safeNext), "/" otherwise.
+			const next = url.searchParams.getAll("next").length === 1 ? safeNext(url.searchParams.get("next")) : null;
+			if (signedIn && !stepUp && !switching) return send(303, "", undefined, { Location: next ?? "/" });
 			// breinhap#signup: Breinhap's own pages; ASafariM only sends the e-mail code.
 			if (identity?.headless) {
 				const lang = localeOf(req, url);
@@ -633,7 +636,7 @@ export function createHandler({
 					: "";
 				return send(
 					200,
-					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice, email: stepUp ? signedIn?.saved.email ?? "" : "", stepUp, switching, next: stepUp ? safeNext(url.searchParams.get("next")) : null }),
+					emailPage(lang, { register: url.pathname === "/register", version: manifest.version, notice, email: stepUp ? signedIn?.saved.email ?? "" : "", stepUp, switching, next: stepUp ? safeNext(url.searchParams.get("next")) : next }),
 					undefined,
 					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);
@@ -642,7 +645,7 @@ export function createHandler({
 				const lang = localeOf(req, url);
 				return send(
 					200,
-					fallbackPage(lang, { register: url.pathname === "/register", version: manifest.version }),
+					fallbackPage(lang, { register: url.pathname === "/register", version: manifest.version, next }),
 					undefined,
 					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);

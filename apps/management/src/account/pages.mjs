@@ -43,22 +43,22 @@ ${error(lang, errorCode)}<button type="submit" class="action-block">${t.sendCode
 <p class="auth-secure">${LOCK} ${t.secure}</p>
 <p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
 <p class="auth-student">${t.student}</p>`;
-	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : stepUp ? `/login?opnieuw=1&next=${encodeURIComponent(next ?? "/")}` : switching ? "/login?switch=1" : "/login", version });
+	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : stepUp ? `/login?opnieuw=1&next=${encodeURIComponent(next ?? "/")}` : switching ? "/login?switch=1" : next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login", version });
 }
 
 /**
  * The same page while ASafariM's headless sign-in is not switched on (ASAFARIM_HEADLESS_SECRET unset): one button to
  * the ASafariM sign-in page. It follows the page's language and has the language selector like the main one.
  */
-export function fallbackPage(lang, { register = false, version }) {
+export function fallbackPage(lang, { register = false, version, next = null }) {
 	const t = T[lang];
 	const [switchText, switchLink] = register ? t.toSignin : t.toRegister;
 	const card = `<p class="auth-lead">${register ? t.fallbackRegisterLead : t.fallbackSigninLead}</p>${register ? steps(lang, 0, "fallbackSteps") : ""}
-<a class="action action-block" href="/auth/start">${register ? t.fallbackRegisterButton : t.fallbackSigninButton} <span aria-hidden="true">→</span></a>
+<a class="action action-block" href="/auth/start${next && next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}">${register ? t.fallbackRegisterButton : t.fallbackSigninButton} <span aria-hidden="true">→</span></a>
 <p class="auth-secure">${LOCK} ${t.secure}</p>
 <p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
 <p class="auth-student">${t.student}</p>`;
-	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : "/login", version });
+	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login", version });
 }
 
 export function codePage(lang, { masked, csrf, register = false, errorCode = "", version }) {
@@ -117,7 +117,7 @@ const dateTime = (lang, at, timeOnly = false) => new Intl.DateTimeFormat(`${lang
 	timeZone: "Europe/Brussels", ...(timeOnly ? {} : { dateStyle: "medium" }), timeStyle: "short", hourCycle: "h23",
 }).format(new Date(at));
 
-const accountStrip = (lang, csrf, email) => `<div class="auth-account"><span>${esc(T[lang].signedIn)} <strong>${esc(email ?? "")}</strong> ·</span>${signoutForm(lang, csrf)}<a href="/">${esc(T[lang].workplace)}</a></div>`;
+const accountStrip = (lang, csrf, email) => `<div class="auth-account"><span>${esc(T[lang].signedIn)} <strong>${esc(email ?? "")}</strong> ·</span>${signoutForm(lang, csrf)}<a href="/">${esc(T[lang].workplace)}</a><a href="/instellingen?lang=${lang}">${esc(settingsLabel(lang))}</a></div>`;
 
 export function rejectedPage(lang, { csrf, email, version }) {
 	const t = T[lang];

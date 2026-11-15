@@ -524,3 +524,14 @@ test("initials for breinhap.com's account menu come only from letters and digits
 	assert.equal(initialsOf("<b>@example.test"), "B");
 	for (const nothing of ["+@example.test", "", undefined, null, 42]) assert.equal(initialsOf(nothing), "");
 });
+
+test("an OIDC sign-in started with next=/instellingen returns there; foreign destinations return to /", async () => {
+	for (const [next, expected] of [["/instellingen", "/instellingen"], ["https://evil.test", "/"], ["//evil.test", "/"]]) {
+		const ctx = await setup();
+		const flow = await ctx.start(`/auth/start?next=${encodeURIComponent(next)}`);
+		const response = await ctx.identity.handle(request(flow.cookie), new URL(`${ORIGIN}/auth/callback?state=${flow.state}&code=valid`));
+		assert.equal(response.status, 303, next);
+		assert.equal(response.headers.Location, expected, next);
+	}
+});
+
