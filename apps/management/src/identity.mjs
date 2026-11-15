@@ -254,6 +254,8 @@ export function createIdentity({
 				grant.permissions.includes("breinhap.memberships.manage"),
 		};
 		req.managementSession.canRequest = !allowed && !studentOnly;
+		// breinhap#132: administrators see how many role requests wait, in the navigation of every page
+		if (req.managementSession.admin) req.managementSession.waiting = (await store.roleRequests()).length;
 		// the administrator's list of people: members from before the index appear on their next visit
 		if (allowed) await store.indexMember(value.saved.sub, value.saved.email ? { email: value.saved.email } : {});
 		return {
