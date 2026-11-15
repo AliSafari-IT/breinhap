@@ -216,3 +216,14 @@ test("signed in: the account menu links to the voice settings in management, in 
   assert.match(read("example.js"), /BreinhapAccount/);
 });
 
+test("read aloud names its voice and never swaps a chosen recorded voice silently", () => {
+  const script = read("example.js");
+  // the clip key is computed before the click, so playback starts inside the click (browser autoplay rules)
+  assert.match(script, /if \(key !== null\) return play\(key\);/);
+  assert.doesNotMatch(script, /play\(\)\.catch\(function \(\) \{ speakDevice/);
+  for (const [folder, , , lang] of LANGUAGES) {
+    const ui = JSON.parse(read(`${folder}index.html`).match(/<script type="application\/json" id="example-ui">(.*?)<\/script>/s)[1]);
+    assert.ok(ui.clipMissing && ui.clipFailed, lang);
+  }
+});
+

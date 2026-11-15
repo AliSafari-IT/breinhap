@@ -104,3 +104,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .ex-read { align-self: start; margin: 0 0 16px; }
 .ex-voice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
 .ex-voice { min-height: 44px; max-width: 100%; padding: 6px 10px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; }
+.ex-read-row { margin: 0 0 16px; }
+.ex-read-row .ex-read { margin: 0; }
+.ex-read-note:empty { display: none; }
+.ex-read-note { margin: 8px 0 0; }
