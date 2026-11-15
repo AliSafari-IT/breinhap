@@ -225,6 +225,7 @@ test("read aloud names its voice and never swaps a chosen recorded voice silentl
     const ui = JSON.parse(read(`${folder}index.html`).match(/<script type="application\/json" id="example-ui">(.*?)<\/script>/s)[1]);
     assert.ok(ui.clipMissing && ui.clipFailed, lang);
   }
+});
 
 test("favicons: ico, svg, Apple touch icon and a web manifest on every page", () => {
   for (const [folder] of LANGUAGES) {
