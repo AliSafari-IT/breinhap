@@ -204,6 +204,11 @@ test("a new account fills in its profile and role, waits for approval, and then 
 	const overview = await call("/", { cookie: admin });
 	assert.match(overview.body, /1 aanvraag wacht op jouw goedkeuring/);
 	assert.match(overview.body, /href="\/beheer"/);
+	// and the navigation of every page shows the count next to Toegang beheren (breinhap#132)
+	for (const path of ["/", "/bibliotheek"]) {
+		const any = await call(path, { cookie: admin });
+		assert.ok(any.body.includes('Toegang beheren <span class="nav-badge"><span aria-hidden="true">1</span><span class="visually-hidden">: 1 aanvraag wacht</span></span></a>'), path);
+	}
 	const manage = await call("/beheer", { cookie: admin });
 	assert.equal(manage.status, 200);
 	// the administrator sees who asks, by name, with what they told; never an account code
