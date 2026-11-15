@@ -1,3 +1,4 @@
+import { cleanVoices } from "./voices.mjs";
 import { tr, ui } from "./workspace-i18n.mjs";
 import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
@@ -38,7 +39,7 @@ export function safeNext(value) {
 	const path = url.pathname;
 	if (url.origin !== ORIGIN || !(path === "/" || path === "/beheer" ||
 		path.startsWith("/beheer/") || path.startsWith("/bibliotheek") ||
-		path === "/uitnodiging/bevestigen")) return "/";
+		path === "/uitnodiging/bevestigen" || path === "/instellingen")) return "/";
 	return `${path}${url.search}${url.hash}`;
 }
 /**
@@ -70,7 +71,7 @@ export async function readForm(req, limit = 4096) {
 	}
 	return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
 }
-const csrfValid = (req, form, session) =>
+export const csrfValid = (req, form, session) =>
 	req.method === "POST" &&
 	req.headers.origin === ORIGIN &&
 	form.getAll("csrf").length === 1 &&
@@ -322,6 +323,10 @@ export function createIdentity({
 			]);
 		}
 		if (path === "/auth/session") {
+			const voicesOf = async (sub) => {
+				const voices = cleanVoices(await store.voicePreferences(sub).catch(() => ({})));
+				return Object.keys(voices).length ? { voices } : {};
+			};
 			if (req.method !== "GET") return message(405, tr("Method not allowed"));
 			const value = await current(req, false);
 			// breinhap.com is same-site, so the SameSite=Lax host-only cookie is sent with its credentialed
@@ -331,7 +336,8 @@ export function createIdentity({
 			return {
 				status: 200,
 				// breinhap#24 (S4): the navbar's account menu shows initials; nothing else about the person leaves.
-				body: JSON.stringify(value ? { active: true, access: !!value.allowed, initials: initialsOf(value.saved.email) } : { active: false, access: false }),
+				// breinhap#124: and, only when the person chose some, their read-aloud voice per language.
+				body: JSON.stringify(value ? { active: true, access: !!value.allowed, initials: initialsOf(value.saved.email), ...(await voicesOf(value.saved.sub)) } : { active: false, access: false }),
 				type: "application/json; charset=utf-8",
 				headers: {
 					Vary: "Origin",

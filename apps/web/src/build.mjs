@@ -28,7 +28,7 @@ const LEGAL_PATHS = {
 
 const copy = {
   nl: {
-    skip: "Naar de inhoud", theme: "Donker thema", mainNav: "Hoofdmenu", languageLabel: "Taal · Langue · Sprache · Language",
+    settings: "Instellingen", skip: "Naar de inhoud", theme: "Donker thema", mainNav: "Hoofdmenu", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Aanmelden", register: "Account aanmaken", account: "Account", manage: "Breinhap beheer", myAccount: "Mijn account", switchAccount: "Wissel van account", legalNav: "Juridisch",
     title: "Leren in kleine happen.", intro: "Een rustige plek om te beginnen, één kleine stap tegelijk.",
     badge: "Binnenkort op het web", notice: "We bouwen Breinhap stap voor stap. Hieronder kun je uitproberen hoe Breinhap werkt, met voorbeeldmissies; de volledige missies in je browser komen later.",
@@ -44,7 +44,7 @@ const copy = {
     footer: "Kleine stappen. Op jouw tempo.", missing: "Deze pagina bestaat nog niet.", back: "Terug naar Breinhap",
   },
   en: {
-    skip: "Skip to content", theme: "Dark theme", mainNav: "Main", languageLabel: "Taal · Langue · Sprache · Language",
+    settings: "Settings", skip: "Skip to content", theme: "Dark theme", mainNav: "Main", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Sign in", register: "Create account", account: "Account", manage: "Breinhap management", myAccount: "My account", switchAccount: "Switch account", legalNav: "Legal",
     title: "Learning in small bites.", intro: "A calm place to start, one small step at a time.",
     badge: "Coming soon to the web", notice: "We are building Breinhap step by step. Below you can try how Breinhap works, with example missions; the full missions in your browser come later.",
@@ -60,7 +60,7 @@ const copy = {
     footer: "Small steps. At your pace.", missing: "This page does not exist yet.", back: "Back to Breinhap",
   },
   fr: {
-    skip: "Aller au contenu", theme: "Thème sombre", mainNav: "Menu principal", languageLabel: "Taal · Langue · Sprache · Language",
+    settings: "Paramètres", skip: "Aller au contenu", theme: "Thème sombre", mainNav: "Menu principal", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Se connecter", register: "Créer un compte", account: "Compte", manage: "Gestion Breinhap", myAccount: "Mon compte", switchAccount: "Changer de compte", legalNav: "Mentions légales",
     title: "Apprendre par petites bouchées.", intro: "Un endroit calme pour commencer, une petite étape à la fois.",
     badge: "Bientôt sur le web", notice: "Nous construisons Breinhap étape par étape. Vous pouvez ci-dessous essayer le fonctionnement de Breinhap avec des missions d’exemple ; les missions complètes dans votre navigateur viendront plus tard.",
@@ -76,7 +76,7 @@ const copy = {
     footer: "Petits pas. À votre rythme.", missing: "Cette page n’existe pas encore.", back: "Retour à Breinhap",
   },
   de: {
-    skip: "Zum Inhalt", theme: "Dunkles Design", mainNav: "Hauptmenü", languageLabel: "Taal · Langue · Sprache · Language",
+    settings: "Einstellungen", skip: "Zum Inhalt", theme: "Dunkles Design", mainNav: "Hauptmenü", languageLabel: "Taal · Langue · Sprache · Language",
     login: "Anmelden", register: "Konto erstellen", account: "Konto", manage: "Breinhap-Verwaltung", myAccount: "Mein Konto", switchAccount: "Konto wechseln", legalNav: "Rechtliches",
     title: "Lernen in kleinen Happen.", intro: "Ein ruhiger Ort zum Anfangen, ein kleiner Schritt nach dem anderen.",
     badge: "Bald im Web", notice: "Wir bauen Breinhap Schritt für Schritt. Unten können Sie ausprobieren, wie Breinhap funktioniert, mit Beispielmissionen; die vollständigen Missionen im Browser folgen später.",
@@ -123,7 +123,7 @@ const switcher = (lang, t) =>
  * control, so its accessible name contains its visible label (WCAG 2.5.3, #90).
  */
 const accountMenu = (lang, t) =>
-  `<details class="account-menu" data-account="menu" hidden><summary class="account-trigger"><span class="account-initials" data-account="initials" aria-hidden="true"></span><span>${esc(t.account)}</span></summary><div class="account-panel"><a href="${MANAGEMENT}/?lang=${lang}" data-account="manage" hidden>${esc(t.manage)}</a><a href="${MANAGEMENT}/?lang=${lang}" data-account="profile" hidden>${esc(t.myAccount)}</a><a href="${MANAGEMENT}/login?switch=1&amp;lang=${lang}">${esc(t.switchAccount)}</a></div></details>`;
+  `<details class="account-menu" data-account="menu" hidden><summary class="account-trigger"><span class="account-initials" data-account="initials" aria-hidden="true"></span><span>${esc(t.account)}</span></summary><div class="account-panel"><a href="${MANAGEMENT}/?lang=${lang}" data-account="manage" hidden>${esc(t.manage)}</a><a href="${MANAGEMENT}/?lang=${lang}" data-account="profile" hidden>${esc(t.myAccount)}</a><a href="${MANAGEMENT}/instellingen?lang=${lang}" data-account="settings">${esc(t.settings)}</a><a href="${MANAGEMENT}/login?switch=1&amp;lang=${lang}">${esc(t.switchAccount)}</a></div></details>`;
 
 function page(lang, missing = false) {
   const t = copy[lang];

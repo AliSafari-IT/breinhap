@@ -275,6 +275,30 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 		"https://breinhap.com",
 	);
 	assert.deepEqual(JSON.parse(anonymous.body), { active: false, access: false });
+	// breinhap#124: Instellingen → Voorleesstem, one voice per reading language, kept with the account.
+	assert.equal((await get("/instellingen")).headers.location, "/login?next=%2Finstellingen");
+	const settings = await get("/instellingen?lang=en", { headers: { Cookie: session } });
+	assert.equal(settings.status, 200);
+	assert.match(settings.body, /<h2>Reading voice<\/h2>/);
+	assert.ok(settings.body.includes('<select id="voice-nl" name="voice-nl"><option value="emma" selected>Emma · recorded voice</option>'));
+	assert.ok(settings.body.includes(`<option value="steven">Steven · recorded voice</option><option value="device">Your browser&#39;s voice</option>`));
+	for (const reading of ["fr", "en", "de"]) assert.ok(!settings.body.includes(`name="voice-${reading}"`), reading);
+	assert.ok(settings.body.includes('There are no recorded voices for <span lang="fr">Français</span>, <span lang="en">English</span>, <span lang="de">Deutsch</span> yet.'));
+	assert.match(home.body, /<a href="\/instellingen">Instellingen<\/a>/);
+	const settingsCsrf = /name="csrf" value="([^"]+)"/.exec(settings.body)[1];
+	const post = (body, origin = "https://management.breinhap.com") =>
+		get("/instellingen?lang=en", { method: "POST", headers: { Cookie: session, Origin: origin }, body });
+	assert.equal((await post(`csrf=${settingsCsrf}&voice-nl=steven`, "https://evil.example")).status, 403);
+	assert.equal((await post(`csrf=wrong&voice-nl=steven`)).status, 403);
+	const saved = await post(`csrf=${settingsCsrf}&voice-nl=steven&voice-fr=emma&voice-de=device&voice-en=%3Cx%3E`);
+	assert.equal(saved.status, 303);
+	assert.equal(saved.headers.location, "/instellingen?opgeslagen=1&lang=en");
+	const after = await get("/instellingen?opgeslagen=1&lang=en", { headers: { Cookie: session } });
+	assert.ok(after.body.includes('<option value="steven" selected>Steven · recorded voice</option>'));
+	assert.match(after.body, /Your reading voice is saved\./);
+	// breinhap.com learns the choice with the session state; unknown voices and languages were dropped
+	const withVoices = await get("/auth/session", { headers: { Cookie: session, Origin: "https://breinhap.com" } });
+	assert.deepEqual(JSON.parse(withVoices.body), { active: true, access: true, initials: "", voices: { nl: "steven", de: "device" } });
 	const csrf = /name="csrf" value="([^"]+)"/.exec(home.body)[1];
 	const logout = await get("/afmelden", {
 		method: "POST",
