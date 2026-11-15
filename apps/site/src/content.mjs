@@ -78,6 +78,24 @@ const nl = {
       home: "Terug naar start",
     },
   },
+  students: {
+    kicker: "In ontwikkeling",
+    title: "Binnenkort: je opdrachten op het web",
+    lead: "Zo gaat Breinhap Web voor leerlingen werken. Je leerkracht, begeleider of ouder zet een opdracht klaar; jij meldt je aan en ziet meteen wat je te doen hebt. Dit zijn schetsen: de schermen zijn nog niet beschikbaar.",
+    screens: [
+      { title: "Aanmelden als leerling", text: "Met je e-mailadres en een code die we je mailen. Geen wachtwoord om te onthouden.", ui: { heading: "Leerling aanmelden", label: "Je e-mailadres", value: "lina@voorbeeld.be", button: "Stuur mij een code" } },
+      { title: "Eén keer je koppelcode", text: "Je krijgt een code van je leerkracht, begeleider of ouder. Daarmee weet Breinhap welke opdrachten van jou zijn.", ui: { heading: "Typ je koppelcode", label: "Koppelcode", value: "K7M2-P9QX-4T", button: "Koppelen" } },
+      { title: "Mijn opdrachten", text: "Alles wat voor jou klaarstaat, met tot wanneer. Wat klaar is, staat onderaan.", ui: { heading: "Mijn opdrachten", who: "Lina · 3de jaar", items: [["Nieuw", "Prikkel en reactie bij planten", "Biologie · 2 missies · 7 min", "Tot en met vrijdag"], ["Bezig", "Samengestelde intrest", "Wiskunde · 1 missie · 5 min", ""], ["Klaar", "Vraag en aanbod", "Economie · klaar op 12 november", ""]] } },
+      { title: "Een opdracht doen", text: "Korte missies in vier vaste stappen: opwarmen, leren, doen, check. Met voorlezen, zonder timer. Pauzeren kan altijd.", ui: { heading: "Prikkel en reactie bij planten", who: "Biologie · van je leerkracht", missions: [["Een plant buigt naar het licht", "4 min · 3 vragen", "Start"], ["Tropie of nastie?", "3 min · 2 vragen", "Klaar"]] } },
+      { title: "Wat een volwassene ziet", text: "Wie de opdracht gaf, ziet alleen of ze klaar is. Geen antwoorden, geen punten.", ui: { heading: "Samengestelde intrest", who: "Klas 3B", rows: [["Lina", "Klaar · 14 november"], ["Noor", "Bezig"], ["Sam", "Niet begonnen"]] } },
+    ],
+    notes: [
+      "Gratis. Breinhap is en blijft volledig gratis: er is geen enkele geldtransactie tussen gebruikers en Breinhap, voor geen enkel niveau en geen enkel jaar.",
+      "Vanaf 13 jaar. Voorlopig kan Breinhap Web alleen gebruikt worden door leerlingen van 13 jaar of ouder. Jongere leerlingen staan in ons latere plan.",
+      "Rustig en voorspelbaar. Geen streaks, geen ranglijsten, geen reclame.",
+    ],
+    sketch: "Schets",
+  },
   why: {
     title: "Gemaakt voor hoe jouw brein werkt",
     lead: "Wat helpt bij ADHD en AuDHD, helpt eigenlijk iedereen. Daarom is dit gewoon hoe de app werkt, geen aparte modus.",
@@ -219,6 +237,24 @@ const en = {
       review: ["We'll review this briefly", "in 2 days."],
       home: "Back to start",
     },
+  },
+  students: {
+    kicker: "In development",
+    title: "Coming soon: your assignments on the web",
+    lead: "This is how Breinhap Web will work for students. Your teacher, tutor or parent sets an assignment; you sign in and see at once what to do. These are sketches: the screens are not available yet.",
+    screens: [
+      { title: "Sign in as a student", text: "With your e-mail address and a code we e-mail you. No password to remember.", ui: { heading: "Student sign-in", label: "Your e-mail address", value: "lina@example.be", button: "Send me a code" } },
+      { title: "Your link code, once", text: "You get a code from your teacher, tutor or parent. It tells Breinhap which assignments are yours.", ui: { heading: "Type your link code", label: "Link code", value: "K7M2-P9QX-4T", button: "Link" } },
+      { title: "My assignments", text: "Everything that is ready for you, and until when. What is done moves to the bottom.", ui: { heading: "My assignments", who: "Lina · 3rd year", items: [["New", "Stimulus and response in plants", "Biology · 2 missions · 7 min", "Until Friday"], ["In progress", "Compound interest", "Mathematics · 1 mission · 5 min", ""], ["Done", "Supply and demand", "Economics · done on 12 November", ""]] } },
+      { title: "Doing an assignment", text: "Short missions in four fixed steps: warm up, learn, practise, check. With read aloud, without a timer. You can always pause.", ui: { heading: "Stimulus and response in plants", who: "Biology · from your teacher", missions: [["A plant bends towards the light", "4 min · 3 questions", "Start"], ["Tropism or nastic movement?", "3 min · 2 questions", "Done"]] } },
+      { title: "What an adult sees", text: "Whoever set the assignment only sees whether it is done. No answers, no marks.", ui: { heading: "Compound interest", who: "Class 3B", rows: [["Lina", "Done · 14 November"], ["Noor", "In progress"], ["Sam", "Not started"]] } },
+    ],
+    notes: [
+      "Free. Breinhap is and stays completely free: no money changes hands between users and Breinhap, at any level or in any grade.",
+      "From age 13. For now, Breinhap Web can only be used by students aged 13 or older. Younger students are in our later plan.",
+      "Calm and predictable. No streaks, no leaderboards, no advertising.",
+    ],
+    sketch: "Sketch",
   },
   why: {
     title: "Made for how your brain works",
