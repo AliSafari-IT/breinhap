@@ -31,6 +31,9 @@ import { isStudentPath } from "./learner/student.mjs";
  * breinhap#136 adds the assigned homework on those same student pages:
  *   GET/HEAD /p/mijn/{assignment}  one assignment, one Start per mission
  *   POST     /p/mijn/{assignment}  one step of a run (the state travels in the form, as on /p/missies)
+ *
+ * breinhap#138 adds the navbar probe of the breinhap.com website, same-origin once the edge routes /p here:
+ *   GET/HEAD /p/session  { active, initials }, never more
  */
 export const PUBLIC_HOST = "breinhap.com";
 export const PUBLIC_ORIGIN = `https://${PUBLIC_HOST}`;

@@ -49,6 +49,9 @@ try:
     assert status == 200 and 'Location' not in headers, headers
     assert get('/locale-selector.js')[0] == 200 and get('/locale-selector.css')[0] == 200
     assert get('/missing-route')[0] == 404
+    # breinhap#138: the website itself never serves /p; the edge routes it to management (without that route, 404)
+    for route in ['/p', '/p/', '/p/mijn', '/p/session']:
+        assert get(route)[0] == 404, route
     print('Sixteen login/register routes redirect to management; four languages stay on-origin; 404 and CSP preserved')
 finally:
     subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
