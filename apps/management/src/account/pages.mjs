@@ -90,7 +90,8 @@ export function profilePage(lang, { csrf, email = "", values = {}, errorCode = "
 ${field("organisation", t.organisation, { max: 120, auto: "organization", hint: t.organisationHint })}
 <div class="field"><label for="p-note">${t.note}</label><small id="p-note-hint">${t.noteHint}</small><textarea id="p-note" name="note" rows="3" maxlength="500" aria-describedby="p-note-hint">${esc(values.note ?? "")}</textarea></div>
 <label class="consent"><input type="checkbox" name="consent" value="1" required${values.consent ? " checked" : ""}> <span>${t.consent}</span></label>
-${error(lang, errorCode)}<button type="submit" class="action-block">${t.submitProfile}</button></form>`;
+${error(lang, errorCode)}<button type="submit" class="action-block">${t.submitProfile}</button></form>
+<p class="auth-student">${t.studentSignIn}</p>`;
 	return shell(lang, t.profileTitle, card, { path: editing ? "/registreren?aanpassen=1" : retry ? "/registreren?opnieuw=1" : "/registreren", version, account: accountStrip(lang, csrf, email) });
 }
 

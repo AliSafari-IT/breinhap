@@ -2,12 +2,20 @@ import {
 	createCipheriv,
 	createDecipheriv,
 	createHash,
+	createHmac,
 	randomBytes,
 } from "node:crypto";
 import { createClient } from "redis";
 
 export const IDLE_MS = 30 * 60_000;
 export const ABSOLUTE_MS = 12 * 3600_000;
+// breinhap#135: a student session on breinhap.com/p. Its own entries (kind "student-session"), never
+// readable as a management session. 14 days idle and 90 days absolute; on a shared computer the cookie
+// ends with the browser and the entry itself after 2 hours idle or 12 hours.
+export const STUDENT_IDLE_MS = 14 * 86400_000;
+export const STUDENT_ABSOLUTE_MS = 90 * 86400_000;
+export const STUDENT_SHARED_IDLE_MS = 2 * 3600_000;
+export const STUDENT_SHARED_ABSOLUTE_MS = 12 * 3600_000;
 export const digest = (value) =>
 	createHash("sha256").update(value).digest("base64url");
 const prefix = "breinhap:{identity}:";
@@ -20,7 +28,7 @@ local now = tonumber(ARGV[1])
 local sub = tonumber(redis.call('GET', r.subKey) or '-1')
 local sid = tonumber(redis.call('GET', r.sidKey) or '-1')
 if r.expires <= now or sub >= r.issuedAt or sid >= r.issuedAt then redis.call('DEL', KEYS[1]); return nil end
-if ARGV[2] == '1' then redis.call('PEXPIRE', KEYS[1], math.min(tonumber(ARGV[3]), r.expires - now)) end
+if ARGV[2] == '1' then redis.call('PEXPIRE', KEYS[1], math.min(tonumber(r.idle or ARGV[3]), r.expires - now)) end
 return raw`;
 const SAVE = `
 local r = cjson.decode(ARGV[1]); local now = tonumber(ARGV[2])
@@ -31,7 +39,7 @@ if ARGV[4] == 'update' then
   local ttl = redis.call('PTTL', KEYS[1]); if ttl <= 0 then return 0 end
   redis.call('SET', KEYS[1], ARGV[1], 'PX', math.min(ttl, r.expires - now)); return 1
 end
-local ok=redis.call('SET', KEYS[1], ARGV[1], 'PX', math.min(tonumber(ARGV[3]), r.expires - now), 'NX'); if ok then return 1 end return 0`;
+local ok=redis.call('SET', KEYS[1], ARGV[1], 'PX', math.min(tonumber(r.idle or ARGV[3]), r.expires - now), 'NX'); if ok then return 1 end return 0`;
 // Separate from refresh ownership: step-up replaces only an existing, unrevoked session.
 const UPDATE = `
 local raw = redis.call('GET', KEYS[1]); if not raw then return 0 end
@@ -199,8 +207,8 @@ export class IdentityStore {
 		const key = this.keyFor("flow", id);
 		return this.decode(key, await this.client.getDel(key));
 	}
-	async getSession(id, touch = true) {
-		const key = this.keyFor("session", id);
+	async getSession(id, touch = true, kind = "session") {
+		const key = this.keyFor(kind, id);
 		const raw = await this.client.eval(READ, {
 			keys: [key],
 			arguments: [String(this.now()), touch ? "1" : "0", String(IDLE_MS)],
@@ -218,14 +226,16 @@ export class IdentityStore {
 			throw new Error("Corrupt session metadata");
 		return value;
 	}
-	async saveSession(id, value, lock) {
-		const key = this.keyFor("session", id);
+	async saveSession(id, value, lock, { kind = "session", idle } = {}) {
+		const key = this.keyFor(kind, id);
 		const record = {
 			payload: this.encode(key, value),
 			expires: value.expires,
 			issuedAt: value.issuedAt,
 			subKey: this.keyFor("revoked-sub", value.sub),
 			sidKey: this.keyFor("revoked-sid", value.sid),
+			// a session kind with its own idle time carries it; the scripts fall back to IDLE_MS
+			...(idle ? { idle } : {}),
 		};
 		return (
 			Number(
@@ -254,6 +264,31 @@ export class IdentityStore {
 	}
 	async destroySession(id) {
 		await this.client.del(this.keyFor("session", id));
+	}
+	// ── breinhap#135: student sessions. The same atomic scripts, their own key kind and lifetimes. A
+	// management session id is not found here and a student session id is not found by getSession:
+	// the key differs, and the key is also the cipher's associated data.
+	async getStudentSession(id, touch = true) {
+		const value = await this.getSession(id, touch, "student-session");
+		return value?.kind === "student" ? value : null;
+	}
+	async saveStudentSession(id, value) {
+		if (value?.kind !== "student") throw new Error("Not a student session");
+		return this.saveSession(id, value, undefined, {
+			kind: "student-session",
+			idle: value.shared ? STUDENT_SHARED_IDLE_MS : STUDENT_IDLE_MS,
+		});
+	}
+	async destroyStudentSession(id) {
+		await this.client.del(this.keyFor("student-session", id));
+	}
+	/**
+	 * A keyed tag for a value (HMAC-SHA-256 under a key derived from the store secret for `purpose`):
+	 * the CSRF token of a form shown before any session exists is the tag of that browser's form cookie.
+	 */
+	tag(purpose, value) {
+		const derived = createHmac("sha256", this.key).update(`breinhap tag v1:${purpose}`).digest();
+		return createHmac("sha256", derived).update(String(value)).digest("base64url");
 	}
 	async acquireRefresh(id) {
 		const token = randomBytes(24).toString("base64url");
@@ -292,7 +327,8 @@ export class IdentityStore {
 			Number(
 				await this.client.eval(LOGOUT, {
 					keys: [this.keyFor("logout-jti", claims.jti), marker],
-					arguments: [String(claims.iat), String(ABSOLUTE_MS + 300_000)],
+					// the marker outlives the longest session it can end (a student session, breinhap#135)
+					arguments: [String(claims.iat), String(STUDENT_ABSOLUTE_MS + 300_000)],
 				}),
 			) === 1
 		);
