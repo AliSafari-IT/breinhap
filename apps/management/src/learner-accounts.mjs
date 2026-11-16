@@ -181,15 +181,15 @@ export class LearnerAccounts {
 		if (!SUBJECT.test(subject ?? "")) fail("code");
 		const plain = normalizeCode(value);
 		if (this.budget) {
-			if (
-				(await this.budget("linkcode-redeem-account", REDEEM_ACCOUNT_LIMIT, REDEEM_WINDOW, digest(subject))) >
-				REDEEM_ACCOUNT_LIMIT
-			)
+			// The identity store's budget answers true while the window has room; a plain counter answers
+			// the attempt number. Both are understood (breinhap#135: with the store's boolean, the former
+			// `count > limit` comparison never refused anything).
+			const spent = (answer, limit) => (typeof answer === "number" ? answer > limit : answer !== true);
+			if (spent(await this.budget("linkcode-redeem-account", REDEEM_ACCOUNT_LIMIT, REDEEM_WINDOW, digest(subject)), REDEEM_ACCOUNT_LIMIT))
 				fail("rate");
 			if (
 				requester &&
-				(await this.budget("linkcode-redeem-address", REDEEM_ADDRESS_LIMIT, REDEEM_WINDOW, requester)) >
-					REDEEM_ADDRESS_LIMIT
+				spent(await this.budget("linkcode-redeem-address", REDEEM_ADDRESS_LIMIT, REDEEM_WINDOW, requester), REDEEM_ADDRESS_LIMIT)
 			)
 				fail("rate");
 		}
@@ -252,6 +252,23 @@ export class LearnerAccounts {
 		}
 		await this.audit(this.pool, subject, "linkcode.redeem", learnerId);
 		return learnerId;
+	}
+
+	/**
+	 * The learner profile this account is linked to right now (breinhap#135), or null: no link, an
+	 * ended link, or an archived profile. Read on every student request, so ending a link ends the
+	 * student's access on their next request.
+	 */
+	async linkedLearner(subject) {
+		if (!SUBJECT.test(subject ?? "")) return null;
+		const { rows } = await this.pool.query(
+			`SELECT la.learner_id AS "learnerId"
+			 FROM learner_accounts la
+			 JOIN learners l ON l.workspace_id = la.workspace_id AND l.id = la.learner_id
+			 WHERE la.workspace_id = $1 AND la.account_sub = $2 AND la.unlinked_at IS NULL AND l.archived_at IS NULL`,
+			[this.workspace, subject],
+		);
+		return rows[0]?.learnerId ?? null;
 	}
 
 	/**

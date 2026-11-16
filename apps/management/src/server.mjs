@@ -38,7 +38,8 @@ import { PracticeStore } from "./practice/store.mjs";
 import { PackAuthoring } from "./practice/authoring.mjs";
 import { PracticeLearner } from "./practice/learner.mjs";
 import { scheduleSweep } from "./practice/maintenance.mjs";
-import { createLearnerHandler, PUBLIC_HOST } from "./learner-server.mjs";
+import { createLearnerHandler, PUBLIC_HOST, PUBLIC_ORIGIN } from "./learner-server.mjs";
+import { createStudentRoutes } from "./learner/student.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
 import { handleUploads } from "./uploads/routes.mjs";
 import { S3Client } from "./uploads/s3.mjs";
@@ -165,8 +166,25 @@ export function createHandler({
 	// breinhap#31: text extraction from uploaded PDF/DOCX files, on the uploads' storage
 	extractions,
 } = {}) {
-	const learnerHandle = learner || publishing ? createLearnerHandler({
+	// breinhap#135: student sign-in on the public Host, with the adults' headless e-mail code and the
+	// link codes of breinhap#134. Absent (404) until both the headless sign-in and the directory exist.
+	const student = identity?.headlessAuth && identity.store && learnerAccounts
+		? createStudentRoutes({
+				origin: PUBLIC_ORIGIN,
+				store: identity.store,
+				headless: identity.headlessAuth,
+				stillActive: identity.stillActive,
+				grants: identity.grants,
+				learnerAccounts,
+				audit: identity.audit,
+				requesterOf: identity.requesterOf,
+				now: identity.now,
+				catalogue: Boolean(publishing),
+			})
+		: undefined;
+	const learnerHandle = learner || publishing || student ? createLearnerHandler({
 		learner,
+		student,
 		// breinhap#35: the public mission catalogue reads only listed, active publications
 		catalog: publishing,
 		budget: identity?.store ? (kind, limit, seconds, requester) => identity.store.budget(kind, limit, seconds, requester) : undefined,

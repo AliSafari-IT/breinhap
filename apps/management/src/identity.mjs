@@ -730,6 +730,10 @@ export function createIdentity({
 		ready: () => store.ready(),
 		readInvitation: (req) => readCookie(req, INVITE),
 		headless: Boolean(headless),
+		// breinhap#135: the student sign-in on breinhap.com/p uses this same client and account check
+		headlessAuth: headless,
+		stillActive,
+		now,
 		version,
 	};
 }

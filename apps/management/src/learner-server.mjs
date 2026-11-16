@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { Readable } from "node:stream";
 import { PracticeError } from "./practice/model.mjs";
 import { languageOf } from "./learner/messages.mjs";
 import { bootstrapPage, donePage, messagePage, resultPage, runPage, startPage } from "./learner/pages.mjs";
 import { t } from "./learner/messages.mjs";
 import { CATALOGUE, catalogueFilters, cataloguePage, objectPage, runStep } from "./learner/public-missions.mjs";
 import { loadNarration, narrationClip } from "./learner/narration.mjs";
+import { clear, cookie, label, readCookie, readForm } from "./learner/http.mjs";
+import { isStudentPath } from "./learner/student.mjs";
 
 /**
  * The isolated public learner handler (breinhap#82). The edge sends breinhap.com/p/* here; nothing
@@ -22,12 +23,15 @@ import { loadNarration, narrationClip } from "./learner/narration.mjs";
  * breinhap#35 adds the public mission catalogue, which needs no link, cookie or stored attempt:
  *   GET/HEAD /p/missies (filters vak, jaar)  /p/missies/{object id}
  *   POST     /p/missies/{object id}  (one step of a run; the state travels in the form)
+ *
+ * breinhap#135 adds the student account pages, served by learner/student.mjs (its own session cookie):
+ *   GET/HEAD /p/aanmelden  /p/aanmelden/code  /p/koppelen  /p/mijn
+ *   POST     /p/aanmelden  /p/aanmelden/code  /p/koppelen  /p/afmelden
  */
 export const PUBLIC_HOST = "breinhap.com";
 export const PUBLIC_ORIGIN = `https://${PUBLIC_HOST}`;
 const FLOW = "__Secure-bh-flow";
 const ATTEMPT = "__Secure-bh-attempt";
-const MAX_BODY = 16_384;
 const PAGE_KEY = /^(?:m:\d{1,2}:\d{1,3}|a:\d{1,2})$/;
 
 const assetFiles = new Map(
@@ -57,41 +61,6 @@ const HEADERS = {
 	"Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
-const cookie = (name, value, maxAge) =>
-	`${name}=${value}; Path=/p; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
-const clear = (name) => cookie(name, "", 0);
-function readCookie(req, name) {
-	const found = [];
-	for (const part of String(req.headers.cookie ?? "").split(";")) {
-		const [key, ...rest] = part.trim().split("=");
-		if (key === name) found.push(rest.join("="));
-	}
-	// duplicates are refused, never guessed at
-	return found.length === 1 && /^[A-Za-z0-9_-]{43}$/.test(found[0]) ? found[0] : null;
-}
-
-async function readForm(req) {
-	const type = String(req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
-	if (type !== "application/x-www-form-urlencoded") return null;
-	const declared = Number(req.headers["content-length"] ?? 0);
-	if (declared > MAX_BODY) return null;
-	let size = 0;
-	const chunks = [];
-	for await (const chunk of Readable.from(req)) {
-		size += chunk.length;
-		if (size > MAX_BODY) return null;
-		chunks.push(chunk);
-	}
-	const params = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
-	const form = {};
-	for (const key of new Set(params.keys())) {
-		const all = params.getAll(key);
-		if (all.length !== 1) return null; // duplicate scalar fields are refused
-		form[key] = all[0];
-	}
-	return form;
-}
-
 /** Converts the service's typed failures into the generic learner answers (no title or count leaks). */
 function failure(error) {
 	if (error instanceof PracticeError) {
@@ -104,9 +73,6 @@ function failure(error) {
 	return { status: 503, title: "errorTitle", text: "errorText" };
 }
 
-/** A short, one-way label for a budget key: raw addresses, codes and cookies never reach Redis. */
-const label = (value) => createHash("sha256").update(String(value)).digest("base64url").slice(0, 22);
-
 /**
  * `budget(kind, limit, seconds, who)` is the shared Redis counter (fixed window, self-expiring), so a
  * burst only waits for the window to pass: there is no permanent lockout, and a guessing flood against
@@ -116,7 +82,7 @@ const label = (value) => createHash("sha256").update(String(value)).digest("base
 // recorded read-aloud clips (prototype); null when apps/management/narration is not installed
 const installedNarration = await loadNarration();
 
-export function createLearnerHandler({ learner, catalog, budget, narration = installedNarration, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
+export function createLearnerHandler({ learner, catalog, student, budget, narration = installedNarration, requesterOf = (req) => req.socket?.remoteAddress ?? "direct" }) {
 	return async function handleLearner(req, res) {
 		let lang = languageOf(req.headers["accept-language"]);
 		const send = (status, body, type = "text/html; charset=utf-8", extra = {}) => {
@@ -196,6 +162,8 @@ export function createLearnerHandler({ learner, catalog, budget, narration = ins
 				return send(503, messagePage(lang, "errorTitle", "errorText"));
 			}
 		}
+		// breinhap#135: the student account pages; absent without the headless sign-in and the directory
+		if (student && isStudentPath(path)) return student({ req, url, path, lang, send, redirect });
 		if (!learner) return send(404, "Not found", "text/plain; charset=utf-8");
 
 		const GETS = new Set(["/p", "/p/", "/p/start", "/p/run", "/p/done"]);
