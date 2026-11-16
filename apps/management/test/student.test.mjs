@@ -23,6 +23,7 @@ import { createIdentity, ORIGIN } from "../src/identity.mjs";
 import { LearnerAccounts } from "../src/learner-accounts.mjs";
 import { createManagementServer } from "../src/server.mjs";
 import { PublishingStore } from "../src/publishing.mjs";
+import { ProgressStore } from "../src/progress.mjs";
 import { STUDENT_ABSOLUTE_MS, STUDENT_IDLE_MS, STUDENT_SHARED_ABSOLUTE_MS, STUDENT_SHARED_IDLE_MS } from "../src/store.mjs";
 import { makeStore, member } from "./helpers.mjs";
 
@@ -94,7 +95,7 @@ function fakeHeadless() {
 }
 
 /** One workspace: identity on Redis, the directory on Postgres, the server on a local port. */
-async function world({ adultGrants = [] } = {}) {
+async function world({ adultGrants = [], wrapProgress = (store) => store } = {}) {
 	const clock = { time: Date.now() };
 	const now = () => clock.time;
 	const store = await makeStore(now);
@@ -119,7 +120,9 @@ async function world({ adultGrants = [] } = {}) {
 	const assignments = new AssignmentStore({ directory, membership: (sub) => store.membership(sub) });
 	const content = new ContentStore({ directory });
 	const publishing = new PublishingStore({ content });
-	const server = createManagementServer({ identity, directory, learnerAccounts });
+	// breinhap#36: the saved progress, wrappable so a test can make a write fail
+	const progress = wrapProgress(new ProgressStore({ directory }));
+	const server = createManagementServer({ identity, directory, learnerAccounts, progress });
 	servers.push(server);
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const learner = async (displayName = "Lina") => directory.createLearner(adminPrincipal, { displayName, schoolYear: 3 });
@@ -176,7 +179,7 @@ async function world({ adultGrants = [] } = {}) {
 		const published = await publishing.publish(publisher, draft.id, 1);
 		return { ...published, objectId: draft.id, publisher };
 	};
-	return { clock, store, headless, identity, directory, learnerAccounts, assignments, publishing, publication, server, port: server.address().port, learner, linkCode };
+	return { clock, store, headless, identity, directory, learnerAccounts, assignments, publishing, publication, progress, server, port: server.address().port, learner, linkCode };
 }
 
 /** A browser as the server sees it: a cookie jar, the public Host and Origin unless told otherwise. */
@@ -1205,5 +1208,337 @@ test("browser, JavaScript off: the shared-computer choice gives a cookie that en
 		await chrome?.close();
 		await new Promise((resolve) => (front ? front.server.close(resolve) : resolve()));
 		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+// ---------------------------------------------------------------------------------------------
+// breinhap#36: saved progress on the server, pause and resume, two tabs, failed writes, a changed
+// publication, account switching, the student's own data page and retention.
+
+/** The hidden fields of the form on this page that posts `doe` (or the first step form). */
+const formFor = (html, doe) => {
+	for (const part of html.split("<form").slice(1)) {
+		const fields = Object.fromEntries([...part.split("</form>")[0].matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]));
+		if (fields.doe === doe) return fields;
+	}
+	return undefined;
+};
+const progressRows = async (learnerId) =>
+	(await pool.query("SELECT mission_id, page, answers, state, finished_at, version, publication_hash FROM assignment_progress WHERE learner_id = $1 ORDER BY assignment_id", [learnerId])).rows;
+
+/** A student with one assignment from a linked parent, signed in and linked: ready on /p/mijn. */
+async function assignedStudent(w, { email = "lina@school.example", name = "Lina" } = {}) {
+	const learnerId = await w.learner(name);
+	const publication = await w.publication();
+	const { principal } = await linkedAdult(w, `ouder-${randomBytes(3).toString("hex")}@school.example`, { target: { learnerId } });
+	const assignment = await w.assignments.assign(principal, { publicationId: publication.id, audienceKind: "learner", audienceId: learnerId, availableUntil: iso(Date.now() + 7 * DAY) });
+	const b = browser(w);
+	await b.signIn(email);
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	return { learnerId, publication, principal, assignment, b, path: `/p/mijn/${assignment.id}` };
+}
+
+test("progress: pause, then resume on another device at the same page with the same answers, and Klaar on /p/mijn", async () => {
+	const w = await world();
+	const { learnerId, b, path } = await assignedStudent(w);
+	assert.match((await b.get("/p/mijn")).body, /class="badge">Nieuw</);
+	const detail = await b.get(path);
+	const start = formFor(detail.body, "start");
+	assert.ok(start, "Start is a saved start");
+
+	const warm = await b.post(path, start);
+	assert.equal(warm.status, 200);
+	assert.match(warm.body, /aria-current="step">Opwarmen<\//);
+	assert.doesNotMatch(warm.body, /name="a"/, "the answers do not travel in the form");
+	assert.match(warm.body, />Pauzeren<\/button>/);
+	assert.deepEqual((await progressRows(learnerId)).map((r) => [r.page, r.answers, r.state]), [[0, "", "started"]]);
+	const learn = await b.post(path, formFor(warm.body, "stap"));
+	const asked = await b.post(path, formFor(learn.body, "stap"));
+	assert.match(asked.body, /name="kies"/);
+	const answered = await b.post(path, { ...formFor(asked.body, "stap"), kies: "0" });
+	assert.match(answered.body, /Klopt\./);
+	assert.deepEqual((await progressRows(learnerId)).map((r) => [r.page, r.answers]), [[2, "2c0"]]);
+
+	// an explicit pause confirms that the answers are on the server
+	const paused = await b.post(path, formFor(answered.body, "pauze"));
+	assert.equal(paused.status, 200);
+	assert.match(paused.body, /<h1>Gepauzeerd<\/h1>/);
+	assert.match(paused.body, /Je antwoorden zijn bewaard\. Je kunt later verder, ook op een ander toestel\./);
+	assert.match((await b.get("/p/mijn")).body, /class="badge">Bezig</);
+
+	// another device: the same account, a new session, nothing in its browser
+	const phone = browser(w);
+	await phone.signIn("lina@school.example");
+	const there = await phone.get(path);
+	assert.match(there.body, /Bezig · stap 3 van 4/);
+	const resumed = await phone.post(path, formFor(there.body, "verder"));
+	assert.match(resumed.body, /Klopt\./, "the answer given on the first device is there");
+	assert.match(resumed.body, /class="chosen">Een verandering/);
+	const check = await phone.post(path, formFor(resumed.body, "stap"));
+	assert.match(check.body, /aria-current="step">Check<\//);
+	const placed = await phone.post(path, { ...formFor(check.body, "stap"), plaats0: "0", plaats1: "1", plaats2: "2" });
+	assert.match(placed.body, /Klopt\./);
+	const done = await phone.post(path, formFor(placed.body, "stap"));
+	assert.match(done.body, /Missie klaar/);
+	assert.match(done.body, /Je had 2 van de 2 vragen juist\./, "the score comes from the stored answers");
+	const [row] = await progressRows(learnerId);
+	assert.equal(row.state, "finished");
+	assert.equal(row.page, 4);
+	assert.equal(row.answers, "2c0;3o0.1.2");
+	assert.ok(row.finished_at);
+
+	// back on the first device: Klaar, and a reload shows the same score
+	assert.match((await b.get("/p/mijn")).body, /class="badge">Klaar ✓</);
+	const after = await b.get(path);
+	assert.match(after.body, /Klaar ✓ op /);
+	const again = await b.post(path, { ...formFor(after.body, undefined), csrf: b.csrf(after.body) });
+	assert.equal(again.status, 200);
+	// "Nog eens" is an unsaved replay: the finished state and its date stay
+	const restarted = await b.post(path, { csrf: b.csrf(after.body), missie: "0", doe: "start" });
+	assert.match(restarted.body, /aria-current="step">Opwarmen<\//);
+	assert.deepEqual((await progressRows(learnerId)).map((r) => [r.state, r.page, r.version]), [["finished", 4, row.version]]);
+});
+
+test("progress: two tabs cannot overwrite each other; the older one says so and continues from the stored page", async () => {
+	const w = await world();
+	const { learnerId, b, path } = await assignedStudent(w);
+	const first = await b.post(path, formFor((await b.get(path)).body, "start"));
+	const second = await b.post(path, formFor((await b.get(path)).body, "verder"));
+	assert.equal(formFor(first.body, "stap").versie, formFor(second.body, "stap").versie);
+
+	assert.equal((await b.post(path, formFor(first.body, "stap"))).status, 200);
+	const late = await b.post(path, formFor(second.body, "stap"));
+	assert.equal(late.status, 409);
+	assert.match(late.body, /Je ging ergens anders verder/);
+	assert.match(late.body, /Er is niets overschreven\./);
+	assert.equal((await progressRows(learnerId))[0].page, 1, "the older tab wrote nothing");
+	const pausedLate = await b.post(path, formFor(second.body, "pauze"));
+	assert.equal(pausedLate.status, 409, "a pause from an old page does not pretend to be saved");
+	const on = await b.post(path, formFor(late.body, "verder"));
+	assert.match(on.body, /aria-current="step">Leren<\//);
+
+	// a restart from the second tab is explicit: the first tab's next step is then stale, not mixed in
+	const restarted = await b.post(path, { csrf: formFor(on.body, "stap").csrf, missie: "0", doe: "start" });
+	assert.match(restarted.body, /aria-current="step">Opwarmen<\//);
+	assert.equal((await b.post(path, formFor(on.body, "stap"))).status, 409);
+});
+
+test("progress: a failed write is visible and the same step can be sent again", async () => {
+	let failSave = 0;
+	let failBegin = 0;
+	const w = await world({
+		wrapProgress: (store) => {
+			const save = store.save.bind(store);
+			const begin = store.begin.bind(store);
+			store.save = async (...args) => {
+				if (failSave-- > 0) throw new Error("database down");
+				return save(...args);
+			};
+			store.begin = async (...args) => {
+				if (failBegin-- > 0) throw new Error("database down");
+				return begin(...args);
+			};
+			return store;
+		},
+	});
+	const { learnerId, b, path } = await assignedStudent(w);
+	failBegin = 1;
+	const notStarted = await b.post(path, formFor((await b.get(path)).body, "start"));
+	assert.equal(notStarted.status, 503);
+	assert.match(notStarted.body, /<h1>Nog niet bewaard<\/h1>/);
+	assert.deepEqual(await progressRows(learnerId), []);
+	const warm = await b.post(path, formFor(notStarted.body, "start"));
+	assert.equal(warm.status, 200, "the retry form sends the same start again");
+	const learn = await b.post(path, formFor(warm.body, "stap"));
+	const asked = await b.post(path, formFor(learn.body, "stap"));
+
+	failSave = 1;
+	const failed = await b.post(path, { ...formFor(asked.body, "stap"), kies: "0" });
+	assert.equal(failed.status, 503);
+	assert.match(failed.body, /Je laatste stap kon niet bewaard worden\./);
+	assert.match(failed.body, /role="alert"/);
+	assert.equal((await progressRows(learnerId))[0].answers, "", "nothing half-written");
+	const retry = formFor(failed.body, "stap");
+	assert.equal(retry.kies, "0", "the retry carries the same answer");
+	const saved = await b.post(path, retry);
+	assert.equal(saved.status, 200);
+	assert.match(saved.body, /Klopt\./);
+	assert.equal((await progressRows(learnerId))[0].answers, "2c0");
+});
+
+test("progress: progress made on another publication, or a row that no longer fits, is never continued", async () => {
+	const w = await world();
+	const { learnerId, b, path, publication } = await assignedStudent(w);
+	const warm = await b.post(path, formFor((await b.get(path)).body, "start"));
+	await b.post(path, formFor(warm.body, "stap"));
+	await pool.query("UPDATE assignment_progress SET publication_hash = $2, version = version + 1 WHERE learner_id = $1", [learnerId, "A".repeat(43)]);
+
+	const detail = await b.get(path);
+	assert.match(detail.body, /Deze missie werd aangepast\./);
+	assert.equal(formFor(detail.body, "verder"), undefined, "no Verder on another publication's progress");
+	const resumed = await b.post(path, { csrf: b.csrf(detail.body), missie: "0", doe: "verder" });
+	assert.equal(resumed.status, 409);
+	assert.match(resumed.body, /<h1>Deze missie werd aangepast<\/h1>/);
+	assert.match((await b.get("/p/mijn")).body, /class="badge">Nieuw</, "it does not count for the current publication");
+	const fresh = await b.post(path, formFor(detail.body, "start"));
+	assert.match(fresh.body, /aria-current="step">Opwarmen<\//);
+	const [row] = await progressRows(learnerId);
+	assert.deepEqual([row.page, row.answers, row.state], [0, "", "started"]);
+	assert.notEqual(row.publication_hash, "A".repeat(43));
+
+	// answers that do not fit the mission (corrupt or from an older layout) are not silently dropped into it
+	await pool.query("UPDATE assignment_progress SET answers = '9c1', page = 1, version = version + 1 WHERE learner_id = $1", [learnerId]);
+	assert.equal((await b.post(path, { csrf: b.csrf(detail.body), missie: "0", doe: "verder" })).status, 409);
+
+	// a withdrawn publication: the assignment is not available; the row waits for retention
+	await w.publishing.withdraw(publication.publisher, publication.objectId);
+	assert.equal((await b.get(path)).status, 404);
+	assert.equal((await progressRows(learnerId)).length, 1);
+});
+
+test("progress: signing out and switching accounts keeps each student's progress their own", async () => {
+	const w = await world();
+	const lina = await assignedStudent(w);
+	const warm = await lina.b.post(lina.path, formFor((await lina.b.get(lina.path)).body, "start"));
+	await lina.b.post(lina.path, formFor(warm.body, "stap"));
+	await lina.b.post("/p/afmelden", { csrf: lina.b.csrf((await lina.b.get("/p/mijn")).body) });
+
+	// the same browser, another student
+	const tom = await w.learner("Tom");
+	await lina.b.signIn("tom@school.example");
+	await lina.b.post("/p/koppelen", { csrf: lina.b.csrf((await lina.b.get("/p/koppelen")).body), code: await w.linkCode(tom) });
+	assert.equal((await lina.b.get(lina.path)).status, 404, "Lina's assignment is not Tom's");
+	const tamper = await lina.b.post(lina.path, { csrf: lina.b.csrf((await lina.b.get("/p/mijn")).body), missie: "0", doe: "verder" });
+	assert.equal(tamper.status, 404);
+	assert.match((await lina.b.get("/p/mijn/gegevens")).body, /Er is geen voortgang bewaard\./);
+	await lina.b.post("/p/afmelden", { csrf: lina.b.csrf((await lina.b.get("/p/mijn")).body) });
+
+	await lina.b.signIn("lina@school.example");
+	assert.match((await lina.b.get(lina.path)).body, /Bezig · stap 2 van 4/);
+});
+
+test("progress: the student's own data page shows what is stored, downloads it, clears one or all, and ends the link", async () => {
+	const w = await world();
+	const { learnerId, principal, b, path } = await assignedStudent(w);
+	const second = await w.publication();
+	const other = await w.assignments.assign(principal, { publicationId: second.id, audienceKind: "learner", audienceId: learnerId });
+	const otherPath = `/p/mijn/${other.id}`;
+	const warm = await b.post(path, formFor((await b.get(path)).body, "start"));
+	const learn = await b.post(path, formFor(warm.body, "stap"));
+	const asked = await b.post(path, formFor(learn.body, "stap"));
+	await b.post(path, { ...formFor(asked.body, "stap"), kies: "1" });
+	await b.post(otherPath, formFor((await b.get(otherPath)).body, "start"));
+
+	const mine = await b.get("/p/mijn");
+	assert.match(mine.body, /href="\/p\/mijn\/gegevens">Mijn gegevens<\/a>/);
+	const page = await b.get("/p/mijn/gegevens");
+	assert.equal(page.status, 200);
+	assert.match(page.body, /<h1>Mijn gegevens<\/h1>/);
+	assert.match(page.body, /Je e-mailadres bewaart ASafariM, niet Breinhap/);
+	assert.match(page.body, /Sinds .* is je account gekoppeld/);
+	assert.match(page.body, /Wat is een prikkel\?: Bezig · 1 antwoord\(en\) · begonnen op /);
+	assert.match(page.body, /90 dagen nadat een opdracht afloopt of wordt ingetrokken/);
+	assert.match(page.body, /ziet je antwoorden en je score niet/);
+	assert.match(page.body, /href="https:\/\/breinhap\.asafarim\.site\/account-verwijderen\/"/);
+	assert.doesNotMatch(page.body, /lina@school\.example|Lina|ouder-/, "no e-mail address, profile name or adult");
+	assert.doesNotMatch(page.body, /<script|style=|<style/);
+
+	const download = await b.get("/p/mijn/gegevens/download");
+	assert.equal(download.status, 200);
+	assert.match(download.headers["content-type"], /^application\/json/);
+	assert.match(download.headers["content-disposition"], /attachment/);
+	const data = JSON.parse(download.body);
+	assert.equal(data.progress.length, 2);
+	assert.deepEqual(data.progress.find((p) => p.assignmentId === (path.split("/").pop())).answers, "2c1");
+	assert.doesNotMatch(download.body, /lina@school\.example|"sub"|Lina/);
+
+	// clearing needs the session's token
+	assert.equal((await b.post("/p/mijn/gegevens/wissen", { opdracht: other.id })).status, 403);
+	assert.equal((await b.post("/p/mijn/gegevens/wissen", { csrf: b.csrf(page.body), opdracht: other.id })).location, "/p/mijn/gegevens");
+	assert.equal((await progressRows(learnerId)).length, 1);
+	assert.match((await b.get(otherPath)).body, /value="start"/, "that assignment starts fresh");
+	const notSure = await b.post("/p/mijn/gegevens/wissen", { csrf: b.csrf(page.body) });
+	assert.equal(notSure.status, 400);
+	assert.match(notSure.body, /Vink eerst aan dat je het begrijpt\./);
+	assert.equal((await progressRows(learnerId)).length, 1);
+	await b.post("/p/mijn/gegevens/wissen", { csrf: b.csrf(page.body), zeker: "1" });
+	assert.deepEqual(await progressRows(learnerId), []);
+	assert.match((await b.get("/p/mijn/gegevens")).body, /Er is geen voortgang bewaard\./);
+
+	// ending the link deletes the progress at once and goes back to the link-code step
+	await b.post(path, formFor((await b.get(path)).body, "start"));
+	assert.equal((await b.post("/p/mijn/gegevens/ontkoppelen", { csrf: b.csrf(page.body) })).status, 400);
+	const unlinked = await b.post("/p/mijn/gegevens/ontkoppelen", { csrf: b.csrf(page.body), zeker: "1" });
+	assert.equal(unlinked.location, "/p/koppelen");
+	assert.deepEqual(await progressRows(learnerId), []);
+	assert.equal((await b.get("/p/mijn")).location, "/p/koppelen");
+	assert.equal((await b.get("/p/mijn/gegevens")).location, "/p/koppelen");
+	const { rows } = await pool.query("SELECT unlinked_at FROM learner_accounts WHERE learner_id = $1", [learnerId]);
+	assert.ok(rows[0].unlinked_at, "the history row stays, marked unlinked");
+	// the same learner can be linked again with a new code
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	assert.equal((await b.get("/p/mijn")).status, 200);
+});
+
+test("progress retention: 90 days after revocation or the window's end; at once on archive and on an administrator's unlink", async () => {
+	const w = await world();
+	const lina = await assignedStudent(w);
+	await lina.b.post(lina.path, formFor((await lina.b.get(lina.path)).body, "start"));
+	await w.assignments.revoke(lina.principal, lina.assignment.id);
+	const at = (days) => new ProgressStore({ directory: w.directory, clock: () => Date.now() + days * DAY });
+	assert.deepEqual(await at(89).retain(), { progress: 0 });
+	assert.equal((await progressRows(lina.learnerId)).length, 1);
+	assert.deepEqual(await at(91).retain(), { progress: 1 });
+	assert.deepEqual(await progressRows(lina.learnerId), []);
+
+	// a closed window counts from its end
+	const tom = await assignedStudent(w, { email: "tom@school.example", name: "Tom" });
+	await tom.b.post(tom.path, formFor((await tom.b.get(tom.path)).body, "start"));
+	assert.deepEqual(await at(7 + 89).retain(), { progress: 0 });
+	assert.deepEqual(await at(7 + 91).retain(), { progress: 1 });
+
+	// an administrator's unlink and archiving the profile delete at once
+	const ana = await assignedStudent(w, { email: "ana@school.example", name: "Ana" });
+	await ana.b.post(ana.path, formFor((await ana.b.get(ana.path)).body, "start"));
+	await w.learnerAccounts.unlink(adminPrincipal, ana.learnerId);
+	assert.deepEqual(await progressRows(ana.learnerId), []);
+	const bo = await assignedStudent(w, { email: "bo@school.example", name: "Bo" });
+	await bo.b.post(bo.path, formFor((await bo.b.get(bo.path)).body, "start"));
+	await w.directory.archiveLearner(adminPrincipal, bo.learnerId);
+	assert.deepEqual(await progressRows(bo.learnerId), []);
+});
+
+test("progress: no adult-facing code reads the stored answers", async () => {
+	// only the progress store reads the table; everything else may only delete from it
+	const sources = execFileSync("grep", ["-rln", "assignment_progress", new URL("../src", import.meta.url).pathname], { encoding: "utf8" })
+		.trim()
+		.split("\n")
+		.filter((f) => !f.endsWith(".sql"));
+	for (const file of sources) {
+		if (file.endsWith("/progress.mjs")) continue;
+		const text = await readFile(file, "utf8");
+		for (const line of text.split("\n").filter((l) => l.includes("assignment_progress")))
+			assert.match(line, /DELETE FROM assignment_progress/, `${file}: ${line.trim()}`);
+	}
+	const users = execFileSync("grep", ["-rlE", "progress\\.(forAssignment|forLearner|begin|save)\\(", new URL("../src", import.meta.url).pathname], { encoding: "utf8" }).trim().split("\n");
+	assert.deepEqual(users.map((f) => f.split("/src/")[1]), ["learner/student.mjs"]);
+});
+
+test("progress pages speak nl, fr, en and de", async () => {
+	const w = await world();
+	const expected = {
+		nl: ["Gepauzeerd", "Mijn gegevens", "Bezig"],
+		fr: ["En pause", "Mes données", "En cours"],
+		en: ["Paused", "My data", "In progress"],
+		de: ["Pausiert", "Meine Daten", "Begonnen"],
+	};
+	for (const [lang, [paused, data, busy]] of Object.entries(expected)) {
+		const s = await assignedStudent(w, { email: `${lang}@school.example`, name: `Leerling ${lang}` });
+		const b = browser(w, { lang: `${lang}-BE,${lang};q=0.9` });
+		await b.signIn(`${lang}@school.example`);
+		const warm = await b.post(s.path, formFor((await b.get(s.path)).body, "start"));
+		assert.ok((await b.post(s.path, formFor(warm.body, "pauze"))).body.includes(`<h1>${paused}</h1>`), lang);
+		assert.ok((await b.get("/p/mijn/gegevens")).body.includes(`<h1>${data}</h1>`), lang);
+		assert.ok((await b.get("/p/mijn")).body.includes(`class="badge">${busy}<`), lang);
 	}
 });

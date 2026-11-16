@@ -38,6 +38,7 @@ import { PracticeStore } from "./practice/store.mjs";
 import { PackAuthoring } from "./practice/authoring.mjs";
 import { PracticeLearner } from "./practice/learner.mjs";
 import { scheduleSweep } from "./practice/maintenance.mjs";
+import { ProgressStore, scheduleProgressSweep } from "./progress.mjs";
 import { createLearnerHandler, PUBLIC_HOST, PUBLIC_ORIGIN } from "./learner-server.mjs";
 import { createStudentRoutes } from "./learner/student.mjs";
 import { createClamav } from "./uploads/clamav.mjs";
@@ -136,6 +137,8 @@ export function createHandler({
 				budget: (kind, limit, seconds, requester) => identity.store.budget(kind, limit, seconds, requester),
 			})
 		: undefined,
+	// breinhap#36: a student's own saved progress on assigned homework
+	progress = directory ? new ProgressStore({ directory }) : undefined,
 	// breinhap#80: the practice storage, shared by pack authoring (#80/#81) and the public learner (#82)
 	practiceStore = directory && content
 		? new PracticeStore({
@@ -178,6 +181,8 @@ export function createHandler({
 				learnerAccounts,
 				// breinhap#136: the learner read boundary for the assignment list and player
 				assignments,
+				// breinhap#36: pause and resume, and the student's own data page
+				progress,
 				audit: identity.audit,
 				requesterOf: identity.requesterOf,
 				now: identity.now,
@@ -896,6 +901,8 @@ export function createHandler({
 	};
 	// breinhap#84: the storage the hourly retention pass works on (absent without the practice tables)
 	dispatch.practiceStore = practiceStore;
+	// breinhap#36: the progress rows the hourly retention pass deletes
+	dispatch.progressStore = progress;
 	return dispatch;
 }
 
@@ -923,6 +930,7 @@ export function createManagementServer(options) {
 	});
 	// long enough for one upload on a slow connection (breinhap#29); headers still have to arrive quickly
 	server.practiceStore = handler.practiceStore;
+	server.progressStore = handler.progressStore;
 	server.requestTimeout = 120_000;
 	server.headersTimeout = 10_000;
 	server.maxHeadersCount = 50;
@@ -1018,5 +1026,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	const server = createManagementServer({ identity, directory, uploads, extractions });
 	// breinhap#84: answers and attempts are erased 30 days after they began; hourly, bounded, idempotent
 	if (server.practiceStore) scheduleSweep(server.practiceStore);
+	// breinhap#36: progress is erased 90 days after its assignment ended; hourly, bounded, idempotent
+	if (server.progressStore) scheduleProgressSweep(server.progressStore);
 	server.listen(8080, "0.0.0.0");
 }

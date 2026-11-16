@@ -6,9 +6,25 @@ import { managementAccess, roleLabels, validSubject } from "../platform.mjs";
 import { STUDENT_ABSOLUTE_MS, STUDENT_SHARED_ABSOLUTE_MS } from "../store.mjs";
 import { clear, cookie, label, readCookie, readForm } from "./http.mjs";
 import { t } from "./messages.mjs";
-import { runStep } from "./public-missions.mjs";
+import { posted, runStep } from "./public-missions.mjs";
 import { esc, messagePage } from "./pages.mjs";
-import { adultPage, assignmentPage, codePage, linkPage, maskEmail, minePage, signInPage } from "./student-pages.mjs";
+import { decodeAnswers, encodeAnswers } from "../preview.mjs";
+import { ProgressError } from "../progress.mjs";
+import { missionPages } from "../vendor/content-mission.mjs";
+import {
+	adultPage,
+	assignmentPage,
+	changedPage,
+	codePage,
+	dataPage,
+	linkPage,
+	maskEmail,
+	minePage,
+	pausedPage,
+	saveFailedPage,
+	signInPage,
+	stalePage,
+} from "./student-pages.mjs";
 
 /**
  * Student sign-in on breinhap.com/p (breinhap#135).
@@ -18,7 +34,17 @@ import { adultPage, assignmentPage, codePage, linkPage, maskEmail, minePage, sig
  *   GET/POST /p/koppelen         the link code, once (LearnerAccounts.redeem, breinhap#134)
  *   GET      /p/mijn             the assignments available to this learner (breinhap#136)
  *   GET/POST /p/mijn/{assignment}  one assignment, seen and played through the shared player
+ *   GET      /p/mijn/gegevens    the student's own data: what is stored, how long, the controls (breinhap#36)
+ *   GET      /p/mijn/gegevens/download   the same as JSON
+ *   POST     /p/mijn/gegevens/wissen     clear the progress of one assignment, or all of it
+ *   POST     /p/mijn/gegevens/ontkoppelen  end the link to the learner profile (progress is deleted)
  *   POST     /p/afmelden         sign out
+ *
+ * breinhap#36: progress on an assignment is stored on the server per learner, assignment and mission
+ * (ProgressStore). A saved run posts `doe` = start | verder | stap | pauze with the row's version;
+ * the answers never travel in the form. A version that moved on (another tab or device) writes
+ * nothing and says so; a failed write says so and offers the same step again; progress made on
+ * another publication is never continued. A POST without `doe` is #136's unsaved replay ("Nog eens").
  *
  * The sign-in is the same headless e-mail code the adults use: the same client, the same budgets,
  * the same single-use flow entries. What differs is the session: its own cookie
@@ -31,8 +57,10 @@ import { adultPage, assignmentPage, codePage, linkPage, maskEmail, minePage, sig
 export const STUDENT_COOKIE = "__Secure-bh-student";
 const LOGIN = "__Secure-bh-login";
 const FORM = "__Secure-bh-form";
-const GETS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/mijn"]);
-const POSTS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/afmelden"]);
+const DATA = "/p/mijn/gegevens";
+const GETS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/mijn", DATA, `${DATA}/download`]);
+const POSTS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/afmelden", `${DATA}/wissen`, `${DATA}/ontkoppelen`]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // breinhap#136: one assignment by its opaque id. Only GET and POST of exactly this shape.
 const ASSIGNMENT = /^\/p\/mijn\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 export const isStudentPath = (path) => GETS.has(path) || POSTS.has(path) || ASSIGNMENT.test(path);
@@ -57,6 +85,8 @@ export function createStudentRoutes({
 	learnerAccounts,
 	// breinhap#136: the learner read boundary for assignments, and the recorded voices for read-aloud
 	assignments,
+	// breinhap#36: the student's own saved progress; without it the player stays #136's unsaved run
+	progress = null,
 	narration = null,
 	audit = async () => {},
 	requesterOf = (req) => req.socket?.remoteAddress ?? "direct",
@@ -90,6 +120,146 @@ export function createStudentRoutes({
 		const token = readCookie(req, LOGIN);
 		const flow = token ? await store.readFlow(token) : null;
 		return flow?.kind === "student-email" && flow.expires > now() ? { token, flow } : null;
+	}
+
+	/**
+	 * Whether a saved row still fits the mission as it is published now: the same publication hash,
+	 * a page inside the mission, answers that decode to exactly what is stored, and a finished state
+	 * only past the last page. Anything else is shown as "changed", never continued or mixed in.
+	 */
+	const usable = (row, pages, hash) =>
+		row.publicationHash === hash &&
+		row.page <= pages.length &&
+		(row.state === "finished") === (row.page === pages.length) &&
+		encodeAnswers(decodeAnswers(row.answers, pages), pages) === row.answers;
+
+	/** The saved state by mission id for the assignment page. */
+	async function savedFor(learnerId, work) {
+		if (!progress) return null;
+		const rows = await progress.forAssignment(learnerId, work.assignmentId);
+		const map = new Map();
+		for (const mission of work.object.missions) {
+			const row = rows.get(mission.id);
+			if (!row) continue;
+			const pages = missionPages(mission);
+			map.set(mission.id, { row, pages: pages.length, usable: usable(row, pages, work.publicationHash) });
+		}
+		return map;
+	}
+
+	/** Nieuw / Bezig / Klaar per assignment on /p/mijn, from the student's own rows on the current publication. */
+	async function statusFor(learnerId, list) {
+		const status = new Map();
+		if (!progress) return status;
+		const rows = await progress.forLearner(learnerId);
+		for (const entry of list) {
+			const mine = rows.filter((r) => r.assignmentId === entry.assignmentId && r.publicationHash === entry.publicationHash);
+			const finished = new Set(mine.filter((r) => r.state === "finished").map((r) => r.missionId)).size;
+			status.set(entry.assignmentId, !mine.length ? "new" : entry.missions > 0 && finished >= entry.missions ? "done" : "busy");
+		}
+		return status;
+	}
+
+	/** Everything stored about this learner, grouped by assignment, with titles where still available. */
+	async function storedData(learnerId) {
+		const rows = progress ? await progress.forLearner(learnerId) : [];
+		const available = new Map((await assignments.availableForLearner(learnerId)).map((a) => [a.assignmentId, a]));
+		const groups = new Map();
+		for (const row of rows) {
+			if (!groups.has(row.assignmentId)) {
+				let object = null;
+				if (available.has(row.assignmentId)) {
+					try {
+						object = (await assignments.assignmentForLearner(learnerId, row.assignmentId)).object;
+					} catch (error) {
+						if (!(error instanceof AssignmentError)) throw error;
+					}
+				}
+				groups.set(row.assignmentId, { assignmentId: row.assignmentId, title: object ? available.get(row.assignmentId).title : null, object, missions: [] });
+			}
+			const group = groups.get(row.assignmentId);
+			const mission = group.object?.missions.find((m) => m.id === row.missionId);
+			group.missions.push({
+				...row,
+				title: mission?.title ?? null,
+				answerCount: row.answers ? row.answers.split(";").length : 0,
+			});
+		}
+		return [...groups.values()].map(({ object, ...group }) => group);
+	}
+
+	/**
+	 * One POST of a saved run (breinhap#36). `form.doe` is start, verder, stap or pauze; `form.versie`
+	 * the row version the page was rendered from. Returns [status, html].
+	 */
+	async function savedRun({ lang, learnerId, work, form, voices, csrf }) {
+		const object = work.object;
+		const missionIndex = /^\d{1,2}$/.test(form.missie ?? "") ? Number(form.missie) : -1;
+		const mission = object.missions[missionIndex];
+		if (!mission) return [404, gonePage(lang)];
+		const pages = missionPages(mission);
+		const hash = work.publicationHash;
+		const action = `/p/mijn/${work.assignmentId}`;
+		const where = { csrf, assignmentId: work.assignmentId, missionIndex };
+		const base = { action, extra: hidden("csrf", csrf), back: { href: "/p/mijn", label: "stBackToMine" } };
+		/** The player at the stored page, its forms carrying the row version instead of the answers. */
+		const show = (row, answerFields = {}) =>
+			runStep(lang, object, { missie: String(missionIndex), stap: String(row.page), a: row.answers, ...answerFields }, voices, {
+				...base,
+				state: () => `${hidden("missie", missionIndex)}${hidden("doe", "stap")}${hidden("versie", row.version)}`,
+				after: `<form method="post" action="${action}">${hidden("csrf", csrf)}${hidden("missie", missionIndex)}${hidden("doe", "pauze")}${hidden("versie", row.version)}<p><button type="submit" class="secondary">${esc(t(lang, "prPause"))}</button></p></form>`,
+			});
+		const failed = () => [503, saveFailedPage(lang, { action, form })];
+
+		if (form.doe === "start") {
+			let row;
+			try {
+				row = await progress.begin(learnerId, work.assignmentId, mission.id, hash);
+			} catch {
+				return failed();
+			}
+			// finished on this publication: "Nog eens" is the unsaved replay, the finished state stays
+			if (!row) return [200, runStep(lang, object, { missie: String(missionIndex), stap: "0", a: "" }, voices, base)];
+			return [200, show(row)];
+		}
+		if (!["verder", "stap", "pauze"].includes(form.doe)) return [400, gonePage(lang)];
+		let row;
+		try {
+			row = (await progress.forAssignment(learnerId, work.assignmentId)).get(mission.id);
+		} catch {
+			return failed();
+		}
+		if (!row) return [409, changedPage(lang, where)];
+		if (!usable(row, pages, hash)) return [409, changedPage(lang, where)];
+		if (form.doe === "verder") return [200, show(row)];
+		const expected = /^\d{1,9}$/.test(form.versie ?? "") ? Number(form.versie) : 0;
+		if (row.version !== expected || row.state !== "started") return [409, stalePage(lang, where)];
+		// the stored version is the one this page showed: everything on it is on the server
+		if (form.doe === "pauze") return [200, pausedPage(lang, where)];
+
+		const answers = decodeAnswers(row.answers, pages);
+		const index = row.page;
+		const page = pages[index];
+		let next;
+		if (page.kind === "question" && !answers[index]) {
+			const sent = posted(lang, page, form);
+			// no answer, or an incomplete one: the same question again, with the message; nothing to save
+			if (!sent || sent.error) {
+				const fields = Object.fromEntries(Object.entries(form).filter(([k]) => k === "kies" || /^plaats\d$/.test(k)));
+				return [200, show(row, fields)];
+			}
+			answers[index] = sent;
+			next = { page: index, answers: encodeAnswers(answers, pages) };
+		} else {
+			next = { page: index + 1, answers: row.answers, finished: index + 1 >= pages.length };
+		}
+		try {
+			row = await progress.save(learnerId, work.assignmentId, mission.id, expected, { ...next, publicationHash: hash });
+		} catch (error) {
+			if (error instanceof ProgressError && error.code === "stale") return [409, stalePage(lang, where)];
+			return failed();
+		}
+		return [200, show(row)];
 	}
 
 	return async function handleStudent({ req, url, path, lang, send, redirect, narration: voices = narration }) {
@@ -135,7 +305,59 @@ export function createStudentRoutes({
 			if (path === "/p/mijn") {
 				if (!session) return redirect("/p/aanmelden", stale);
 				if (!session.learnerId) return redirect("/p/koppelen");
-				return html(200, minePage(lang, { csrf: session.saved.csrf, catalogue, assignments: await assignments.availableForLearner(session.learnerId) }));
+				const list = await assignments.availableForLearner(session.learnerId);
+				return html(200, minePage(lang, { csrf: session.saved.csrf, catalogue, assignments: list, status: await statusFor(session.learnerId, list) }));
+			}
+
+			// breinhap#36: the student's own data, and the controls over it
+			if (path.startsWith(`${DATA}`)) {
+				if (!session) return redirect("/p/aanmelden", stale);
+				if (!session.learnerId) return redirect("/p/koppelen");
+				const csrf = session.saved.csrf;
+				if (!isGet && form.csrf !== csrf) return send(403, "Forbidden", TEXT);
+				const page = async (status, error = "") =>
+					html(status, dataPage(lang, { csrf, linkedAt: await learnerAccounts.linkedSince(session.saved.sub), groups: await storedData(session.learnerId), error }));
+				if (path === DATA) return page(200);
+				if (path === `${DATA}/download`) {
+					const body = JSON.stringify(
+						{
+							linkedSince: await learnerAccounts.linkedSince(session.saved.sub),
+							progress: (await storedData(session.learnerId)).flatMap((g) =>
+								g.missions.map((m) => ({
+									assignment: g.title,
+									assignmentId: g.assignmentId,
+									mission: m.title,
+									missionId: m.missionId,
+									state: m.state,
+									page: m.page,
+									answers: m.answers,
+									startedAt: m.startedAt,
+									finishedAt: m.finishedAt,
+									updatedAt: m.updatedAt,
+								})),
+							),
+						},
+						null,
+						2,
+					);
+					return send(200, body, "application/json; charset=utf-8", { "Content-Disposition": 'attachment; filename="breinhap-mijn-gegevens.json"' });
+				}
+				if (path === `${DATA}/wissen`) {
+					if (!progress) return redirect(DATA);
+					if (form.opdracht !== undefined) {
+						if (!UUID.test(form.opdracht)) return page(400);
+						await progress.clear(session.learnerId, form.opdracht);
+					} else {
+						if (form.zeker !== "1") return page(400, "gdSureError");
+						await progress.clear(session.learnerId);
+					}
+					await audit("student.progress_clear", session.saved.sub);
+					return redirect(DATA);
+				}
+				// /p/mijn/gegevens/ontkoppelen
+				if (form.zeker !== "1") return page(400, "gdSureError");
+				await learnerAccounts.unlinkSelf(session.saved.sub);
+				return redirect("/p/koppelen");
 			}
 
 			// breinhap#136: one assigned homework, seen and played through the shared stateless player.
@@ -152,7 +374,11 @@ export function createStudentRoutes({
 					if (error instanceof AssignmentError && error.code === "not_found") return html(404, gonePage(lang));
 					throw error;
 				}
-				if (isGet) return html(200, assignmentPage(lang, { csrf: session.saved.csrf, assignment: work }));
+				if (isGet) return html(200, assignmentPage(lang, { csrf: session.saved.csrf, assignment: work, progress: await savedFor(session.learnerId, work) }));
+				if (progress && form.doe !== undefined) {
+					const [status, body] = await savedRun({ lang, learnerId: session.learnerId, work, form, voices, csrf: session.saved.csrf });
+					return html(status, body);
+				}
 				const page = runStep(lang, work.object, form, voices, {
 					action: `/p/mijn/${assignment}`,
 					extra: hidden("csrf", session.saved.csrf),

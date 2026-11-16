@@ -249,6 +249,8 @@ export class Directory {
 				"UPDATE adult_links SET revoked_at = now(), revoked_by = $3 WHERE workspace_id = $1 AND learner_id = $2 AND revoked_at IS NULL",
 				[this.workspace, id, principal.sub],
 			);
+			// breinhap#36: the student's stored progress is deleted with the profile, at once
+			await db.query("DELETE FROM assignment_progress WHERE workspace_id = $1 AND learner_id = $2", [this.workspace, id]);
 			await this.audit(principal.sub, "learner.archive", id, "done", db);
 		});
 	}
