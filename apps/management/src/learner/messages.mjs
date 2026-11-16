@@ -310,12 +310,12 @@ const M = {
 	stFromTeacher: ["Van je leerkracht", "From your teacher", "De votre enseignant", "Von deiner Lehrkraft"],
 	stFromParent: ["Van je ouder", "From your parent", "De votre parent", "Von deinem Elternteil"],
 	stFromTutor: ["Van je begeleider", "From your tutor", "De votre accompagnateur", "Von deiner Begleitperson"],
-	// breinhap#36: answers stay the student's own; an adult sees at most started / done and the dates (#137)
+	// breinhap#36/#137: answers stay the student's own; the assigning adult sees started / finished and the day
 	stPrivate: [
-		"Je antwoorden en je score zie alleen jij. De volwassene die je deze opdracht gaf, ziet hoogstens of je begon en klaar bent.",
-		"Only you see your answers and your score. The adult who gave you this assignment sees at most whether you started and finished.",
-		"Vous seul voyez vos réponses et votre score. L’adulte qui vous a donné ce devoir voit tout au plus si vous avez commencé et terminé.",
-		"Deine Antworten und deine Punktzahl siehst nur du. Die erwachsene Person, die dir diese Aufgabe gegeben hat, sieht höchstens, ob du begonnen und fertig bist.",
+		"Je antwoorden en je score zie alleen jij. De volwassene die je deze opdracht gaf, ziet alleen of je begon en klaar bent, en op welke dag.",
+		"Only you see your answers and your score. The adult who gave you this assignment only sees whether you started and finished, and on which day.",
+		"Vous seul voyez vos réponses et votre score. L’adulte qui vous a donné ce devoir voit seulement si vous avez commencé et terminé, et quel jour.",
+		"Deine Antworten und deine Punktzahl siehst nur du. Die erwachsene Person, die dir diese Aufgabe gegeben hat, sieht nur, ob du begonnen hast und fertig bist, und an welchem Tag.",
 	],
 	stBackToMine: ["Terug naar mijn opdrachten", "Back to my assignments", "Retour à mes devoirs", "Zurück zu meinen Aufgaben"],
 	stGoneTitle: [
@@ -417,10 +417,10 @@ const M = {
 		"Dein Fortschritt wird 90 Tage nach dem Ende oder dem Zurückziehen einer Aufgabe gelöscht. Löschst du ihn selbst, trennst du die Verbindung oder wird dein Schülerprofil archiviert, wird er sofort gelöscht.",
 	],
 	gdAdults: [
-		"Je leerkracht, begeleider of ouder ziet je antwoorden en je score niet. Hoogstens ziet die of je een opdracht begon en klaar bent, en op welke dag.",
-		"Your teacher, tutor or parent does not see your answers or your score. At most they see whether you started and finished an assignment, and on which day.",
-		"Votre enseignant, accompagnateur ou parent ne voit ni vos réponses ni votre score. Tout au plus voit-il si vous avez commencé et terminé un devoir, et quel jour.",
-		"Deine Lehrkraft, Begleitperson oder dein Elternteil sieht deine Antworten und deine Punktzahl nicht. Höchstens sieht sie, ob du eine Aufgabe begonnen und beendet hast, und an welchem Tag.",
+		"Je leerkracht, begeleider of ouder ziet je antwoorden en je score niet. Wie je een opdracht gaf, ziet alleen of je die begon en klaar bent, en op welke dag. Een beheerder ziet alleen aantallen, zonder je naam.",
+		"Your teacher, tutor or parent does not see your answers or your score. The adult who gave you an assignment only sees whether you started and finished it, and on which day. An administrator only sees counts, without your name.",
+		"Votre enseignant, accompagnateur ou parent ne voit ni vos réponses ni votre score. L’adulte qui vous a donné un devoir voit seulement si vous l’avez commencé et terminé, et quel jour. Un administrateur ne voit que des nombres, sans votre nom.",
+		"Deine Lehrkraft, Begleitperson oder dein Elternteil sieht deine Antworten und deine Punktzahl nicht. Wer dir eine Aufgabe gegeben hat, sieht nur, ob du sie begonnen und beendet hast, und an welchem Tag. Eine Administratorin oder ein Administrator sieht nur Anzahlen, ohne deinen Namen.",
 	],
 	gdDownload: ["Download mijn gegevens (JSON)", "Download my data (JSON)", "Télécharger mes données (JSON)", "Meine Daten herunterladen (JSON)"],
 	gdUnlinkTitle: ["Koppeling verbreken", "End the link", "Rompre la liaison", "Verbindung trennen"],

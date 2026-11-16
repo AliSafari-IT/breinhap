@@ -13,7 +13,7 @@ import {
 } from "./library.mjs";
 import { previewPage } from "./preview.mjs";
 import { publicationPage, publicListingPage } from "./publishing-page.mjs";
-import { assignmentsPage } from "./assignments-page.mjs";
+import { assignmentCountsPage, assignmentsPage } from "./assignments-page.mjs";
 import { learnerUrl, mintedPage, packAttemptPage, packEditorPage, packLinksPage, packResultsPage, packsListPage } from "./packs-page.mjs";
 import { randomBytes } from "node:crypto";
 import { PackAuthoring } from "./practice/authoring.mjs";
@@ -345,6 +345,13 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 		if (req.method !== "GET" && req.method !== "HEAD")
 			return { status: 405, title: tr("Niet toegestaan"), body: "", headers: { Allow: "GET, POST" } };
 		return assignmentGuard(async () => {
+			// breinhap#137: an administrator assigns nothing and sees counts only, never names
+			if (!canAssign && (await content.directory.can(principal, "learners.read_all")))
+				return {
+					status: 200,
+					title: tr("Voortgang van toewijzingen"),
+					body: assignmentCountsPage(await assignments.statusCounts(principal)),
+				};
 			const targets = LINK_TARGETS[principal.role] ?? [];
 			const [publications, learners, groups, list] = await Promise.all([
 				assignments.publications(principal),
@@ -352,7 +359,7 @@ export async function handleLibrary(req, url, { identity, content, publishing, a
 					? content.directory.learners(principal)
 					: [],
 				targets.includes("group") ? content.directory.groups(principal) : [],
-				assignments.list(principal),
+				assignments.listWithStatus(principal),
 			]);
 			const feedback = url.searchParams.get("toegewezen")
 				? notice(tr("De inhoud is toegewezen."))

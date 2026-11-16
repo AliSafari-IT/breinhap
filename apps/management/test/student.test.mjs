@@ -1517,6 +1517,16 @@ test("progress: no adult-facing code reads the stored answers", async () => {
 	for (const file of sources) {
 		if (file.endsWith("/progress.mjs")) continue;
 		const text = await readFile(file, "utf8");
+		// breinhap#137: the adult status read joins the table as `ap` and may name only the key, the
+		// publication hash, the state and the two dates; never answers, page, version or updated_at
+		if (file.endsWith("/assignments.mjs")) {
+			const joins = text.split("\n").filter((l) => l.includes("assignment_progress"));
+			assert.deepEqual(joins.map((l) => l.trim()), ["LEFT JOIN assignment_progress ap"], file);
+			const columns = new Set([...text.matchAll(/\bap\.(\w+|\*)/g)].map((m) => m[1]));
+			const allowed = ["workspace_id", "assignment_id", "learner_id", "mission_id", "publication_hash", "state", "started_at", "finished_at"];
+			for (const column of columns) assert.ok(allowed.includes(column), `assignments.mjs reads ap.${column}`);
+			continue;
+		}
 		for (const line of text.split("\n").filter((l) => l.includes("assignment_progress")))
 			assert.match(line, /DELETE FROM assignment_progress/, `${file}: ${line.trim()}`);
 	}

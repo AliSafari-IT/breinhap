@@ -51,6 +51,29 @@ function windowText(row) {
 	return `${from} ${until}`.trim();
 }
 
+/** A learner's status in words (breinhap#137): only the state and its day, never answers or a score. */
+function learnerStatus(learner) {
+	if (learner.state === "finished")
+		return { label: tr("klaar op {0}", date(learner.finishedOn)), tone: "ok" };
+	if (learner.state === "started")
+		return { label: tr("bezig sinds {0}", date(learner.startedOn)), tone: "pending" };
+	return { label: tr("niet begonnen"), tone: "draft" };
+}
+
+/** Per assignment: how many are done, and per learner it reaches now, the state and its day. */
+function progressCell(row) {
+	const learners = row.learners ?? [];
+	if (!learners.length) return ui`<small>${tr("Geen leerlingen")}</small>`;
+	const done = learners.filter((learner) => learner.state === "finished").length;
+	const items = learners
+		.map((learner) => {
+			const status = learnerStatus(learner);
+			return ui`<li>${esc(learner.displayName)}: <span class="state ${status.tone}">${esc(status.label)}</span></li>`;
+		})
+		.join("");
+	return ui`<details class="assignment-status"><summary>${tr("{0} van {1} klaar", done, learners.length)}</summary><ul>${items}</ul></details>`;
+}
+
 function editForm(row, csrf) {
 	return ui`<form method="post" action="/bibliotheek/toewijzen/${esc(row.id)}" class="assignment-window"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="expectedVersion" value="${row.version}"><label>${tr("Vanaf")} <input type="date" name="notBefore" value="${inputDate(row.notBefore)}"></label><label>${tr("Tot en met")} <input type="date" name="availableUntil" value="${inputDate(row.availableUntil)}"></label><button>${tr("Wijzigen")}</button></form>`;
 }
@@ -99,7 +122,7 @@ export function assignmentsPage({
 				: ui`<p>${tr("Er is nog geen actieve publicatie om toe te wijzen. Publiceer eerst een nagekeken revisie.")}</p>`;
 
 	const list = assignments.length
-		? ui`<table class="library"><caption>${tr("Jouw toewijzingen")}</caption><thead><tr><th scope="col">${tr("Titel")}</th><th scope="col">${tr("Voor")}</th><th scope="col">${tr("Periode")}</th><th scope="col">${tr("Status")}</th><th scope="col">${tr("Acties")}</th></tr></thead><tbody>${assignments
+		? ui`<table class="library"><caption>${tr("Jouw toewijzingen")}</caption><thead><tr><th scope="col">${tr("Titel")}</th><th scope="col">${tr("Voor")}</th><th scope="col">${tr("Periode")}</th><th scope="col">${tr("Status")}</th><th scope="col">${tr("Voortgang")}</th><th scope="col">${tr("Acties")}</th></tr></thead><tbody>${assignments
 				.map((row) => {
 					const state = stateLabel(row.state);
 					const editable = !row.revokedAt && row.publicationState === "active";
@@ -108,10 +131,26 @@ export function assignmentsPage({
 						: row.revokedAt
 							? ui`<small>${tr("Ingetrokken op {0}.", date(row.revokedAt))}</small>`
 							: ui`<small>${tr("Deze toewijzing kan niet meer worden gewijzigd.")}</small>`;
-					return ui`<tr><td>${esc(publicationLabel(row))}<br><small>${esc(tr(SUBJECT_NAME[row.subject] ?? row.subject))} · ${tr("jaar {0}", row.grade)}</small></td><td>${esc(targetLabel(row))}</td><td>${esc(windowText(row))}</td><td><span class="state ${state.tone}">${esc(state.label)}</span></td><td>${actions}</td></tr>`;
+					return ui`<tr><td>${esc(publicationLabel(row))}<br><small>${esc(tr(SUBJECT_NAME[row.subject] ?? row.subject))} · ${tr("jaar {0}", row.grade)}</small></td><td>${esc(targetLabel(row))}</td><td>${esc(windowText(row))}</td><td><span class="state ${state.tone}">${esc(state.label)}</span></td><td>${progressCell(row)}</td><td>${actions}</td></tr>`;
 				})
 				.join("")}</tbody></table>`
 		: ui`<p>${tr("Je hebt nog geen inhoud toegewezen.")}</p>`;
 
-	return ui`${notice}<p>${tr("Wijs alleen gepubliceerde, onafhankelijk nagekeken inhoud toe. Leerlingen zien enkel wat aan hen of aan hun groep is toegewezen, zolang de publicatie actief is en de periode loopt.")}</p><p><small>${tr("Datums zijn in UTC.")}</small></p>${assign}${list}<p><a href="/bibliotheek">${tr("Terug naar de bibliotheek")}</a></p>`;
+	return ui`${notice}<p>${tr("Wijs alleen gepubliceerde, onafhankelijk nagekeken inhoud toe. Leerlingen zien enkel wat aan hen of aan hun groep is toegewezen, zolang de publicatie actief is en de periode loopt.")}</p><p>${tr("Bij Voortgang zie je per leerling alleen of die begon en klaar is, en op welke dag. Antwoorden, scores en tijd zie je niet: die blijven van de leerling. Leerlingen lezen dit ook op hun eigen pagina.")}</p><p><small>${tr("Datums zijn in UTC.")}</small></p>${assign}${list}<p><a href="/bibliotheek">${tr("Terug naar de bibliotheek")}</a></p>`;
+}
+
+/**
+ * The administrator's view (breinhap#137): counts per publication over current assignments, without
+ * learner, group or adult names and without dates.
+ */
+export function assignmentCountsPage(rows) {
+	const table = rows.length
+		? ui`<table class="library"><caption>${tr("Voortgang van toewijzingen")}</caption><thead><tr><th scope="col">${tr("Titel")}</th><th scope="col">${tr("Toewijzingen")}</th><th scope="col">${tr("Leerlingen")}</th><th scope="col">${tr("Niet begonnen")}</th><th scope="col">${tr("Bezig")}</th><th scope="col">${tr("Afgewerkt")}</th></tr></thead><tbody>${rows
+				.map(
+					(row) =>
+						ui`<tr><td>${esc(tr("{0} · revisie {1}", row.title, row.revision))}</td><td>${row.assignments}</td><td>${row.learners}</td><td>${row.notStarted}</td><td>${row.started}</td><td>${row.finished}</td></tr>`,
+				)
+				.join("")}</tbody></table>`
+		: ui`<p>${tr("Er zijn nu geen lopende toewijzingen.")}</p>`;
+	return ui`<p>${tr("Als beheerder zie je alleen aantallen: geen namen van leerlingen, groepen of volwassenen, en geen datums. Alleen de volwassene die iets toewees, ziet per leerling of die begon en klaar is.")}</p>${table}`;
 }
