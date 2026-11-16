@@ -153,7 +153,8 @@ test("login and register links from before go to management, in the same languag
 
 test("the navbar's account state comes from management, and the CSP allows only that", () => {
   const nginx = readFileSync(new URL("../nginx.conf", import.meta.url), "utf8");
-  assert.match(nginx, /connect-src https:\/\/management\.breinhap\.com;/);
+  // 'self' is the student probe of breinhap#138 (/p/session on this Host); nothing else is allowed
+  assert.match(nginx, /connect-src 'self' https:\/\/management\.breinhap\.com;/);
   const script = read("account.js");
   assert.match(script, /"https:\/\/management\.breinhap\.com"/);
   assert.match(script, /\/auth\/session/);
@@ -203,7 +204,7 @@ test("recorded voices: the try-out loads the voice list, and the CSP lets it pla
     for (const key of voice.clips) assert.ok(existsSync(new URL(`../dist/narration/${voice.id}/${key}.mp3`, import.meta.url)), `${voice.id}/${key}`);
   }
   const nginx = readFileSync(new URL("../nginx.conf", import.meta.url), "utf8");
-  assert.match(nginx, /Content-Security-Policy "default-src 'none'; script-src 'self'; connect-src https:\/\/management\.breinhap\.com; style-src 'self'; img-src 'self'; media-src 'self';/);
+  assert.match(nginx, /Content-Security-Policy "default-src 'none'; script-src 'self'; connect-src 'self' https:\/\/management\.breinhap\.com; style-src 'self'; img-src 'self'; media-src 'self';/);
 });
 
 test("signed in: the account menu links to the voice settings in management, in the page's language", () => {

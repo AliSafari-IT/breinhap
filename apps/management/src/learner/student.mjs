@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { AssignmentError } from "../assignments.mjs";
+import { initialsOf } from "../identity.mjs";
 import { LearnerAccountError } from "../learner-accounts.mjs";
 import { managementAccess, roleLabels, validSubject } from "../platform.mjs";
 import { STUDENT_ABSOLUTE_MS, STUDENT_SHARED_ABSOLUTE_MS } from "../store.mjs";
@@ -39,6 +40,7 @@ import {
  *   POST     /p/mijn/gegevens/wissen     clear the progress of one assignment, or all of it
  *   POST     /p/mijn/gegevens/ontkoppelen  end the link to the learner profile (progress is deleted)
  *   POST     /p/afmelden         sign out
+ *   GET      /p/session          { active, initials } for the breinhap.com navbar (breinhap#138)
  *
  * breinhap#36: progress on an assignment is stored on the server per learner, assignment and mission
  * (ProgressStore). A saved run posts `doe` = start | verder | stap | pauze with the row's version;
@@ -58,7 +60,9 @@ export const STUDENT_COOKIE = "__Secure-bh-student";
 const LOGIN = "__Secure-bh-login";
 const FORM = "__Secure-bh-form";
 const DATA = "/p/mijn/gegevens";
-const GETS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/mijn", DATA, `${DATA}/download`]);
+// breinhap#138: the website's navbar asks this, same-origin, whether a student is signed in
+const SESSION = "/p/session";
+const GETS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/mijn", DATA, `${DATA}/download`, SESSION]);
 const POSTS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/afmelden", `${DATA}/wissen`, `${DATA}/ontkoppelen`]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // breinhap#136: one assignment by its opaque id. Only GET and POST of exactly this shape.
@@ -103,10 +107,13 @@ export function createStudentRoutes({
 	const adultAccount = async (sub) =>
 		(await adultMember(sub)) || Boolean(await store.roleRequest(sub)) || managementAccess(await grants(sub), sub).adult;
 
-	/** The student session of this request, checked again on every request, with the current link. */
-	async function current(req) {
+	/**
+	 * The student session of this request, checked again on every request, with the current link.
+	 * `touch: false` reads without extending the idle time (the navbar probe must not keep a session alive).
+	 */
+	async function current(req, touch = true) {
 		const id = readCookie(req, STUDENT_COOKIE);
-		const saved = id ? await store.getStudentSession(id) : null;
+		const saved = id ? await store.getStudentSession(id, touch) : null;
 		if (!saved) return null;
 		if (!(await stillActive(saved.sub)).active || (await adultMember(saved.sub))) {
 			await store.destroyStudentSession(id);
@@ -262,6 +269,26 @@ export function createStudentRoutes({
 		return [200, show(row)];
 	}
 
+	/**
+	 * breinhap#138: whether this browser has a student session, for the breinhap.com navbar, which shows
+	 * it the way it shows the adult one: initials only. Same-origin (the website and /p share the Host),
+	 * so there is no CORS header; no store work without a cookie; its own budget, so a school's shared
+	 * address polling once a minute per tab never eats the budget of the student pages; and read without
+	 * touching, so an open tab does not keep an idle session alive. Always 200 with a state body.
+	 */
+	async function sessionState(req, requester, send) {
+		const json = (value, cookies = []) =>
+			send(200, JSON.stringify(value), "application/json; charset=utf-8", cookies.length ? { "Set-Cookie": cookies } : {});
+		const signedOut = { active: false };
+		if (!readCookie(req, STUDENT_COOKIE)) return json(signedOut);
+		if (!(await store.budget("student-session", 600, 60, label(requester))))
+			return send(429, JSON.stringify(signedOut), "application/json; charset=utf-8", { "Retry-After": "60" });
+		const session = await current(req, false);
+		if (!session) return json(signedOut, [clear(STUDENT_COOKIE)]);
+		const initials = typeof session.saved.initials === "string" ? session.saved.initials : "";
+		return json({ active: true, initials });
+	}
+
 	return async function handleStudent({ req, url, path, lang, send, redirect, narration: voices = narration }) {
 		const method = req.method;
 		const isGet = method === "GET" || method === "HEAD";
@@ -279,6 +306,7 @@ export function createStudentRoutes({
 		const wait = { "Retry-After": "60" };
 		try {
 			const requester = requesterOf(req);
+			if (path === SESSION) return await sessionState(req, requester, send);
 			if (!(await store.budget("student-requests", 240, 60, label(requester))))
 				return html(429, messagePage(lang, "tooManyTitle", "tooManyText"), [], wait);
 			if (isGet && url.search) return redirect(path);
@@ -494,6 +522,8 @@ export function createStudentRoutes({
 				issuedAt: Math.floor(time / 1000),
 				csrf: random(),
 				shared,
+				// breinhap#138: two letters for the navbar (as the adult menu shows), derived here; the address is not kept
+				initials: initialsOf(result.email),
 				expires: time + lifetime,
 			};
 			if (!(await store.saveStudentSession(id, saved))) return restart(400, "stErrExpired");

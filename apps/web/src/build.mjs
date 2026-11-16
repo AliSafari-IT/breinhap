@@ -3,8 +3,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const dist = join(root, "dist");
-const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+// BREINHAP_WEB_DIST lets the tests build a second copy (with the other flag) next to the real one
+const dist = process.env.BREINHAP_WEB_DIST || join(root, "dist");
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const { version } = pkg;
+/**
+ * breinhap#138: the student entry (navbar and home page, to /p/mijn) and the navbar's same-origin /p/session probe
+ * exist only once the edge sends breinhap.com/p to the management container's learner handler. Without that route
+ * /p is this site's own 404, so the links are not built at all. The switch is committed (package.json
+ * "breinhap.studentRoute"), so an image built from one commit is always the same; BREINHAP_STUDENT_ROUTE=1 or 0
+ * overrides it for a local or test build only.
+ */
+const studentRoute = process.env.BREINHAP_STUDENT_ROUTE === undefined ? pkg.breinhap?.studentRoute === true : process.env.BREINHAP_STUDENT_ROUTE === "1";
+const STUDENT_HOME = "/p/mijn";
 const shared = join(root, "../site");
 const origin = "https://breinhap.com";
 /** Sign in and registration are management's pages: the navbar goes straight there, in the page's language. */
@@ -29,6 +40,7 @@ const LEGAL_PATHS = {
 const copy = {
   nl: {
     free: "Breinhap is en blijft volledig gratis: er is geen enkele geldtransactie tussen gebruikers en Breinhap, voor geen enkel niveau en geen enkel jaar.", settings: "Instellingen", skip: "Naar de inhoud", theme: "Donker thema", mainNav: "Hoofdmenu", languageLabel: "Taal · Langue · Sprache · Language",
+    studentSignIn: "Leerling aanmelden", studentMine: "Mijn opdrachten",
     login: "Aanmelden", register: "Account aanmaken", account: "Account", manage: "Breinhap beheer", myAccount: "Mijn account", switchAccount: "Wissel van account", legalNav: "Juridisch",
     title: "Leren in kleine happen.", intro: "Een rustige plek om te beginnen, één kleine stap tegelijk.",
     badge: "Binnenkort op het web", notice: "We bouwen Breinhap stap voor stap. Hieronder kun je uitproberen hoe Breinhap werkt, met voorbeeldmissies; de volledige missies in je browser komen later.",
@@ -45,6 +57,7 @@ const copy = {
   },
   en: {
     free: "Breinhap is and stays completely free: no money changes hands between users and Breinhap, at any level or in any grade.", settings: "Settings", skip: "Skip to content", theme: "Dark theme", mainNav: "Main", languageLabel: "Taal · Langue · Sprache · Language",
+    studentSignIn: "Student sign-in", studentMine: "My assignments",
     login: "Sign in", register: "Create account", account: "Account", manage: "Breinhap management", myAccount: "My account", switchAccount: "Switch account", legalNav: "Legal",
     title: "Learning in small bites.", intro: "A calm place to start, one small step at a time.",
     badge: "Coming soon to the web", notice: "We are building Breinhap step by step. Below you can try how Breinhap works, with example missions; the full missions in your browser come later.",
@@ -61,6 +74,7 @@ const copy = {
   },
   fr: {
     free: "Breinhap est et restera entièrement gratuit : aucune transaction financière n’a lieu entre les utilisateurs et Breinhap, à aucun niveau et dans aucune année.", settings: "Paramètres", skip: "Aller au contenu", theme: "Thème sombre", mainNav: "Menu principal", languageLabel: "Taal · Langue · Sprache · Language",
+    studentSignIn: "Connexion élève", studentMine: "Mes devoirs",
     login: "Se connecter", register: "Créer un compte", account: "Compte", manage: "Gestion Breinhap", myAccount: "Mon compte", switchAccount: "Changer de compte", legalNav: "Mentions légales",
     title: "Apprendre par petites bouchées.", intro: "Un endroit calme pour commencer, une petite étape à la fois.",
     badge: "Bientôt sur le web", notice: "Nous construisons Breinhap étape par étape. Vous pouvez ci-dessous essayer le fonctionnement de Breinhap avec des missions d’exemple ; les missions complètes dans votre navigateur viendront plus tard.",
@@ -77,6 +91,7 @@ const copy = {
   },
   de: {
     free: "Breinhap ist und bleibt vollständig kostenlos: Zwischen Nutzerinnen und Nutzern und Breinhap fließt kein Geld, auf keiner Stufe und in keinem Jahrgang.", settings: "Einstellungen", skip: "Zum Inhalt", theme: "Dunkles Design", mainNav: "Hauptmenü", languageLabel: "Taal · Langue · Sprache · Language",
+    studentSignIn: "Schüleranmeldung", studentMine: "Meine Aufgaben",
     login: "Anmelden", register: "Konto erstellen", account: "Konto", manage: "Breinhap-Verwaltung", myAccount: "Mein Konto", switchAccount: "Konto wechseln", legalNav: "Rechtliches",
     title: "Lernen in kleinen Happen.", intro: "Ein ruhiger Ort zum Anfangen, ein kleiner Schritt nach dem anderen.",
     badge: "Bald im Web", notice: "Wir bauen Breinhap Schritt für Schritt. Unten können Sie ausprobieren, wie Breinhap funktioniert, mit Beispielmissionen; die vollständigen Missionen im Browser folgen später.",
@@ -125,6 +140,15 @@ const switcher = (lang, t) =>
 const accountMenu = (lang, t) =>
   `<details class="account-menu" data-account="menu" hidden><summary class="account-trigger"><span class="account-initials" data-account="initials" aria-hidden="true"></span><span>${esc(t.account)}</span></summary><div class="account-panel"><a href="${MANAGEMENT}/?lang=${lang}" data-account="manage" hidden>${esc(t.manage)}</a><a href="${MANAGEMENT}/?lang=${lang}" data-account="profile" hidden>${esc(t.myAccount)}</a><a href="${MANAGEMENT}/instellingen?lang=${lang}" data-account="settings">${esc(t.settings)}</a><a href="${MANAGEMENT}/login?switch=1&amp;lang=${lang}">${esc(t.switchAccount)}</a></div></details>`;
 
+/**
+ * breinhap#138: the student entry. Signed out it says "Leerling aanmelden"; once /account.js learns from /p/session
+ * that a student is signed in it says "Mijn opdrachten" with the initials, like the adult menu. Both go to /p/mijn,
+ * which sends a signed-out student to /p/aanmelden. The visible word is the accessible name; the initials are
+ * decoration. Hidden while an adult is signed in: an adult account gets no student session.
+ */
+const studentEntry = (t) =>
+  `<a class="nav-link student-entry" href="${STUDENT_HOME}" data-account="student"><span class="account-initials" data-account="student-initials" aria-hidden="true"></span><span data-account="student-label" data-signed-in="${esc(t.studentMine)}">${esc(t.studentSignIn)}</span></a>`;
+
 function page(lang, missing = false) {
   const t = copy[lang];
   const path = pathOf(lang);
@@ -132,7 +156,7 @@ function page(lang, missing = false) {
   const androidPath = pathOf(androidLang(lang));
   const entry = (kind) => `${MANAGEMENT}/${kind}?lang=${lang}`;
   return `<!doctype html>
-<html lang="${HTML_LANG[lang]}">
+<html lang="${HTML_LANG[lang]}"${studentRoute ? " data-student-route" : ""}>
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Breinhap · ${esc(missing ? t.missing : t.title)}</title>
@@ -150,7 +174,7 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 <header class="os-topbar"><div class="wrap topbar-inner">
   <a class="brand" href="${path}"><img src="/logo.svg" width="40" height="40" alt=""><span>Breinhap</span></a>
   <div class="tools" role="group" aria-label="${esc(t.mainNav)}">
-    <div class="nav-actions"><a class="nav-link" href="${entry("login")}" data-account="login">${t.login}</a><a class="nav-cta" href="${entry("register")}" data-account="register">${t.register}</a>${accountMenu(lang, t)}</div>
+    <div class="nav-actions">${studentRoute ? studentEntry(t) : ""}<a class="nav-link" href="${entry("login")}" data-account="login">${t.login}</a><a class="nav-cta" href="${entry("register")}" data-account="register">${t.register}</a>${accountMenu(lang, t)}</div>
     ${switcher(lang, t)}
     ${themeToggle(t.theme)}
   </div>
@@ -159,7 +183,7 @@ ${LANGUAGES.map((l) => `<link rel="alternate" hreflang="${HTML_LANG[l]}" href="$
 <main id="main" class="wrap">
 ${missing ? `<section class="hero"><h1>${t.missing}</h1><a class="button" href="${path}">${t.back}</a></section>` : `
 <section class="hero"><p class="eyebrow">Breinhap</p><h1>${t.title}</h1><p class="lead">${t.intro}</p><p class="intro">${t.text}</p>
-<a class="button" href="https://breinhap.asafarim.site${androidPath}">${t.link} <span aria-hidden="true">↗</span></a></section>
+${studentRoute ? '<p class="hero-actions">' : ""}<a class="button" href="https://breinhap.asafarim.site${androidPath}">${t.link} <span aria-hidden="true">↗</span></a>${studentRoute ? `<a class="button button-quiet" href="${STUDENT_HOME}">${esc(t.studentMine)}</a></p>` : ""}</section>
 ${exampleSection(t)}
 <section class="expect"><h2>${t.next}</h2><div class="cards">${t.cards.map(([title, text], index) => `<article class="card"><span class="number" aria-hidden="true">0${index + 1}</span><h3>${title}</h3><p>${text}</p></article>`).join("")}</div></section>
 <section class="android"><h2>${t.android}</h2><p>${t.androidText}</p></section>`}

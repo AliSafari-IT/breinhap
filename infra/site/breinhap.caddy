@@ -1,6 +1,21 @@
 breinhap.com {
   encode zstd gzip
-  reverse_proxy breinhap-web:8080
+
+  # breinhap#138: exactly /p, /p/ and /p/... go to the management container's learner handler (breinhap#82), which
+  # answers only for Host breinhap.com (Caddy keeps the public Host by default) and fails closed on anything it does
+  # not know. /pizza and the like stay with the website. The client address header is overwritten here, as on
+  # management.breinhap.com, because management trusts it for rate limiting only.
+  # Rollback: delete this handle block and reload; /p is then the website's own 404 again.
+  @learner path /p /p/*
+  handle @learner {
+    reverse_proxy breinhap-management:8080 {
+      header_up X-Breinhap-Client-Address {remote_host}
+    }
+  }
+
+  handle {
+    reverse_proxy breinhap-web:8080
+  }
 }
 
 www.breinhap.com {

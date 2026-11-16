@@ -14,6 +14,11 @@
  * This script loads without defer in <head>: it marks the page as checking at once, and the stylesheet keeps the
  * navbar actions invisible (not removed) until the first answer or CHECK_MS, so a signed-in visitor does not see
  * the sign-in links flash first. Without JavaScript nothing is marked and the sign-in links simply show.
+ *
+ * breinhap#138: when the page was built with the student route (<html data-student-route>), the student entry asks
+ * this site's own /p/session (same origin: the edge sends /p to management's learner handler, whose cookie is
+ * host-only for breinhap.com and scoped to /p) and shows "Mijn opdrachten" with the initials once a student is signed
+ * in. It is hidden while an adult is signed in. Without that attribute nothing is asked.
  */
 (function () {
   if (typeof window === "undefined" || typeof document === "undefined" || typeof fetch !== "function") return;
@@ -23,6 +28,9 @@
   var root = document.documentElement;
   var state = null;
   var inFlight = false;
+  var studentRoute = root.hasAttribute("data-student-route");
+  var student = null;
+  var studentInFlight = false;
 
   root.setAttribute("data-account-state", "checking");
   var reveal = setTimeout(function () {
@@ -50,8 +58,57 @@
     setHidden(find("profile"), !(signedIn && state.access !== true));
     var initials = find("initials");
     if (initials) initials.textContent = signedIn ? state.initials : "";
+    renderStudent();
     clearTimeout(reveal);
     root.setAttribute("data-account-state", signedIn ? (state.access === true ? "management" : "signed-in") : "signed-out");
+  }
+
+  function renderStudent() {
+    var entry = find("student");
+    if (!entry || document.readyState === "loading") return;
+    var signedIn = !!student && student.active === true;
+    entry.hidden = !!state && state.active === true;
+    var label = find("student-label");
+    if (label) {
+      if (!label.hasAttribute("data-signed-out")) label.setAttribute("data-signed-out", label.textContent);
+      label.textContent = label.getAttribute(signedIn ? "data-signed-in" : "data-signed-out");
+    }
+    var initials = find("student-initials");
+    if (initials) initials.textContent = signedIn ? student.initials : "";
+  }
+
+  /** The same rule for /p/session: { active: true, initials } or it counts as signed out. */
+  function acceptStudent(value) {
+    var active = !!value && value.active === true;
+    var initials = active && typeof value.initials === "string" && /^[\p{L}\p{N}]{1,2}$/u.test(value.initials) ? value.initials : "";
+    student = { active: active, initials: initials };
+    renderStudent();
+  }
+
+  function checkStudent() {
+    if (!studentRoute || studentInFlight) return;
+    studentInFlight = true;
+    var options = { credentials: "same-origin", cache: "no-store" };
+    if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) options.signal = AbortSignal.timeout(5000);
+    fetch("/p/session", options)
+      .then(function (response) {
+        // a refusal (429) or an outage keeps the last known state; only a 200 answer changes it
+        if (!response || !response.ok) return undefined;
+        return response.json().catch(function () {
+          return null;
+        });
+      })
+      .then(
+        function (value) {
+          if (value !== undefined || !student) acceptStudent(value === undefined ? null : value);
+        },
+        function () {
+          if (!student) acceptStudent(null);
+        },
+      )
+      .then(function () {
+        studentInFlight = false;
+      });
   }
 
   /** Only the shape management sends is accepted; anything else counts as signed out. */
@@ -101,10 +158,20 @@
       });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () {
+    render();
+    renderStudent();
+  });
   check();
-  setInterval(check, RECHECK_MS);
+  checkStudent();
+  setInterval(function () {
+    check();
+    checkStudent();
+  }, RECHECK_MS);
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") check();
+    if (document.visibilityState === "visible") {
+      check();
+      checkStudent();
+    }
   });
 })();

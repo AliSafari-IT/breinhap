@@ -308,7 +308,7 @@ test("a new student signs in with only an e-mail address, types the link code an
 		assert.ok(!/school\.example/i.test(dump), `${table} holds no e-mail address`);
 	}
 	const session = await w.store.getStudentSession(b.jar.get(STUDENT), false);
-	assert.deepEqual(Object.keys(session).sort(), ["authTime", "csrf", "expires", "issuedAt", "kind", "shared", "sid", "sub"]);
+	assert.deepEqual(Object.keys(session).sort(), ["authTime", "csrf", "expires", "initials", "issuedAt", "kind", "shared", "sid", "sub"]);
 	assert.equal(session.sub, sub);
 	assert.ok(!JSON.stringify(session).includes("school.example"), "the session holds no e-mail address");
 });
@@ -469,6 +469,52 @@ test("sign-out ends the session at once", async () => {
 	assert.equal((await b.post("/p/afmelden", {})).status, 303);
 	// the link itself stays: signing in again goes straight to /p/mijn
 	assert.equal((await b.signIn("eva@school.example")).location, "/p/mijn");
+});
+
+test("/p/session tells the breinhap.com navbar whether a student is signed in: initials only, same-origin, without extending the session", async () => {
+	const w = await world();
+	const code = await w.linkCode(await w.learner());
+	const b = browser(w);
+	const state = async (options) => {
+		const res = await b.get("/p/session", options);
+		assert.equal(res.status, 200);
+		assert.match(res.headers["content-type"], /^application\/json/);
+		assert.equal(res.headers["cache-control"], "no-store");
+		// same-origin: no CORS answer for anyone
+		assert.equal(res.headers["access-control-allow-origin"], undefined);
+		return JSON.parse(res.body);
+	};
+	// anonymous: a plain answer, no cookie set, no budget spent
+	assert.deepEqual(await state(), { active: false });
+
+	await b.signIn("lina.maes@school.example");
+	assert.deepEqual(await state(), { active: true, initials: "LM" }, "signed in, not yet linked");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code });
+	const id = b.jar.get(STUDENT);
+	const body = (await b.get("/p/session")).body;
+	assert.equal(body, '{"active":true,"initials":"LM"}', "nothing else about the student leaves");
+	assert.doesNotMatch(JSON.stringify(await w.store.getStudentSession(id, false)), /lina|school\.example/, "the address is still not kept");
+
+	// the probe does not keep an idle session alive
+	const ttl = await w.store.client.pTTL(sessionKey(w, id));
+	w.clock.time += 60_000;
+	await state();
+	assert.ok((await w.store.client.pTTL(sessionKey(w, id))) <= ttl, "not touched");
+
+	// GET and HEAD only; never on the management Host
+	assert.equal((await b.post("/p/session", {})).status, 405);
+	assert.equal((await b.request("HEAD", "/p/session")).status, 200);
+	assert.equal((await b.get("/p/session", { host: "management.breinhap.com" })).status, 404);
+
+	// a session that ended answers signed out and the stale cookie goes
+	const mine = await b.get("/p/mijn");
+	const stolen = b.cookieHeader();
+	await b.post("/p/afmelden", { csrf: b.csrf(mine.body) });
+	const ended = await b.get("/p/session", { cookie: stolen });
+	assert.deepEqual(JSON.parse(ended.body), { active: false });
+	assert.match([ended.headers["set-cookie"]].flat().join("\n"), /__Secure-bh-student=; Path=\/p;.*Max-Age=0/);
+	// an adult's management cookie is not a student session
+	assert.deepEqual(await state({ cookie: `__Host-breinhap-session=${id}` }), { active: false });
 });
 
 test("the session lasts 14 days idle and 90 days at most; on a shared computer it ends with the browser", async () => {
