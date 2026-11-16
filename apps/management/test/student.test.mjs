@@ -342,7 +342,7 @@ test("an adult account gets no student session and is pointed to management.brei
 	const refused = await teacher.signIn("juf@example.test");
 	assert.equal(refused.status, 403);
 	assert.match(refused.body, /<h1>Deze pagina is voor leerlingen<\/h1>/);
-	assert.match(refused.body, /management\.breinhap\.com/);
+	assert.ok(refused.body.includes("Je werkplek staat op management.breinhap.com."), "the page says where the workspace is");
 	assert.match(refused.body, /href="https:\/\/management\.breinhap\.com\/login"/);
 	assert.ok(!teacher.jar.has(STUDENT));
 	assert.equal((await teacher.get("/p/mijn")).location, "/p/aanmelden");
