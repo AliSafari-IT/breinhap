@@ -24,6 +24,7 @@ const SUBJECT_LABEL = Object.fromEntries(SUBJECTS);
 const MAX_STATE = 2000;
 
 const subjectName = (lang, code) => withLocale(lang, () => tr(SUBJECT_LABEL[code] ?? code));
+export { subjectName };
 const hidden = (name, value) => `<input type="hidden" name="${name}" value="${esc(value)}">`;
 
 /** The catalogue filters a GET may carry. Anything else is dropped, never echoed. */
@@ -107,9 +108,11 @@ function feedback(lang, question, answer) {
 
 /**
  * POST /p/missies/{id}: one step of a run. `form` is the bounded, duplicate-free form. Returns the
- * page HTML, or null when the posted mission does not exist (the caller answers 404).
+ * page HTML, or null when the posted mission does not exist (the caller answers 404). `action`
+ * replaces the catalogue's POST target (breinhap#136 plays an assignment at /p/mijn/{assignment}),
+ * and `extra` adds hidden fields (the student session's CSRF token) to every form it renders.
  */
-export function runStep(lang, object, form, narration = null) {
+export function runStep(lang, object, form, narration = null, { action, extra = "", back } = {}) {
 	const missionIndex = /^\d{1,2}$/.test(form.missie ?? "") ? Number(form.missie) : -1;
 	const mission = object.missions[missionIndex];
 	if (!mission) return null;
@@ -119,9 +122,10 @@ export function runStep(lang, object, form, narration = null) {
 	let index = /^\d{1,3}$/.test(form.stap ?? "") ? Math.min(Number(form.stap), pages.length) : 0;
 	const open = pages.findIndex((page, i) => page.kind === "question" && !answers[i]);
 	if (open !== -1 && index > open) index = open;
-	const action = `${CATALOGUE}/${esc(object.id)}`;
+	const post = action ?? `${CATALOGUE}/${esc(object.id)}`;
+	const backLink = `<p><a href="${esc(back?.href ?? CATALOGUE)}">${esc(t(lang, back?.label ?? "backToCatalogue"))}</a></p>`;
 	const state = (step) => `${hidden("missie", missionIndex)}${hidden("stap", step)}${hidden("a", encodeAnswers(answers, pages))}`;
-	const next = () => `<form method="post" action="${action}">${state(index + 1)}<p><button type="submit">${esc(t(lang, "next"))}</button></p></form>`;
+	const next = () => `<form method="post" action="${post}">${state(index + 1)}${extra}<p><button type="submit">${esc(t(lang, "next"))}</button></p></form>`;
 	const page = pages[index];
 
 	if (!page) {
@@ -131,8 +135,8 @@ export function runStep(lang, object, form, narration = null) {
 		const mistakes = mission.commonMistakes.length
 			? `<section class="card"><h2>${esc(t(lang, "commonMistake"))}</h2>${mission.commonMistakes.map((m) => `<p>“${esc(m.mistake)}” — ${esc(m.why)}</p>`).join("")}</section>`
 			: "";
-		const again = `<form method="post" action="${action}">${hidden("missie", missionIndex)}${hidden("stap", 0)}${hidden("a", "")}<p><button type="submit">${esc(t(lang, "again"))}</button></p></form>`;
-		return layout(lang, t(lang, "missionDone"), `<p class="score">${esc(sentence)}</p>${mistakes}${again}${back(lang)}`);
+		const again = `<form method="post" action="${post}">${hidden("missie", missionIndex)}${hidden("stap", 0)}${hidden("a", "")}${extra}<p><button type="submit">${esc(t(lang, "again"))}</button></p></form>`;
+		return layout(lang, t(lang, "missionDone"), `<p class="score">${esc(sentence)}</p>${mistakes}${again}${backLink}`);
 	}
 
 	const head = `${stepList(lang, page.step)}<p class="muted">${esc(mission.title)} · ${esc(t(lang, "progress", index + 1, pages.length))}</p>`;
@@ -179,6 +183,6 @@ export function runStep(lang, object, form, narration = null) {
 	return layout(
 		lang,
 		object.title,
-		`${head}<section class="card"><form method="post" action="${action}">${state(index)}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${fields}</fieldset>${error}<p><button type="submit">${esc(t(lang, "check"))}</button></p></form></section>`,
+		`${head}<section class="card"><form method="post" action="${post}">${state(index)}${extra}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${fields}</fieldset>${error}<p><button type="submit">${esc(t(lang, "check"))}</button></p></form></section>`,
 	);
 }

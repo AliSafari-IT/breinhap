@@ -16,10 +16,13 @@ import pg from "pg";
 import { chromium } from "playwright";
 
 import { migrate } from "../src/db.mjs";
+import { AssignmentStore } from "../src/assignments.mjs";
+import { ContentStore } from "../src/content.mjs";
 import { Directory } from "../src/directory.mjs";
 import { createIdentity, ORIGIN } from "../src/identity.mjs";
 import { LearnerAccounts } from "../src/learner-accounts.mjs";
 import { createManagementServer } from "../src/server.mjs";
+import { PublishingStore } from "../src/publishing.mjs";
 import { STUDENT_ABSOLUTE_MS, STUDENT_IDLE_MS, STUDENT_SHARED_ABSOLUTE_MS, STUDENT_SHARED_IDLE_MS } from "../src/store.mjs";
 import { makeStore, member } from "./helpers.mjs";
 
@@ -112,12 +115,68 @@ async function world({ adultGrants = [] } = {}) {
 		membership: (sub) => store.membership(sub),
 		budget: (kind, limit, seconds, requester) => store.budget(kind, limit, seconds, requester),
 	});
+	// breinhap#136: the same assignment boundary the server builds, to prepare homework in tests
+	const assignments = new AssignmentStore({ directory, membership: (sub) => store.membership(sub) });
+	const content = new ContentStore({ directory });
+	const publishing = new PublishingStore({ content });
 	const server = createManagementServer({ identity, directory, learnerAccounts });
 	servers.push(server);
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const learner = async (displayName = "Lina") => directory.createLearner(adminPrincipal, { displayName, schoolYear: 3 });
 	const linkCode = async (learnerId) => (await learnerAccounts.createCode(adminPrincipal, learnerId)).code;
-	return { clock, store, headless, identity, directory, learnerAccounts, server, port: server.address().port, learner, linkCode };
+	let n = 0;
+	const adult = (role = "teacher") => ({ sub: `test:${role}-${++n}`, role: `breinhap.${role}` });
+	const sources = [{ kind: "own", title: "Eigen werk" }];
+	/** A published, independently approved object with one mission (a card, a choice, an order). */
+	const publication = async () => {
+		const author = adult("teacher");
+		const reviewer = adult("parent");
+		const publisher = adult("teacher");
+		await directory.grantCapability(adminPrincipal, reviewer, "content.review");
+		await directory.grantCapability(adminPrincipal, publisher, "content.publish");
+		const draft = {
+			schemaVersion: 1,
+			id: `lo-${++n}`,
+			subject: "biologie",
+			title: "Prikkel en reactie",
+			grade: 3,
+			curriculum: { leerdoel: "De leerlingen leggen prikkel en reactie uit." },
+			review: { status: "draft" },
+			missions: [
+				{
+					id: `m-${n}`,
+					title: "Wat is een prikkel?",
+					minutes: 3,
+					warmup: { text: "Denk aan iets dat je laat schrikken." },
+					learn: [{ text: "Een prikkel is een verandering die een organisme waarneemt." }],
+					practice: [
+						{
+							kind: "choice",
+							prompt: "Wat is een prikkel?",
+							options: ["Een verandering", "Een spier"],
+							answerIndex: 0,
+							explanation: "Een prikkel is een verandering in de omgeving.",
+						},
+					],
+					check: [
+						{
+							kind: "order",
+							prompt: "Zet in volgorde.",
+							items: ["prikkel", "reactie", "receptor"],
+							explanation: "Eerst de prikkel, dan de receptor, dan de reactie.",
+						},
+					],
+				},
+			],
+		};
+		await content.create(author, draft, sources);
+		await content.snapshot(author, draft.id, 1);
+		await content.submit(author, draft.id, 1);
+		await content.review(reviewer, draft.id, 1, "approved");
+		const published = await publishing.publish(publisher, draft.id, 1);
+		return { ...published, objectId: draft.id, publisher };
+	};
+	return { clock, store, headless, identity, directory, learnerAccounts, assignments, publishing, publication, server, port: server.address().port, learner, linkCode };
 }
 
 /** A browser as the server sees it: a cookie jar, the public Host and Origin unless told otherwise. */
@@ -659,6 +718,302 @@ test("the pages speak nl, fr, en and de", async () => {
 		assert.equal((await b.signIn(`${lang}@school.example`)).location, "/p/koppelen");
 		assert.equal(w.headless.sent.at(-1).locale, lang, "the e-mail is asked for in the page's language");
 		assert.ok((await b.get("/p/koppelen")).body.includes(`<h1>${linkTitle}</h1>`), lang);
+	}
+});
+
+// ── breinhap#136: the assigned homework ─────────────────────────────────────────────────────────
+
+const iso = (ms) => new Date(ms).toISOString();
+
+/** The hidden fields of the player's form on this screen, ready to post as the next step. */
+const nextForm = (html) => {
+	const grab = (name) => new RegExp(`name="${name}" value="([^"]*)"`).exec(html)?.[1];
+	return { csrf: grab("csrf"), missie: grab("missie"), stap: grab("stap"), a: grab("a") };
+};
+
+/** A linked adult with a student account: signs in on the public Host, gets a membership and a link. */
+async function linkedAdult(w, email, { role = "breinhap.parent", target } = {}) {
+	const b = browser(w);
+	await b.signIn(email);
+	const sub = w.headless.subOf(email);
+	await member(w.store, sub, role);
+	const principal = { sub, role };
+	const link = await w.directory.link(adminPrincipal, principal, target);
+	return { b, principal, link };
+}
+
+test("a student sees the assigned homework on /p/mijn and plays a mission through", async () => {
+	const w = await world();
+	const learnerId = await w.learner("Lina");
+	const publication = await w.publication();
+	const { principal } = await linkedAdult(w, "papa@school.example", { target: { learnerId } });
+	const assignment = await w.assignments.assign(principal, {
+		publicationId: publication.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+		availableUntil: iso(w.clock.time + 7 * DAY),
+	});
+
+	const b = browser(w);
+	await b.signIn("lina@school.example");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	const mine = await b.get("/p/mijn");
+	assert.equal(mine.status, 200);
+	assert.match(mine.body, /Prikkel en reactie/);
+	assert.match(mine.body, /Biologie · Jaar 3/);
+	assert.match(mine.body, /1 missie\(s\), samen ongeveer 3 minuten/);
+	assert.match(mine.body, /Tot en met /);
+	const id = /\/p\/mijn\/([0-9a-f-]{36})/.exec(mine.body)?.[1];
+	assert.equal(id, assignment.id, "the list links the assignment by its own id");
+
+	// what it is about: the goal, the adult's role (never a name), one Start per mission
+	const detail = await b.get(`/p/mijn/${id}`);
+	assert.equal(detail.status, 200);
+	assert.match(detail.body, /<h1>Prikkel en reactie<\/h1>/);
+	assert.match(detail.body, /De leerlingen leggen prikkel en reactie uit\./);
+	assert.match(detail.body, /Van je ouder/);
+	assert.match(detail.body, /Wat is een prikkel\?/);
+	assert.match(detail.body, /2 vragen, ongeveer 3 minuten/);
+	assert.doesNotMatch(detail.body, /papa|Papa/);
+	const token = b.csrf(detail.body);
+
+	// the existing player, one card or question per screen: Opwarmen → Leren → Doen → Check
+	const warm = await b.post(`/p/mijn/${id}`, { csrf: token, missie: "0", stap: "0", a: "" });
+	assert.equal(warm.status, 200);
+	assert.match(warm.body, /aria-current="step">Opwarmen<\//);
+	assert.match(warm.body, /Denk aan iets dat je laat schrikken\./);
+	const learn = await b.post(`/p/mijn/${id}`, nextForm(warm.body));
+	assert.match(learn.body, /aria-current="step">Leren<\//);
+	const asked = await b.post(`/p/mijn/${id}`, nextForm(learn.body));
+	assert.match(asked.body, /aria-current="step">Doen<\//);
+	assert.match(asked.body, /name="kies"/);
+	const done = await b.post(`/p/mijn/${id}`, { ...nextForm(asked.body), kies: "0" });
+	assert.match(done.body, /Klopt\./);
+	assert.match(done.body, /Een prikkel is een verandering in de omgeving\./);
+	const checked = await b.post(`/p/mijn/${id}`, nextForm(done.body));
+	assert.match(checked.body, /aria-current="step">Check<\//);
+	assert.match(checked.body, /name="plaats0"/);
+	const finished = await b.post(`/p/mijn/${id}`, { ...nextForm(checked.body), plaats0: "0", plaats1: "1", plaats2: "2" });
+	assert.match(finished.body, /Klopt\./);
+	const wrapped = await b.post(`/p/mijn/${id}`, nextForm(finished.body));
+	assert.match(wrapped.body, /Missie klaar/);
+	assert.match(wrapped.body, /Je had 2 van de 2 vragen juist\./);
+
+	// the run lives only in the posted form: the same GET still shows the assignment page
+	assert.match((await b.get(`/p/mijn/${id}`)).body, /<h1>Prikkel en reactie<\/h1>/);
+	// and the student's own list is the only way back
+	assert.match(wrapped.body, /href="\/p\/mijn">Terug naar mijn opdrachten<\/a>/);
+});
+
+test("the list sorts closing soonest first, and an assignment without a date comes last", async () => {
+	const w = await world();
+	const learnerId = await w.learner("Lina");
+	const first = await w.publication();
+	const second = await w.publication();
+	const { principal } = await linkedAdult(w, "papa@school.example", { target: { learnerId } });
+	const soon = await w.assignments.assign(principal, {
+		publicationId: first.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+		availableUntil: iso(w.clock.time + 2 * DAY),
+	});
+	const later = await w.assignments.assign(principal, {
+		publicationId: second.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+	});
+
+	const b = browser(w);
+	await b.signIn("lina@school.example");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	const mine = await b.get("/p/mijn");
+	const order = [...mine.body.matchAll(/\/p\/mijn\/([0-9a-f-]{36})/g)].map((m) => m[1]);
+	assert.deepEqual(order, [soon.id, later.id], "the dated one first, the undated one last");
+});
+
+test("honest states: nothing assigned yet, and one calm page for every id the learner cannot see", async () => {
+	const w = await world();
+	const learnerId = await w.learner("Lina");
+	const publication = await w.publication();
+	const { principal } = await linkedAdult(w, "papa@school.example", { target: { learnerId } });
+	const b = browser(w);
+	await b.signIn("lina@school.example");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	const goneTitle = /Deze opdracht is niet meer beschikbaar/;
+	const foreign = "/p/mijn/00000000-0000-1000-8000-000000000000";
+
+	// nothing assigned yet
+	assert.match((await b.get("/p/mijn")).body, /Er staat nog geen opdracht voor je klaar\./);
+	const unknown = await b.get(foreign);
+	assert.equal(unknown.status, 404, "a made-up id is not found");
+	assert.match(unknown.body, goneTitle);
+	assert.match(unknown.body, /href="\/p\/mijn"/);
+	assert.doesNotMatch(unknown.body, /Er ging iets mis|Deze link werkt niet/);
+
+	// a not-yet-open window is invisible, exactly like nothing assigned
+	const future = await w.assignments.assign(principal, {
+		publicationId: publication.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+		notBefore: iso(Date.now() + DAY),
+	});
+	assert.doesNotMatch((await b.get("/p/mijn")).body, /Prikkel en reactie/);
+	const held = await b.get(`/p/mijn/${future.id}`);
+	assert.equal(held.status, 404);
+	assert.match(held.body, goneTitle);
+
+	// the same publication once the window opens
+	await w.assignments.update(principal, future.id, 1, { notBefore: null });
+	const open = await b.get(`/p/mijn/${future.id}`);
+	assert.equal(open.status, 200);
+	assert.match((await b.get("/p/mijn")).body, /Prikkel en reactie/);
+
+	// a revoked assignment closes it: the same calm page as every other missing id
+	await w.assignments.revoke(principal, future.id);
+	const closed = await b.get(`/p/mijn/${future.id}`);
+	assert.equal(closed.status, 404, "revoked is the same calm page");
+	assert.match(closed.body, goneTitle);
+	assert.doesNotMatch((await b.get("/p/mijn")).body, /Prikkel en reactie/);
+
+	// an expiring window: visible now, gone a moment later, same page as every other missing id
+	const expiring = await w.assignments.assign(principal, {
+		publicationId: publication.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+		availableUntil: iso(Date.now() + 1500),
+	});
+	assert.equal((await b.get(`/p/mijn/${expiring.id}`)).status, 200);
+	await new Promise((resolve) => setTimeout(resolve, 1700));
+	assert.doesNotMatch((await b.get("/p/mijn")).body, /Prikkel en reactie/);
+	const after = await b.get(`/p/mijn/${expiring.id}`);
+	assert.equal(after.status, 404);
+	assert.equal(after.body, unknown.body, "a closed window, a revoked assignment and a wrong id answer alike");
+
+	// the publication itself is withdrawn: the still-assigned homework becomes not available
+	const pulled = await w.publication();
+	const pulledAssignment = await w.assignments.assign(principal, {
+		publicationId: pulled.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+	});
+	await w.publishing.withdraw(pulled.publisher, pulled.objectId);
+	const gone = await b.get(`/p/mijn/${pulledAssignment.id}`);
+	assert.equal(gone.status, 404);
+	assert.match(gone.body, goneTitle);
+	assert.doesNotMatch((await b.get("/p/mijn")).body, /Prikkel en reactie/);
+
+	// a visitor without a session sees nothing at all
+	const anon = await browser(w).get(`/p/mijn/${pulledAssignment.id}`);
+	assert.equal(anon.status, 303);
+	assert.equal(anon.location, "/p/aanmelden");
+});
+
+test("a group assignment follows the group, and no name — adult, group or learner — ever appears", async () => {
+	const w = await world();
+	const learnerId = await w.learner("Lina");
+	const group = await w.directory.createGroup(adminPrincipal, { name: "Klas 3A" });
+	await w.directory.addToGroup(adminPrincipal, { groupId: group, learnerId });
+	const publication = await w.publication();
+	const { principal, link } = await linkedAdult(w, "juf@school.example", {
+		role: "breinhap.teacher",
+		target: { groupId: group },
+	});
+	const assignment = await w.assignments.assign(principal, { publicationId: publication.id, audienceKind: "group", audienceId: group });
+
+	const b = browser(w);
+	await b.signIn("lina@school.example");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	const mine = await b.get("/p/mijn");
+	assert.match(mine.body, /Prikkel en reactie/);
+	assert.doesNotMatch(mine.body, /Klas 3A|Bram|Lina|juf|Juf/);
+	const id = /\/p\/mijn\/([0-9a-f-]{36})/.exec(mine.body)?.[1];
+	assert.equal(id, assignment.id);
+	const detail = await b.get(`/p/mijn/${id}`);
+	assert.match(detail.body, /Van je leerkracht/);
+	assert.doesNotMatch(detail.body, /Klas 3A|test:|sub-|@school\.example/);
+
+	// a learner outside the group gets the same calm page as everyone else
+	const other = browser(w);
+	assert.equal((await other.signIn("bram@school.example")).location, "/p/koppelen");
+	assert.equal((await other.get(`/p/mijn/${id}`)).location, "/p/koppelen");
+
+	// the teacher's link to the group is revoked: the homework stops without an error page
+	await w.directory.unlink(adminPrincipal, link);
+	const ended = await b.get(`/p/mijn/${id}`);
+	assert.equal(ended.status, 404);
+	assert.match(ended.body, /Deze opdracht is niet meer beschikbaar/);
+	assert.match((await b.get("/p/mijn")).body, /Er staat nog geen opdracht voor je klaar\./);
+});
+
+test("the assignment steps need the session's CSRF token and the exact Origin", async () => {
+	const w = await world();
+	const learnerId = await w.learner("Lina");
+	const publication = await w.publication();
+	const { principal } = await linkedAdult(w, "papa@school.example", { target: { learnerId } });
+	const assignment = await w.assignments.assign(principal, {
+		publicationId: publication.id,
+		audienceKind: "learner",
+		audienceId: learnerId,
+	});
+	const b = browser(w);
+	await b.signIn("lina@school.example");
+	await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+	const detail = await b.get(`/p/mijn/${assignment.id}`);
+	assert.equal(detail.status, 200);
+	const token = b.csrf(detail.body);
+	const path = `/p/mijn/${assignment.id}`;
+	const step = { csrf: token, missie: "0", stap: "0", a: "" };
+
+	for (const origin of ["https://management.breinhap.com", "https://evil.example", "null", ""]) {
+		const res = await b.post(path, step, { origin });
+		assert.equal(res.status, 403, `Origin ${origin || "(none)"}`);
+	}
+	assert.equal((await b.post(path, { ...step, csrf: "x".repeat(43) })).status, 403, "another session's token does not fit");
+	assert.equal((await b.post(path, { missie: "0", stap: "0", a: "" })).status, 403, "no token, no step");
+	assert.equal((await b.request("DELETE", path)).status, 405, "only GET, HEAD and POST");
+	// a query string is dropped, never echoed
+	const stripped = await b.get(`${path}?missie=1&stap=9`);
+	assert.equal(stripped.status, 303);
+	assert.equal(stripped.location, path);
+	// the form is bounded and duplicate-free like every other POST here
+	assert.equal((await b.request("POST", path, { body: `csrf=${token}&csrf=${token}&missie=0` })).status, 400);
+	// and with the right token the step runs
+	assert.equal((await b.post(path, step)).status, 200);
+});
+
+test("the assignment pages speak nl, fr, en and de", async () => {
+	const w = await world();
+	const publication = await w.publication();
+	const { principal } = await linkedAdult(w, "papa@school.example", { target: { learnerId: await w.learner("Eerste") } });
+	const expected = {
+		nl: ["nl-BE", "Mijn opdrachten", "Van je ouder", "Tot en met", "Deze opdracht is niet meer beschikbaar"],
+		fr: ["fr-BE", "Mes devoirs", "De votre parent", "Jusqu’au", "Ce devoir n’est plus disponible"],
+		en: ["en", "My assignments", "From your parent", "Until", "This assignment is no longer available"],
+		de: ["de-BE", "Meine Aufgaben", "Von deinem Elternteil", "Bis", "Diese Aufgabe ist nicht mehr verfügbar"],
+	};
+	for (const [lang, [htmlLang, mineTitle, from, due, goneTitle]] of Object.entries(expected)) {
+		const learnerId = await w.learner(`Leerling ${lang}`);
+		await w.directory.link(adminPrincipal, principal, { learnerId });
+		await w.assignments.assign(principal, {
+			publicationId: publication.id,
+			audienceKind: "learner",
+			audienceId: learnerId,
+			availableUntil: iso(Date.now() + DAY),
+		});
+		const b = browser(w, { lang: `${lang}-BE,${lang};q=0.9` });
+		await b.signIn(`${lang}@school.example`);
+		await b.post("/p/koppelen", { csrf: b.csrf((await b.get("/p/koppelen")).body), code: await w.linkCode(learnerId) });
+		const mine = await b.get("/p/mijn");
+		assert.match(mine.body, new RegExp(`<html lang="${htmlLang}">`), lang);
+		assert.ok(mine.body.includes(`<h1>${mineTitle}</h1>`), lang);
+		assert.ok(mine.body.includes(due), `${lang}: the due date line`);
+		const id = /\/p\/mijn\/([0-9a-f-]{36})/.exec(mine.body)?.[1];
+		const detail = await b.get(`/p/mijn/${id}`);
+		assert.ok(detail.body.includes("<h1>Prikkel en reactie</h1>"), lang);
+		assert.ok(detail.body.includes(from), `${lang}: the adult's role, never a name`);
+		const gone = await b.get("/p/mijn/00000000-0000-1000-8000-000000000000");
+		assert.ok(gone.body.includes(goneTitle), `${lang}: the honest not-available page`);
+		assert.ok(!gone.body.includes("00000000-0000-1000-8000-000000000000"), `${lang}: the id is not echoed`);
 	}
 });
 

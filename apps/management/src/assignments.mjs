@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { LINK_TARGETS } from "./directory.mjs";
+import { SCHEMA_VERSION } from "./vendor/content-schema.mjs";
 
 /**
  * Assigning active, reviewed publications to linked learners and groups (breinhap#34).
@@ -341,7 +342,7 @@ export class AssignmentStore {
 				   a.not_before AS "notBefore", a.available_until AS "availableUntil",
 				   p.id AS "publicationId", p.learning_object_id AS "objectId",
 				   p.revision, p.pack_version AS "version", p.pack_hash AS "publicationHash",
-				   lo.title, lo.subject, lo.grade
+				   p.pack, lo.title, lo.subject, lo.grade
 				 FROM content_assignments a
 				 JOIN content_publications p
 				   ON p.workspace_id = a.workspace_id AND p.id = a.publication_id AND p.state = 'active'
@@ -378,7 +379,8 @@ export class AssignmentStore {
 			const kind = row.learnerId ? "learner" : "group";
 			const target = row.learnerId ?? row.groupId;
 			if (!(await this.adultCanRead(row.assignedBy, kind, target))) continue;
-			if (!byPublication.has(row.publicationId))
+			if (!byPublication.has(row.publicationId)) {
+				const missions = row.pack?.objects?.[0]?.missions ?? [];
 				byPublication.set(row.publicationId, {
 					publicationId: row.publicationId,
 					objectId: row.objectId,
@@ -388,12 +390,44 @@ export class AssignmentStore {
 					title: row.title,
 					subject: row.subject,
 					grade: row.grade,
+					// what a student needs to choose (breinhap#136); never names or group data
 					assignmentId: row.assignmentId,
+					missions: missions.length,
+					minutes: missions.reduce((sum, m) => sum + (Number.isInteger(m.minutes) ? m.minutes : 0), 0),
 					notBefore: row.notBefore,
 					availableUntil: row.availableUntil,
 				});
+			}
 		}
 		return [...byPublication.values()];
+	}
+
+	/**
+	 * One assignment by opaque id, but only when it is in the learner's own available list, with the
+	 * clean delivery pack for the player. An unknown, unassigned, expired, withdrawn or foreign id is
+	 * the same `not_found`, so an id reveals nothing by being tried. The adult's role may be shown
+	 * ("van je leerkracht"); their name and subject never leave this method.
+	 */
+	async assignmentForLearner(learnerId, assignmentId, { at } = {}) {
+		if (!UUID.test(assignmentId ?? "")) fail("not_found");
+		const entry = (await this.availableForLearner(learnerId, { at })).find((row) => row.assignmentId === assignmentId);
+		if (!entry) fail("not_found");
+		const { rows } = await this.pool.query(
+			`SELECT p.pack, a.assigned_by
+			 FROM content_assignments a
+			 JOIN content_publications p
+			   ON p.workspace_id = a.workspace_id AND p.id = a.publication_id AND p.state = 'active'
+			 WHERE a.workspace_id = $1 AND a.id = $2 AND a.revoked_at IS NULL`,
+			[this.workspace, assignmentId],
+		);
+		const object = rows[0]?.pack?.objects?.[0];
+		if (!object || object.schemaVersion !== SCHEMA_VERSION) fail("not_found");
+		const member = await this.membership(rows[0].assigned_by);
+		return {
+			...entry,
+			object,
+			assignedRole: ADULT_ROLES.includes(member?.role ?? "") ? member.role : undefined,
+		};
 	}
 
 	/**
