@@ -271,6 +271,41 @@ export class LearnerAccounts {
 		return rows[0]?.learnerId ?? null;
 	}
 
+	/** When this account's current link began (breinhap#36, the student's own data page), or null. */
+	async linkedSince(subject) {
+		if (!SUBJECT.test(subject ?? "")) return null;
+		const { rows } = await this.pool.query(
+			`SELECT la.linked_at AS "linkedAt"
+			 FROM learner_accounts la
+			 JOIN learners l ON l.workspace_id = la.workspace_id AND l.id = la.learner_id
+			 WHERE la.workspace_id = $1 AND la.account_sub = $2 AND la.unlinked_at IS NULL AND l.archived_at IS NULL`,
+			[this.workspace, subject],
+		);
+		return rows[0]?.linkedAt ?? null;
+	}
+
+	/**
+	 * The student ends their own link from /p/mijn/gegevens (breinhap#36). The history row stays; the
+	 * progress stored for the learner profile is deleted at once. Returns whether a link ended.
+	 */
+	async unlinkSelf(subject) {
+		if (!SUBJECT.test(subject ?? "")) return false;
+		const ended = await this.tx(async (db) => {
+			const done = await db.query(
+				`UPDATE learner_accounts SET unlinked_at = $3
+				 WHERE workspace_id = $1 AND account_sub = $2 AND unlinked_at IS NULL
+				 RETURNING learner_id AS "learnerId"`,
+				[this.workspace, subject, await this.time(db)],
+			);
+			const learnerId = done.rows[0]?.learnerId;
+			if (!learnerId) return null;
+			await db.query("DELETE FROM assignment_progress WHERE workspace_id = $1 AND learner_id = $2", [this.workspace, learnerId]);
+			await this.audit(db, subject, "learner.unlink_self", learnerId);
+			return learnerId;
+		});
+		return Boolean(ended);
+	}
+
 	/**
 	 * An administrator ends a learner's account link (the student can end it from their own page
 	 * later, breinhap#135). The history row stays; a waiting code of the learner ends with it.
@@ -287,6 +322,11 @@ export class LearnerAccounts {
 				"UPDATE learner_link_codes SET revoked_at = $3 WHERE workspace_id = $1 AND learner_id = $2 AND used_at IS NULL AND revoked_at IS NULL",
 				[this.workspace, learnerId, await this.time(db)],
 			);
+			// breinhap#36: the student's stored progress ends with the link, at once
+			await db.query("DELETE FROM assignment_progress WHERE workspace_id = $1 AND learner_id = $2", [
+				this.workspace,
+				this.directory.uuid(learnerId),
+			]);
 			await this.audit(db, principal.sub, "learner.unlink", learnerId);
 		});
 	}

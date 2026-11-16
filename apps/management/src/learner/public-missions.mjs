@@ -82,7 +82,7 @@ export function objectPage(lang, object) {
 }
 
 /** The answer posted with this request for `page`, `{ error }` when incomplete, or null for none. */
-function posted(lang, page, form) {
+export function posted(lang, page, form) {
 	const question = page.question;
 	if (question.kind === "choice") {
 		if (form.kies === undefined) return null;
@@ -111,8 +111,11 @@ function feedback(lang, question, answer) {
  * page HTML, or null when the posted mission does not exist (the caller answers 404). `action`
  * replaces the catalogue's POST target (breinhap#136 plays an assignment at /p/mijn/{assignment}),
  * and `extra` adds hidden fields (the student session's CSRF token) to every form it renders.
+ * breinhap#36: `state(step)` replaces the hidden run state of the step forms (a saved assignment
+ * carries its row version instead of the answers), `after` is shown under every card and question
+ * (the pause button), and `notice` above them.
  */
-export function runStep(lang, object, form, narration = null, { action, extra = "", back } = {}) {
+export function runStep(lang, object, form, narration = null, { action, extra = "", back, state: savedState, after = "", notice = "" } = {}) {
 	const missionIndex = /^\d{1,2}$/.test(form.missie ?? "") ? Number(form.missie) : -1;
 	const mission = object.missions[missionIndex];
 	if (!mission) return null;
@@ -124,7 +127,7 @@ export function runStep(lang, object, form, narration = null, { action, extra = 
 	if (open !== -1 && index > open) index = open;
 	const post = action ?? `${CATALOGUE}/${esc(object.id)}`;
 	const backLink = `<p><a href="${esc(back?.href ?? CATALOGUE)}">${esc(t(lang, back?.label ?? "backToCatalogue"))}</a></p>`;
-	const state = (step) => `${hidden("missie", missionIndex)}${hidden("stap", step)}${hidden("a", encodeAnswers(answers, pages))}`;
+	const state = savedState ?? ((step) => `${hidden("missie", missionIndex)}${hidden("stap", step)}${hidden("a", encodeAnswers(answers, pages))}`);
 	const next = () => `<form method="post" action="${post}">${state(index + 1)}${extra}<p><button type="submit">${esc(t(lang, "next"))}</button></p></form>`;
 	const page = pages[index];
 
@@ -139,12 +142,12 @@ export function runStep(lang, object, form, narration = null, { action, extra = 
 		return layout(lang, t(lang, "missionDone"), `<p class="score">${esc(sentence)}</p>${mistakes}${again}${backLink}`);
 	}
 
-	const head = `${stepList(lang, page.step)}<p class="muted">${esc(mission.title)} · ${esc(t(lang, "progress", index + 1, pages.length))}</p>`;
+	const head = `${notice}${stepList(lang, page.step)}<p class="muted">${esc(mission.title)} · ${esc(t(lang, "progress", index + 1, pages.length))}</p>`;
 	if (page.kind === "card")
 		return layout(
 			lang,
 			object.title,
-			`${head}<section class="card"${narrationAttrs(lang, narration, narrationText(page.card))}><p>${esc(page.card.text)}</p>${page.card.example ? `<p class="muted">${esc(t(lang, "example", page.card.example))}</p>` : ""}${next()}</section>`,
+			`${head}<section class="card"${narrationAttrs(lang, narration, narrationText(page.card))}><p>${esc(page.card.text)}</p>${page.card.example ? `<p class="muted">${esc(t(lang, "example", page.card.example))}</p>` : ""}${next()}</section>${after}`,
 			{ script: "/p/assets/narration.js" },
 		);
 
@@ -161,7 +164,7 @@ export function runStep(lang, object, form, narration = null, { action, extra = 
 			question.kind === "choice"
 				? `<ul class="options">${question.options.map((o, i) => `<li${i === answer.chosen ? ' class="chosen"' : ""}>${esc(o)}${i === answer.chosen ? ` <em>(${esc(t(lang, "yourChoice"))})</em>` : ""}</li>`).join("")}</ul>`
 				: `<ol>${answer.placed.map((item) => `<li>${esc(item)}</li>`).join("")}</ol>`;
-		return layout(lang, object.title, `${head}<section class="card"><h2>${esc(question.prompt)}</h2>${shown}${feedback(lang, question, answer)}${next()}</section>`);
+		return layout(lang, object.title, `${head}<section class="card"><h2>${esc(question.prompt)}</h2>${shown}${feedback(lang, question, answer)}${next()}</section>${after}`);
 	}
 	const fields =
 		question.kind === "choice"
@@ -183,6 +186,6 @@ export function runStep(lang, object, form, narration = null, { action, extra = 
 	return layout(
 		lang,
 		object.title,
-		`${head}<section class="card"><form method="post" action="${post}">${state(index)}${extra}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${fields}</fieldset>${error}<p><button type="submit">${esc(t(lang, "check"))}</button></p></form></section>`,
+		`${head}<section class="card"><form method="post" action="${post}">${state(index)}${extra}<fieldset><legend><h2>${esc(question.prompt)}</h2></legend>${fields}</fieldset>${error}<p><button type="submit">${esc(t(lang, "check"))}</button></p></form></section>${after}`,
 	);
 }
