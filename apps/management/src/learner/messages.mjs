@@ -243,12 +243,6 @@ const M = {
 	],
 	stSignOut: ["Afmelden", "Sign out", "Se déconnecter", "Abmelden"],
 	stMineTitle: ["Mijn opdrachten", "My assignments", "Mes devoirs", "Meine Aufgaben"],
-	stMineText: [
-		"Je bent aangemeld. Je opdrachten komen hier te staan.",
-		"You are signed in. Your assignments will appear here.",
-		"Vous êtes connecté. Vos devoirs apparaîtront ici.",
-		"Du bist angemeldet. Deine Aufgaben erscheinen hier.",
-	],
 	stMorePractice: ["Meer oefenen met de openbare missies", "Practise more with the public missions", "S’exercer davantage avec les missions publiques", "Mehr üben mit den öffentlichen Missionen"],
 	stAdultTitle: ["Deze pagina is voor leerlingen", "This page is for students", "Cette page est pour les élèves", "Diese Seite ist für Schülerinnen und Schüler"],
 	stAdultText: [
@@ -304,6 +298,36 @@ const M = {
 		"This link code does not work. Check it again, or ask for a new code.",
 		"Ce code de liaison ne fonctionne pas. Vérifiez-le ou demandez un nouveau code.",
 		"Dieser Verbindungscode funktioniert nicht. Sieh ihn dir noch einmal an oder frag nach einem neuen Code.",
+	],
+	// breinhap#136: the assignment list, the assignment page and its honest states
+	stNothingYet: [
+		"Er staat nog geen opdracht voor je klaar. Kom later nog eens kijken.",
+		"There is no assignment for you yet. Have a look again later.",
+		"Il n’y a pas encore de devoir pour vous. Revenez plus tard.",
+		"Für dich ist noch keine Aufgabe bereit. Schau später noch einmal vorbei.",
+	],
+	stDue: ["Tot en met {0}", "Until {0}", "Jusqu’au {0}", "Bis {0}"],
+	stFromTeacher: ["Van je leerkracht", "From your teacher", "De votre enseignant", "Von deiner Lehrkraft"],
+	stFromParent: ["Van je ouder", "From your parent", "De votre parent", "Von deinem Elternteil"],
+	stFromTutor: ["Van je begeleider", "From your tutor", "De votre accompagnateur", "Von deiner Begleitperson"],
+	stPrivate: [
+		"Je antwoorden zijn zichtbaar voor de volwassene die je deze opdracht gaf. Je hoeft geen naam of e-mailadres in te vullen.",
+		"Your answers can be seen by the adult who gave you this assignment. You do not need to enter a name or email address.",
+		"Vos réponses sont visibles par l’adulte qui vous a donné ce devoir. Vous n’avez pas besoin d’indiquer un nom ni une adresse e-mail.",
+		"Deine Antworten kann die erwachsene Person sehen, die dir diese Aufgabe gegeben hat. Du musst keinen Namen und keine E-Mail-Adresse eingeben.",
+	],
+	stBackToMine: ["Terug naar mijn opdrachten", "Back to my assignments", "Retour à mes devoirs", "Zurück zu meinen Aufgaben"],
+	stGoneTitle: [
+		"Deze opdracht is niet meer beschikbaar",
+		"This assignment is no longer available",
+		"Ce devoir n’est plus disponible",
+		"Diese Aufgabe ist nicht mehr verfügbar",
+	],
+	stGoneText: [
+		"Ze bestaat niet (meer), is al afgelopen of is ingetrokken. Kijk op je pagina met opdrachten.",
+		"It does not exist (any more), has already closed or was withdrawn. Have a look at your assignments page.",
+		"Elle n’existe pas (ou plus), est déjà terminée ou a été retirée. Consultez votre page de devoirs.",
+		"Sie existiert nicht (mehr), ist bereits beendet oder wurde zurückgezogen. Schau auf deine Aufgabenseite.",
 	],
 };
 

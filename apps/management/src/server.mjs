@@ -176,6 +176,8 @@ export function createHandler({
 				stillActive: identity.stillActive,
 				grants: identity.grants,
 				learnerAccounts,
+				// breinhap#136: the learner read boundary for the assignment list and player
+				assignments,
 				audit: identity.audit,
 				requesterOf: identity.requesterOf,
 				now: identity.now,

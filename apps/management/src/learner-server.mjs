@@ -27,6 +27,10 @@ import { isStudentPath } from "./learner/student.mjs";
  * breinhap#135 adds the student account pages, served by learner/student.mjs (its own session cookie):
  *   GET/HEAD /p/aanmelden  /p/aanmelden/code  /p/koppelen  /p/mijn
  *   POST     /p/aanmelden  /p/aanmelden/code  /p/koppelen  /p/afmelden
+ *
+ * breinhap#136 adds the assigned homework on those same student pages:
+ *   GET/HEAD /p/mijn/{assignment}  one assignment, one Start per mission
+ *   POST     /p/mijn/{assignment}  one step of a run (the state travels in the form, as on /p/missies)
  */
 export const PUBLIC_HOST = "breinhap.com";
 export const PUBLIC_ORIGIN = `https://${PUBLIC_HOST}`;
@@ -162,8 +166,9 @@ export function createLearnerHandler({ learner, catalog, student, budget, narrat
 				return send(503, messagePage(lang, "errorTitle", "errorText"));
 			}
 		}
-		// breinhap#135: the student account pages; absent without the headless sign-in and the directory
-		if (student && isStudentPath(path)) return student({ req, url, path, lang, send, redirect });
+		// breinhap#135: the student account pages; absent without the headless sign-in and the directory.
+		// breinhap#136 plays assigned missions through them, with the same recorded voices.
+		if (student && isStudentPath(path)) return student({ req, url, path, lang, send, redirect, narration });
 		if (!learner) return send(404, "Not found", "text/plain; charset=utf-8");
 
 		const GETS = new Set(["/p", "/p/", "/p/start", "/p/run", "/p/done"]);

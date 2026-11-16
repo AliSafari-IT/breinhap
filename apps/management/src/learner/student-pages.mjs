@@ -1,10 +1,12 @@
+import { subjectName } from "./public-missions.mjs";
 import { t } from "./messages.mjs";
 import { esc, layout } from "./pages.mjs";
 
 /**
  * The student pages (breinhap#135): sign in with an e-mail code, type the link code once, and the
  * landing page. Plain forms that work without JavaScript, one thing per screen, no inline script or
- * style. No e-mail address, code or token is ever put in a URL.
+ * style. No e-mail address, code or token is ever put in a URL. breinhap#136 adds the assignment
+ * list (/p/mijn) and the assignment page (/p/mijn/{assignment}) that plays the missions.
  */
 export const MANAGEMENT_SIGN_IN = "https://management.breinhap.com/login";
 const FOOT = { footer: "stFooter" };
@@ -49,12 +51,50 @@ export function linkPage(lang, { csrf, error = "" }) {
 	);
 }
 
-/** GET /p/mijn: where a linked student lands. The assignment list itself is breinhap#136. */
-export function minePage(lang, { csrf, catalogue = false }) {
+/** "12 mei 2026", in the page's language, Brussels time (the school's clock). */
+const dueDate = (lang, at) =>
+	new Intl.DateTimeFormat(`${lang}-BE`, { dateStyle: "long", timeZone: "Europe/Brussels" }).format(new Date(at));
+const due = (lang, at) => `<p class="muted">${esc(t(lang, "stDue", dueDate(lang, at)))}</p>`;
+const FROM = { "breinhap.teacher": "stFromTeacher", "breinhap.parent": "stFromParent", "breinhap.tutor": "stFromTutor" };
+
+/** GET /p/mijn: the assignments available to this learner, closing soonest first. */
+export function minePage(lang, { csrf, catalogue = false, assignments = [] }) {
+	const sorted = [...assignments].sort((a, b) => {
+		const left = a.availableUntil ? +new Date(a.availableUntil) : Number.POSITIVE_INFINITY;
+		const right = b.availableUntil ? +new Date(b.availableUntil) : Number.POSITIVE_INFINITY;
+		return left - right || String(a.title).localeCompare(String(b.title));
+	});
+	const list = sorted.length
+		? `<ul class="catalogue">${sorted
+				.map(
+					(row) =>
+						`<li class="card"><h2><a href="/p/mijn/${esc(row.assignmentId)}">${esc(row.title)}</a></h2><p class="muted">${esc(subjectName(lang, row.subject))} · ${esc(t(lang, "yearN", row.grade))} · ${esc(t(lang, "missionCount", row.missions, row.minutes))}</p>${row.availableUntil ? due(lang, row.availableUntil) : ""}</li>`,
+				)
+				.join("")}</ul>`
+		: `<p class="notice" role="status">${esc(t(lang, "stNothingYet"))}</p>`;
 	return layout(
 		lang,
 		t(lang, "stMineTitle"),
-		`<p>${esc(t(lang, "stMineText"))}</p>${catalogue ? `<p><a href="/p/missies">${esc(t(lang, "stMorePractice"))}</a></p>` : ""}${signOut(lang, csrf)}`,
+		`${list}${catalogue ? `<p><a href="/p/missies">${esc(t(lang, "stMorePractice"))}</a></p>` : ""}${signOut(lang, csrf)}`,
+		FOOT,
+	);
+}
+
+/** GET /p/mijn/{assignment}: what it is about, then one start button per mission. */
+export function assignmentPage(lang, { csrf, assignment }) {
+	const action = `/p/mijn/${esc(assignment.assignmentId)}`;
+	const object = assignment.object;
+	const missions = object.missions
+		.map(
+			(m, i) =>
+				`<li class="card"><h2>${esc(m.title)}</h2><p class="muted">${esc(t(lang, "about", m.practice.length + m.check.length, m.minutes))}</p><form method="post" action="${action}">${hidden("csrf", csrf)}${hidden("missie", i)}${hidden("stap", 0)}${hidden("a", "")}<p><button type="submit">${esc(t(lang, "start"))}</button></p></form></li>`,
+		)
+		.join("");
+	const from = assignment.assignedRole ? `<p class="muted">${esc(t(lang, FROM[assignment.assignedRole] ?? "stFromTeacher"))}</p>` : "";
+	return layout(
+		lang,
+		assignment.title,
+		`<p class="muted">${esc(subjectName(lang, assignment.subject))} · ${esc(t(lang, "yearN", assignment.grade))}</p><p>${esc(object.curriculum.leerdoel)}</p>${from}${assignment.availableUntil ? due(lang, assignment.availableUntil) : ""}<p>${esc(t(lang, "stepsInfo"))}</p><p class="notice">${esc(t(lang, "stPrivate"))}</p><ul class="catalogue">${missions}</ul><p><a href="/p/mijn">${esc(t(lang, "stBackToMine"))}</a></p>`,
 		FOOT,
 	);
 }

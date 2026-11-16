@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
+import { AssignmentError } from "../assignments.mjs";
 import { LearnerAccountError } from "../learner-accounts.mjs";
 import { managementAccess, roleLabels, validSubject } from "../platform.mjs";
 import { STUDENT_ABSOLUTE_MS, STUDENT_SHARED_ABSOLUTE_MS } from "../store.mjs";
 import { clear, cookie, label, readCookie, readForm } from "./http.mjs";
-import { messagePage } from "./pages.mjs";
-import { adultPage, codePage, linkPage, maskEmail, minePage, signInPage } from "./student-pages.mjs";
+import { t } from "./messages.mjs";
+import { runStep } from "./public-missions.mjs";
+import { esc, messagePage } from "./pages.mjs";
+import { adultPage, assignmentPage, codePage, linkPage, maskEmail, minePage, signInPage } from "./student-pages.mjs";
 
 /**
  * Student sign-in on breinhap.com/p (breinhap#135).
@@ -13,7 +16,8 @@ import { adultPage, codePage, linkPage, maskEmail, minePage, signInPage } from "
  *   GET/POST /p/aanmelden        the e-mail address; ASafariM e-mails a six-digit code
  *   GET/POST /p/aanmelden/code   that code; a student session starts
  *   GET/POST /p/koppelen         the link code, once (LearnerAccounts.redeem, breinhap#134)
- *   GET      /p/mijn             the landing page of a linked student (the list is breinhap#136)
+ *   GET      /p/mijn             the assignments available to this learner (breinhap#136)
+ *   GET/POST /p/mijn/{assignment}  one assignment, seen and played through the shared player
  *   POST     /p/afmelden         sign out
  *
  * The sign-in is the same headless e-mail code the adults use: the same client, the same budgets,
@@ -29,11 +33,17 @@ const LOGIN = "__Secure-bh-login";
 const FORM = "__Secure-bh-form";
 const GETS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/mijn"]);
 const POSTS = new Set(["/p/aanmelden", "/p/aanmelden/code", "/p/koppelen", "/p/afmelden"]);
-export const isStudentPath = (path) => GETS.has(path) || POSTS.has(path);
+// breinhap#136: one assignment by its opaque id. Only GET and POST of exactly this shape.
+const ASSIGNMENT = /^\/p\/mijn\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+export const isStudentPath = (path) => GETS.has(path) || POSTS.has(path) || ASSIGNMENT.test(path);
 
 const EMAIL = /^[^\s@<>"]{1,64}@[^\s@<>"]{1,190}\.[^\s@<>"]{2,}$/;
 const TEXT = "text/plain; charset=utf-8";
 const random = () => randomBytes(32).toString("base64url");
+const hidden = (name, value) => `<input type="hidden" name="${name}" value="${esc(value)}">`;
+/** The calm answer for an assignment the learner cannot see (breinhap#136): never an error page. */
+const gonePage = (lang) =>
+	messagePage(lang, "stGoneTitle", "stGoneText", { link: `<p><a href="/p/mijn">${t(lang, "stBackToMine")}</a></p>` });
 
 export function createStudentRoutes({
 	origin,
@@ -45,6 +55,9 @@ export function createStudentRoutes({
 	grants,
 	// breinhap#134: redeeming a code and reading the current link
 	learnerAccounts,
+	// breinhap#136: the learner read boundary for assignments, and the recorded voices for read-aloud
+	assignments,
+	narration = null,
 	audit = async () => {},
 	requesterOf = (req) => req.socket?.remoteAddress ?? "direct",
 	now = Date.now,
@@ -79,13 +92,18 @@ export function createStudentRoutes({
 		return flow?.kind === "student-email" && flow.expires > now() ? { token, flow } : null;
 	}
 
-	return async function handleStudent({ req, url, path, lang, send, redirect }) {
+	return async function handleStudent({ req, url, path, lang, send, redirect, narration: voices = narration }) {
 		const method = req.method;
 		const isGet = method === "GET" || method === "HEAD";
-		if (isGet && !GETS.has(path)) return send(405, "Method not allowed", TEXT, { Allow: "POST" });
-		if (method === "POST" && !POSTS.has(path)) return send(405, "Method not allowed", TEXT, { Allow: "GET, HEAD" });
-		if (!isGet && method !== "POST")
-			return send(405, "Method not allowed", TEXT, { Allow: [GETS.has(path) ? "GET, HEAD" : "", POSTS.has(path) ? "POST" : ""].filter(Boolean).join(", ") });
+		const assignment = ASSIGNMENT.exec(path)?.[1];
+		if (assignment) {
+			if (!isGet && method !== "POST") return send(405, "Method not allowed", TEXT, { Allow: "GET, HEAD, POST" });
+		} else {
+			if (isGet && !GETS.has(path)) return send(405, "Method not allowed", TEXT, { Allow: "POST" });
+			if (method === "POST" && !POSTS.has(path)) return send(405, "Method not allowed", TEXT, { Allow: "GET, HEAD" });
+			if (!isGet && method !== "POST")
+				return send(405, "Method not allowed", TEXT, { Allow: [GETS.has(path) ? "GET, HEAD" : "", POSTS.has(path) ? "POST" : ""].filter(Boolean).join(", ") });
+		}
 		const html = (status, body, cookies = [], extra = {}) =>
 			send(status, body, "text/html; charset=utf-8", { ...(cookies.length ? { "Set-Cookie": cookies } : {}), ...extra });
 		const wait = { "Retry-After": "60" };
@@ -117,7 +135,30 @@ export function createStudentRoutes({
 			if (path === "/p/mijn") {
 				if (!session) return redirect("/p/aanmelden", stale);
 				if (!session.learnerId) return redirect("/p/koppelen");
-				return html(200, minePage(lang, { csrf: session.saved.csrf, catalogue }));
+				return html(200, minePage(lang, { csrf: session.saved.csrf, catalogue, assignments: await assignments.availableForLearner(session.learnerId) }));
+			}
+
+			// breinhap#136: one assigned homework, seen and played through the shared stateless player.
+			// An id this learner cannot see — unknown, another student's, closed, withdrawn — is one
+			// calm "not available" page, exactly like the catalogue's missing missions.
+			if (assignment) {
+				if (!session) return redirect("/p/aanmelden", stale);
+				if (!session.learnerId) return redirect("/p/koppelen");
+				if (!isGet && form.csrf !== session.saved.csrf) return send(403, "Forbidden", TEXT);
+				let work;
+				try {
+					work = await assignments.assignmentForLearner(session.learnerId, assignment);
+				} catch (error) {
+					if (error instanceof AssignmentError && error.code === "not_found") return html(404, gonePage(lang));
+					throw error;
+				}
+				if (isGet) return html(200, assignmentPage(lang, { csrf: session.saved.csrf, assignment: work }));
+				const page = runStep(lang, work.object, form, voices, {
+					action: `/p/mijn/${assignment}`,
+					extra: hidden("csrf", session.saved.csrf),
+					back: { href: "/p/mijn", label: "stBackToMine" },
+				});
+				return page ? html(200, page) : html(404, gonePage(lang));
 			}
 
 			if (path === "/p/koppelen") {
