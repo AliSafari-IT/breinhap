@@ -50,15 +50,27 @@ ${error(lang, errorCode)}<button type="submit" class="action-block">${t.sendCode
  * The same page while ASafariM's headless sign-in is not switched on (ASAFARIM_HEADLESS_SECRET unset): one button to
  * the ASafariM sign-in page. It follows the page's language and has the language selector like the main one.
  */
-export function fallbackPage(lang, { register = false, version, next = null }) {
+export function fallbackPage(lang, { register = false, version, next = null, switching = false }) {
 	const t = T[lang];
 	const [switchText, switchLink] = register ? t.toSignin : t.toRegister;
 	const card = `<p class="auth-lead">${register ? t.fallbackRegisterLead : t.fallbackSigninLead}</p>${register ? steps(lang, 0, "fallbackSteps") : ""}
-<a class="action action-block" href="/auth/start${next && next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}">${register ? t.fallbackRegisterButton : t.fallbackSigninButton} <span aria-hidden="true">→</span></a>
+<a class="action action-block" href="/auth/start${startQuery({ fresh: switching && !register, next })}">${register ? t.fallbackRegisterButton : t.fallbackSigninButton} <span aria-hidden="true">→</span></a>
 <p class="auth-secure">${LOCK} ${t.secure}</p>
 <p class="auth-switch">${switchText} <a href="${register ? "/login" : "/register"}">${switchLink}</a></p>
 <p class="auth-student">${t.student}</p>`;
-	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login", version });
+	return shell(lang, register ? t.registerTitle : t.signinTitle, card, { path: register ? "/register" : switching ? "/login?switch=1" : next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login", version });
+}
+
+/**
+ * The query for /auth/start. Switching account asks ASafariM for a new sign-in (fresh=1: prompt=login), because
+ * otherwise its still-open session signs the browser straight back in as the same person.
+ */
+function startQuery({ fresh, next }) {
+	const query = new URLSearchParams();
+	if (fresh) query.set("fresh", "1");
+	if (next && next !== "/") query.set("next", next);
+	const text = query.toString();
+	return text ? `?${esc(text)}` : "";
 }
 
 export function codePage(lang, { masked, csrf, register = false, errorCode = "", version }) {
