@@ -818,3 +818,12 @@ footer.management-footer {
 
 /* breinhap#132: waiting role requests, next to "Toegang beheren" for administrators */
 .nav-badge { display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; margin-left: .3rem; padding: 0 .35rem; border-radius: 999px; background: #f2c14e; color: #1f2329; font-size: .78rem; font-weight: 800; line-height: 1; vertical-align: .05em; }
+
+/* breinhap#137: per assignment, the learners it reaches and their done / not done */
+.assignment-status ul {
+	margin: 0.4rem 0 0;
+	padding-left: 1.1rem;
+}
+.assignment-status li {
+	margin: 0.2rem 0;
+}

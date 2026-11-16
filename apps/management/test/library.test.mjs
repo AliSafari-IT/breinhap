@@ -1454,7 +1454,11 @@ test("assigning (breinhap#34): a linked adult assigns, changes and revokes; role
 	assert.match((await s.call("/bibliotheek", { who: teacher })).body, /href="\/bibliotheek\/toewijzen"/);
 	assert.match((await s.call("/bibliotheek", { who: parent })).body, /href="\/bibliotheek\/toewijzen"/);
 	assert.doesNotMatch((await s.call("/bibliotheek", { who: boss })).body, /href="\/bibliotheek\/toewijzen"/);
-	assert.equal((await s.call("/bibliotheek/toewijzen", { who: boss })).status, 403);
+	// breinhap#137: the administrator gets the counts-only overview there, never the assigning form
+	const bossPage = await s.call("/bibliotheek/toewijzen", { who: boss });
+	assert.equal(bossPage.status, 200);
+	assert.match(bossPage.body, /Voortgang van toewijzingen/);
+	assert.doesNotMatch(bossPage.body, /name="publicationId"/);
 
 	// the page lists only the targets the current role may use
 	const teacherPage = await s.call("/bibliotheek/toewijzen", { who: teacher });
@@ -1577,4 +1581,72 @@ test("assigning (breinhap#34): a linked adult assigns, changes and revokes; role
 		form: { publicationId, audience: `learner:${learner}` },
 	});
 	assert.equal(gone.status, 404);
+});
+
+test("done / not done (breinhap#137): the assigner sees each learner's state and day, the administrator counts only", async () => {
+	const s = await stack();
+	const teacher = await s.login("teacher");
+	const parent = await s.login("parent");
+	const boss = await s.login("admin");
+	const adminP = { sub: "admin", role: "breinhap.admin" };
+	const teacherP = { sub: "teacher", role: "breinhap.teacher" };
+	const parentP = { sub: "parent", role: "breinhap.parent" };
+	const lina = await s.directory.createLearner(adminP, { displayName: "Lina Status", schoolYear: 3 });
+	const sam = await s.directory.createLearner(adminP, { displayName: "Sam Status", schoolYear: 3 });
+	const group = await s.directory.createGroup(adminP, { name: "Klas 3B" });
+	await s.directory.addToGroup(adminP, { groupId: group, learnerId: lina });
+	await s.directory.addToGroup(adminP, { groupId: group, learnerId: sam });
+	await s.directory.link(adminP, teacherP, { groupId: group });
+	await s.directory.link(adminP, parentP, { learnerId: lina });
+
+	await s.call("/bibliotheek/nieuw", { who: teacher, method: "POST", form: validFields() });
+	await s.call("/bibliotheek/prikkel-reactie/vastleggen", { who: teacher, method: "POST", form: { expectedVersion: "1" } });
+	await s.call("/bibliotheek/prikkel-reactie/aanbieden", { who: teacher, method: "POST", form: { revision: "1" } });
+	await s.directory.grantCapability(adminP, parentP, "content.review");
+	await s.call("/bibliotheek/nakijken/prikkel-reactie/1", { who: parent, method: "POST", form: { decision: "approved" } });
+	await s.directory.grantCapability(adminP, teacherP, "content.publish");
+	await s.call("/bibliotheek/publicaties/prikkel-reactie/publiceren", { who: teacher, method: "POST", form: { revision: "1" } });
+	const publication = (
+		await pool.query(
+			`SELECT id, pack_hash, ARRAY(SELECT m ->> 'id' FROM jsonb_array_elements(pack -> 'objects' -> 0 -> 'missions') m) AS missions
+			 FROM content_publications WHERE workspace_id = $1 AND state = 'active'`,
+			[s.workspace],
+		)
+	).rows[0];
+	const assigned = await s.call("/bibliotheek/toewijzen", { who: teacher, method: "POST", form: { publicationId: publication.id, audience: `group:${group}` } });
+	assert.equal(assigned.status, 303);
+	const assignment = (await pool.query("SELECT id FROM content_assignments WHERE workspace_id = $1 AND group_id = $2", [s.workspace, group])).rows[0].id;
+
+	// before anyone starts
+	const before = await s.call("/bibliotheek/toewijzen", { who: teacher });
+	assert.match(before.body, /0 van 2 klaar/);
+	assert.match(before.body, /Lina Status: <span class="state draft">niet begonnen<\/span>/);
+	assert.match(before.body, /Antwoorden, scores en tijd zie je niet/);
+
+	// Lina finishes every mission of the publication (the student's own rows, written as the player does)
+	for (const mission of publication.missions)
+		await pool.query(
+			`INSERT INTO assignment_progress (workspace_id, assignment_id, learner_id, mission_id, publication_hash, page, answers, state, started_at, finished_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, 3, '0c1', 'finished', '2026-11-14T08:00:00Z', '2026-11-16T19:30:00Z', '2026-11-16T19:30:00Z')`,
+			[s.workspace, assignment, lina, mission, publication.pack_hash],
+		);
+	const teacherPage = await s.call("/bibliotheek/toewijzen", { who: teacher });
+	assert.match(teacherPage.body, /1 van 2 klaar/);
+	assert.match(teacherPage.body, /Lina Status: <span class="state ok">klaar op 16\/11\/2026<\/span>/);
+	assert.match(teacherPage.body, /Sam Status: <span class="state draft">niet begonnen<\/span>/);
+	assert.doesNotMatch(teacherPage.body, /19:30|0c1/);
+	// the parent linked to Lina did not make this assignment: nothing of it on their page
+	assert.doesNotMatch((await s.call("/bibliotheek/toewijzen", { who: parent })).body, /klaar op|van 2 klaar|Lina Status:/);
+
+	// the administrator: counts only, linked from the overview
+	assert.match((await s.call("/", { who: boss })).body, /href="\/bibliotheek\/toewijzen"/);
+	const counts = await s.call("/bibliotheek/toewijzen", { who: boss });
+	assert.equal(counts.status, 200);
+	assert.match(counts.body, /Prikkel en reactie · revisie 1<\/td><td>1<\/td><td>2<\/td><td>1<\/td><td>0<\/td><td>1<\/td>/);
+	assert.doesNotMatch(counts.body, /Lina Status|Sam Status|Klas 3B|16\/11\/2026/);
+
+	// in English too
+	const english = await s.call("/bibliotheek/toewijzen?lang=en", { who: teacher });
+	assert.match(english.body, /1 of 2 finished/);
+	assert.match(english.body, /finished on/);
 });

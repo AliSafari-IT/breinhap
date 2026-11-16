@@ -852,8 +852,8 @@ export function createHandler({
 				page(
 					tr("Overzicht"),
 					waiting
-						? ui`<strong>${waiting} ${waiting === 1 ? tr("aanvraag wacht") : tr("aanvragen wachten")} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a>`
-						: ui`Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a>`,
+						? ui`<strong>${waiting} ${waiting === 1 ? tr("aanvraag wacht") : tr("aanvragen wachten")} op jouw goedkeuring.</strong> <a href="/beheer">Aanvragen bekijken in Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a> · <a href="/bibliotheek/toewijzen">Voortgang van toewijzingen</a>`
+						: ui`Je beheerwerkplek is klaar. Er wachten geen aanvragen. <a href="/beheer">Toegang beheren</a> · <a href="/bibliotheek/openbaar">Openbare missies op breinhap.com</a> · <a href="/bibliotheek/toewijzen">Voortgang van toewijzingen</a>`,
 					url.pathname,
 					req.managementSession,
 				),

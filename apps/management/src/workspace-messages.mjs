@@ -4157,5 +4157,89 @@ export const MESSAGES = {
 		"en": "With a link code, a learner links their own account (on breinhap.com) to their profile; they then see the assignments you make to them. You pass the code on once; it works for 14 days and once only.",
 		"fr": "Avec un code de liaison, un élève lie son propre compte (sur breinhap.com) à son profil ; il voit ensuite les devoirs que vous lui attribuez. Vous transmettez le code une seule fois ; il est valable 14 jours et une seule fois.",
 		"de": "Mit einem Koppelcode verknüpft ein Lernender sein eigenes Konto (auf breinhap.com) mit seinem Profil; danach sieht er die Aufgaben, die Sie ihm zuweisen. Sie geben den Code einmal weiter; er gilt 14 Tage und nur einmal."
+	},
+	"klaar op {0}": {
+		"nl": "klaar op {0}",
+		"en": "finished on {0}",
+		"fr": "terminé le {0}",
+		"de": "fertig am {0}"
+	},
+	"bezig sinds {0}": {
+		"nl": "bezig sinds {0}",
+		"en": "started on {0}",
+		"fr": "commencé le {0}",
+		"de": "begonnen am {0}"
+	},
+	"niet begonnen": {
+		"nl": "niet begonnen",
+		"en": "not started",
+		"fr": "pas commencé",
+		"de": "nicht begonnen"
+	},
+	"Geen leerlingen": {
+		"nl": "Geen leerlingen",
+		"en": "No learners",
+		"fr": "Aucun élève",
+		"de": "Keine Lernenden"
+	},
+	"{0} van {1} klaar": {
+		"nl": "{0} van {1} klaar",
+		"en": "{0} of {1} finished",
+		"fr": "{0} sur {1} terminé(s)",
+		"de": "{0} von {1} fertig"
+	},
+	"Voortgang": {
+		"nl": "Voortgang",
+		"en": "Progress",
+		"fr": "Progression",
+		"de": "Fortschritt"
+	},
+	"Bij Voortgang zie je per leerling alleen of die begon en klaar is, en op welke dag. Antwoorden, scores en tijd zie je niet: die blijven van de leerling. Leerlingen lezen dit ook op hun eigen pagina.": {
+		"nl": "Bij Voortgang zie je per leerling alleen of die begon en klaar is, en op welke dag. Antwoorden, scores en tijd zie je niet: die blijven van de leerling. Leerlingen lezen dit ook op hun eigen pagina.",
+		"en": "Under Progress you see, per learner, only whether they started and finished, and on which day. You do not see answers, scores or time spent: those stay the learner's own. Learners read this on their own page too.",
+		"fr": "Sous Progression, vous voyez par élève seulement s’il a commencé et terminé, et quel jour. Vous ne voyez ni les réponses, ni les scores, ni le temps passé : ils restent à l’élève. Les élèves lisent aussi ceci sur leur propre page.",
+		"de": "Unter Fortschritt sehen Sie pro Lernendem nur, ob er begonnen hat und fertig ist, und an welchem Tag. Antworten, Punktzahlen und Zeit sehen Sie nicht: Die bleiben beim Lernenden. Lernende lesen dies auch auf ihrer eigenen Seite."
+	},
+	"Voortgang van toewijzingen": {
+		"nl": "Voortgang van toewijzingen",
+		"en": "Assignment progress",
+		"fr": "Progression des devoirs",
+		"de": "Fortschritt der Zuweisungen"
+	},
+	"Toewijzingen": {
+		"nl": "Toewijzingen",
+		"en": "Assignments",
+		"fr": "Devoirs",
+		"de": "Zuweisungen"
+	},
+	"Niet begonnen": {
+		"nl": "Niet begonnen",
+		"en": "Not started",
+		"fr": "Pas commencé",
+		"de": "Nicht begonnen"
+	},
+	"{0} · revisie {1}": {
+		"nl": "{0} · revisie {1}",
+		"en": "{0} · revision {1}",
+		"fr": "{0} · révision {1}",
+		"de": "{0} · Revision {1}"
+	},
+	"Er zijn nu geen lopende toewijzingen.": {
+		"nl": "Er zijn nu geen lopende toewijzingen.",
+		"en": "There are no current assignments.",
+		"fr": "Il n’y a aucun devoir en cours.",
+		"de": "Es gibt derzeit keine laufenden Zuweisungen."
+	},
+	"Als beheerder zie je alleen aantallen: geen namen van leerlingen, groepen of volwassenen, en geen datums. Alleen de volwassene die iets toewees, ziet per leerling of die begon en klaar is.": {
+		"nl": "Als beheerder zie je alleen aantallen: geen namen van leerlingen, groepen of volwassenen, en geen datums. Alleen de volwassene die iets toewees, ziet per leerling of die begon en klaar is.",
+		"en": "As an administrator you see counts only: no names of learners, groups or adults, and no dates. Only the adult who made an assignment sees, per learner, whether they started and finished.",
+		"fr": "En tant qu’administrateur, vous ne voyez que des nombres : aucun nom d’élève, de groupe ou d’adulte, et aucune date. Seul l’adulte qui a attribué un devoir voit, par élève, s’il a commencé et terminé.",
+		"de": "Als Administrator sehen Sie nur Anzahlen: keine Namen von Lernenden, Gruppen oder Erwachsenen und keine Daten. Nur die erwachsene Person, die etwas zugewiesen hat, sieht pro Lernendem, ob er begonnen hat und fertig ist."
+	},
+	"Afgewerkt": {
+		"nl": "Afgewerkt",
+		"en": "Finished",
+		"fr": "Terminé",
+		"de": "Fertig"
 	}
 };

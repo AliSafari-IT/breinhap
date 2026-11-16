@@ -75,6 +75,14 @@ const changeInput = z
 	})
 	.strict();
 
+/** A learner's done / not done on one assignment, from the aggregate `reach` returns. */
+const statusOf = (row) => {
+	if (row.missions > 0 && row.done >= row.missions)
+		return { state: "finished", startedOn: row.startedOn, finishedOn: row.finishedOn };
+	if (row.begun > 0) return { state: "started", startedOn: row.startedOn, finishedOn: null };
+	return { state: "not_started", startedOn: null, finishedOn: null };
+};
+
 export class AssignmentStore {
 	constructor({ directory, membership, clock }) {
 		this.directory = directory;
@@ -202,6 +210,126 @@ export class AssignmentStore {
 			visible.push({ ...row, kind, state: this.stateOf(row, now) });
 		}
 		return visible;
+	}
+
+	/**
+	 * Done / not done for the assigner (breinhap#137). One bounded read over the progress table that
+	 * selects only each mission's state and its two dates, never its answers, page or version. Per
+	 * assignment the adult already sees in `list` (their own, target still linked through their
+	 * current role), per learner it reaches now: the learner itself, or the group's current,
+	 * unarchived members. A learner is `finished` when every mission of the publication is finished
+	 * on that publication, `started` once any is begun. Dates leave as UTC days ("2026-11-16"), so no
+	 * time of day does.
+	 *
+	 * Returns the `list` rows, each with `learners: [{ learnerId, displayName, state, startedOn,
+	 * finishedOn }]`.
+	 */
+	async listWithStatus(p) {
+		const visible = await this.list(p);
+		if (!visible.length) return visible;
+		const byAssignment = new Map(visible.map((row) => [row.id, []]));
+		for (const row of await this.reach([...byAssignment.keys()], { assignedBy: p.sub, names: true }))
+			byAssignment.get(row.assignmentId).push({
+				learnerId: row.learnerId,
+				displayName: row.displayName,
+				...statusOf(row),
+			});
+		return visible.map((row) => ({ ...row, learners: byAssignment.get(row.id) }));
+	}
+
+	/**
+	 * What an administrator sees (breinhap#137): counts only, per publication, over the current
+	 * (unrevoked) assignments whose assigner still holds the link. No learner, group or adult name,
+	 * and no dates.
+	 */
+	async statusCounts(p) {
+		await this.directory.require(p, "learners.read_all", "assignment.status");
+		const { rows } = await this.pool.query(
+			`SELECT a.id, a.assigned_by AS "assignedBy", a.learner_id AS "learnerId",
+			   a.group_id AS "groupId", a.publication_id AS "publicationId", p.revision,
+			   p.state AS "publicationState", lo.title
+			 FROM content_assignments a
+			 JOIN content_publications p ON p.workspace_id = a.workspace_id AND p.id = a.publication_id
+			 JOIN learning_objects lo ON lo.workspace_id = p.workspace_id AND lo.id = p.learning_object_id
+			 WHERE a.workspace_id = $1 AND a.revoked_at IS NULL
+			 ORDER BY lo.title, p.revision, a.publication_id`,
+			[this.workspace],
+		);
+		const current = [];
+		for (const row of rows) {
+			const kind = row.learnerId ? "learner" : "group";
+			if (await this.adultCanRead(row.assignedBy, kind, row.learnerId ?? row.groupId)) current.push(row);
+		}
+		const byPublication = new Map();
+		for (const row of current) {
+			if (!byPublication.has(row.publicationId))
+				byPublication.set(row.publicationId, {
+					publicationId: row.publicationId,
+					title: row.title,
+					revision: row.revision,
+					publicationState: row.publicationState,
+					assignments: 0,
+					learners: 0,
+					notStarted: 0,
+					started: 0,
+					finished: 0,
+				});
+			byPublication.get(row.publicationId).assignments++;
+		}
+		const publicationOf = new Map(current.map((row) => [row.id, row.publicationId]));
+		if (current.length)
+			for (const row of await this.reach([...publicationOf.keys()], { names: false })) {
+				const counts = byPublication.get(publicationOf.get(row.assignmentId));
+				const { state } = statusOf(row);
+				counts.learners++;
+				counts[state === "finished" ? "finished" : state === "started" ? "started" : "notStarted"]++;
+			}
+		return [...byPublication.values()];
+	}
+
+	/**
+	 * The learners each assignment reaches now, with the aggregate of their progress on it. Only
+	 * `state`, `started_at` and `finished_at` of the progress table are read, and only rows on the
+	 * assignment's own publication hash and missions. Names only when asked for.
+	 */
+	async reach(assignmentIds, { assignedBy, names }) {
+		const params = [this.workspace, assignmentIds];
+		let owner = "";
+		if (assignedBy !== undefined) {
+			params.push(assignedBy);
+			owner = `AND a.assigned_by = $${params.length}`;
+		}
+		const { rows } = await this.pool.query(
+			`WITH target AS (
+			   SELECT a.id AS assignment_id, a.workspace_id, p.pack_hash,
+			     ARRAY(SELECT m ->> 'id' FROM jsonb_array_elements(p.pack -> 'objects' -> 0 -> 'missions') m) AS missions,
+			     l.id AS learner_id${names ? ", l.display_name" : ""}
+			   FROM content_assignments a
+			   JOIN content_publications p ON p.workspace_id = a.workspace_id AND p.id = a.publication_id
+			   JOIN learners l ON l.workspace_id = a.workspace_id AND l.archived_at IS NULL
+			    AND (l.id = a.learner_id
+			         OR EXISTS (SELECT 1 FROM group_learners gl
+			                     JOIN groups g ON g.id = gl.group_id AND g.archived_at IS NULL
+			                    WHERE gl.group_id = a.group_id AND gl.learner_id = l.id))
+			   WHERE a.workspace_id = $1 AND a.id = ANY($2::uuid[]) ${owner}
+			 )
+			 SELECT t.assignment_id AS "assignmentId", t.learner_id AS "learnerId",
+			   ${names ? 't.display_name AS "displayName",' : ""}
+			   cardinality(t.missions) AS missions,
+			   count(ap.state)::int AS begun,
+			   count(ap.finished_at)::int AS done,
+			   to_char(min(ap.started_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "startedOn",
+			   to_char(max(ap.finished_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "finishedOn"
+			 FROM target t
+			 LEFT JOIN assignment_progress ap
+			   ON ap.workspace_id = t.workspace_id AND ap.assignment_id = t.assignment_id
+			  AND ap.learner_id = t.learner_id AND ap.publication_hash = t.pack_hash
+			  AND ap.mission_id = ANY(t.missions)
+			 GROUP BY t.assignment_id, t.learner_id, ${names ? "t.display_name, " : ""}t.missions
+			 ORDER BY ${names ? "t.display_name, " : ""}t.learner_id`,
+			params,
+		);
+		return rows;
 	}
 
 	/** Assigns one active publication to one linked learner or group. */
