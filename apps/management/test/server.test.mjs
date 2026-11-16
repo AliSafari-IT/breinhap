@@ -176,6 +176,7 @@ test("management image and routing never replace student deployment", async () =
 
 test("HTTP sign-in and logout compose with the protected management shell", async () => {
 	let state;
+	let fresh;
 	const store = await makeStore();
 	await member(store, "person", "breinhap.parent");
 	const identity = createIdentity({
@@ -183,6 +184,7 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 		provider: {
 			authorizationUrl: async (flow) => {
 				state = flow.state;
+				fresh = flow.fresh;
 				return `https://id.asafarim.site/auth?state=${state}`;
 			},
 			exchange: async () => ({
@@ -247,6 +249,14 @@ test("HTTP sign-in and logout compose with the protected management shell", asyn
 		assert.equal(again.status, 303, path);
 		assert.equal(again.headers.location, "/", path);
 	}
+	// "Wissel van account": the page stays, and its button asks ASafariM for a new sign-in (prompt=login), so
+	// ASafariM's open session does not sign the same person straight back in.
+	const switching = await get("/login?switch=1&lang=en", { headers: { Cookie: session } });
+	assert.equal(switching.status, 200);
+	assert.ok(switching.body.includes('href="/auth/start?fresh=1">Sign in with ASafariM '));
+	assert.ok(switching.body.includes('href="/login?switch=1&amp;lang=fr"'));
+	await get("/auth/start?fresh=1", { headers: { Cookie: session } });
+	assert.equal(fresh, true);
 	// breinhap.com (same-site) may read the session state for its navbar; other origins may not.
 	const fromSite = await get("/auth/session", {
 		headers: { Cookie: session, Origin: "https://breinhap.com" },

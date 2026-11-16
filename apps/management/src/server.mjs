@@ -802,7 +802,7 @@ export function createHandler({
 				const lang = localeOf(req, url);
 				return send(
 					200,
-					fallbackPage(lang, { register: url.pathname === "/register", version: manifest.version, next }),
+					fallbackPage(lang, { register: url.pathname === "/register", version: manifest.version, next, switching }),
 					undefined,
 					url.searchParams.has("lang") ? { "Set-Cookie": langCookie(lang, req.headers.host) } : {},
 				);
