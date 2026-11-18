@@ -340,3 +340,36 @@ test("the catalogue is rate limited, fails closed without its store, and stays o
 	assert.equal((await browser(w.publishing)("/p/")).status, 404);
 	assert.equal((await browser(w.publishing)("/p/missies", { host: "management.breinhap.com" })).status, 421);
 });
+
+test("breinhap.com/p/missies.json: the Android app downloads exactly the listed, clean objects", async () => {
+	const w = await setup();
+	const id = await w.published({ subject: "wiskunde", grade: 3, title: "Ontbinden" });
+	await w.published({ subject: "wiskunde", grade: 3, title: "Niet openbaar" });
+	await w.publishing.list(w.admin, id);
+	const get = browser(w.publishing);
+
+	let res = await get("/p/missies.json");
+	assert.equal(res.status, 200);
+	assert.match(res.headers["content-type"], /^application\/json/);
+	assert.equal(res.headers["set-cookie"], undefined);
+	assert.equal(res.headers["cache-control"], "no-store");
+	const body = JSON.parse(res.body);
+	assert.equal(body.schemaVersion, 1);
+	assert.equal(body.objects.length, 1);
+	const [{ object, publishedAt }] = body.objects;
+	assert.match(publishedAt, /^\d{4}-\d{2}-\d{2}$/);
+	assert.equal(object.id, id);
+	assert.equal(object.title, "Ontbinden");
+	assert.equal(object.missions[0].id, `${id}-m1`);
+	for (const key of ["review", "sources", "owner", "ownerSub", "revision"]) assert.equal(key in object, false, key);
+
+	assert.equal((await get("/p/missies.json?vak=wiskunde")).status, 400);
+	assert.equal((await get("/p/missies.json", { method: "POST", form: {} })).status, 405);
+	assert.equal((await get("/p/missies.json", { host: "management.breinhap.com" })).status, 421);
+	assert.equal((await browser(undefined)("/p/missies.json")).status, 404);
+	assert.equal((await browser(w.publishing, { budget: async () => false })("/p/missies.json")).status, 429);
+
+	// withdrawal empties the download at once
+	await w.publishing.withdraw(w.publisher, id);
+	assert.deepEqual(JSON.parse((await get("/p/missies.json")).body).objects, []);
+});

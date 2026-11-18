@@ -360,6 +360,31 @@ export class PublishingStore {
 	}
 
 	/**
+	 * The whole public catalogue as clean delivery objects, for the Android app's download
+	 * (GET /p/missies.json). The same rows as `publicCatalog` without filters: listed, active,
+	 * unarchived, current schema. Each object carries the day its release was published, which
+	 * is the day it passed review; never an owner, reviewer, revision, source or internal id.
+	 */
+	async publicObjects() {
+		const { rows } = await this.pool.query(
+			`SELECT p.pack, p.published_at AS "publishedAt"
+			 FROM public_listings l
+			 JOIN learning_objects lo ON lo.workspace_id = l.workspace_id AND lo.id = l.learning_object_id
+			 JOIN content_publications p
+			   ON p.workspace_id = l.workspace_id AND p.learning_object_id = l.learning_object_id
+			  AND p.state = 'active'
+			 WHERE l.workspace_id = $1 AND l.unlisted_at IS NULL AND lo.archived_at IS NULL
+			 ORDER BY (p.pack -> 'objects' -> 0 ->> 'grade')::int, p.pack -> 'objects' -> 0 ->> 'title', l.learning_object_id
+			 LIMIT 200`,
+			[this.workspace],
+		);
+		return rows
+			.map(({ pack, publishedAt }) => ({ object: pack?.objects?.[0], publishedAt }))
+			.filter(({ object }) => object?.schemaVersion === SCHEMA_VERSION)
+			.map(({ object, publishedAt }) => ({ publishedAt: new Date(publishedAt).toISOString().slice(0, 10), object }));
+	}
+
+	/**
 	 * One publicly listed object's clean delivery payload. Anything not listed, archived, withdrawn,
 	 * only superseded or unknown is the same `not_found`, so a direct id reveals nothing.
 	 */
