@@ -85,6 +85,8 @@ try {
 			spawnSync("sleep", ["0.5"]);
 		}
 		env.POSTGRES_TEST_URL = `postgres://postgres:${password}@${postgres.endpoint}/postgres`;
+		// breinhap#37: the backup check runs pg_dump / pg_restore inside this container (same version)
+		env.BREINHAP_TEST_PG_CONTAINER = postgres.container;
 	}
 	child = spawn(process.execPath, ["--test", "test/*.test.mjs"], {
 		env,
