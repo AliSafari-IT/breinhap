@@ -53,6 +53,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+        env:
+          # breinhap#37: the backup check runs pg_dump / pg_restore inside the service container (same version)
+          BREINHAP_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
 
       # Proves the Android JavaScript bundle builds (Metro resolves the workspace packages); no native build.
       - name: Android bundle
