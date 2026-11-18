@@ -970,14 +970,16 @@ test("browser, keyboard only at 320, 390 and 1280 px: the student's homework and
 				const metrics = await (await context.newCDPSession(page)).send("Page.getLayoutMetrics");
 				assert.ok(metrics.cssContentSize.width <= width, `overflow on ${where} at ${width}px: ${metrics.cssContentSize.width}`);
 			};
-			/** Tab until the focused element names `name`, then press `key`: the keyboard alone. */
+			/** Tab until the focused element names `name`, then press `key` and wait for the next page. */
 			const reach = async (name, key = "Enter") => {
 				for (let i = 0; i < 60; i++) {
 					await page.keyboard.press("Tab");
 					const focused = page.locator(":focus");
 					const text = (await focused.count()) ? await focused.innerText().catch(() => "") : "";
 					if (typeof name === "string" ? text.includes(name) : name.test(text)) {
-						await page.keyboard.press(key);
+						// every link and button here loads a new page (a GET or a form POST to the same URL):
+						// wait for it, so the next Tab never lands on the page being left
+						await Promise.all([page.waitForEvent("load"), page.keyboard.press(key)]);
 						return;
 					}
 				}
